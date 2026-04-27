@@ -1,0 +1,157 @@
+:root {
+  --bg: #0f1115;
+  --panel: #161922;
+  --panel-2: #1d212d;
+  --border: #2a2f3d;
+  --text: #e6e8ee;
+  --text-dim: #98a0b3;
+  --accent: #7aa7ff;
+  --user: #2a3a5c;
+  --tool: #2d2f3a;
+  --tool-result: #20242e;
+  --danger: #f87171;
+  --success: #4ade80;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+
+.app {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: 100vh;
+}
+
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.stream {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+}
+
+.input-bar {
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  background: var(--panel);
+  display: flex;
+  gap: 8px;
+}
+
+.input-bar textarea {
+  flex: 1;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  resize: none;
+  font-family: inherit;
+  min-height: 60px;
+  max-height: 200px;
+}
+
+button {
+  background: var(--accent);
+  color: #0b0d12;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+button.danger { background: var(--danger); color: white; }
+
+.msg { margin-bottom: 14px; }
+.msg-system { color: var(--text-dim); font-size: 12px; padding: 6px 10px; background: var(--panel-2); border-radius: 6px; border: 1px dashed var(--border); }
+.msg-user { background: var(--user); padding: 10px 14px; border-radius: 10px; max-width: 80%; margin-left: auto; }
+.msg-assistant { padding: 4px 0; }
+.msg-result { color: var(--text-dim); font-size: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+
+.tool-use, .tool-result {
+  background: var(--tool);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+.tool-result { background: var(--tool-result); border-left-color: var(--success); }
+.tool-name { font-weight: 700; color: var(--accent); }
+.tool-result .tool-name { color: var(--success); }
+.tool-payload {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 6px;
+  color: var(--text-dim);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.markdown pre { background: #0b0d12; padding: 12px; border-radius: 6px; overflow-x: auto; }
+.markdown code { font-family: ui-monospace, monospace; font-size: 13px; }
+.markdown :not(pre) > code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; }
+.markdown p { line-height: 1.6; }
+
+.config-panel { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.config-panel label { font-size: 12px; color: var(--text-dim); display: flex; flex-direction: column; gap: 4px; }
+.config-panel input, .config-panel select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: inherit;
+}
+
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 560px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.modal h3 { margin: 0 0 12px; }
+.modal pre {
+  background: var(--panel-2);
+  padding: 10px;
+  border-radius: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+.connection-status {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+.connection-status.connected { background: rgba(74, 222, 128, 0.15); color: var(--success); }
+.connection-status.disconnected { background: rgba(248, 113, 113, 0.15); color: var(--danger); }

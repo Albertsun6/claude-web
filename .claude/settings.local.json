@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/yongqian/.claude/plans/**)",
+      "WebSearch",
+      "WebFetch(domain:github.com)"
+    ]
+  }
+}

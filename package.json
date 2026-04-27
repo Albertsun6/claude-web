@@ -1,0 +1,12 @@
+{
+  "name": "claude-web",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev:backend": "pnpm --filter @claude-web/backend dev",
+    "dev:frontend": "pnpm --filter @claude-web/frontend dev",
+    "test:cli": "pnpm --filter @claude-web/backend test:cli"
+  },
+  "packageManager": "pnpm@9.0.0"
+}
