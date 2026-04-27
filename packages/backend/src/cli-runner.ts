@@ -57,6 +57,10 @@ function buildArgs(p: RunSessionParams, resume?: string): string[] {
     "--include-partial-messages",
     "--permission-mode", p.permissionMode,
     "--model", p.model,
+    // Move per-machine bits (cwd / env / git status) out of the system prompt
+    // into the first user message. Keeps the system prefix stable so prompt
+    // caching can hit across sessions and across users on shared infra.
+    "--exclude-dynamic-system-prompt-sections",
   ];
   if (resume) args.push("--resume", resume);
   if (p.permissionToken && p.backendBase && p.permissionMode !== "bypassPermissions") {

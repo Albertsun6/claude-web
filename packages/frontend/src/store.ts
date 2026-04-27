@@ -24,6 +24,15 @@ export interface VoiceDraft {
   status: "pending" | "ready" | "failed";
 }
 
+export interface UsageStats {
+  inputTokens: number;       // brand-new tokens this session paid for
+  cacheCreationTokens: number; // tokens written into cache (one-time cost)
+  cacheReadTokens: number;   // cache hits (≈ free)
+  outputTokens: number;
+  costUsd: number;           // nominal — not actually billed under subscription
+  turns: number;
+}
+
 export interface ProjectSession {
   cwd: string;
   name: string;
@@ -32,6 +41,7 @@ export interface ProjectSession {
   busy: boolean;
   currentRunId?: string;
   voiceDraft?: VoiceDraft;
+  usage?: UsageStats;
 }
 
 interface AppState {
@@ -61,7 +71,9 @@ interface AppState {
   clearMessages: (cwd: string) => void;
   /** Drop messages whose `_runId` matches; used on stale-session restart. */
   removeRunMessages: (cwd: string, runId: string) => void;
-  resetSession: (cwd: string) => void; // clear messages + sessionId
+  resetSession: (cwd: string) => void; // clear messages + sessionId + usage
+  /** Accumulate token usage from a `type:"result"` SDK message. */
+  addUsage: (cwd: string, result: unknown) => void;
   // helper: ensure cwd is open and active (used when adding a new project on the fly)
   ensureOpenAndActive: (project: Project) => void;
 
@@ -236,8 +248,28 @@ export const useStore = create<AppState>((set, get) => ({
     if (!cur) return;
     updateSessionInLS(cwd, undefined);
     set({
-      byCwd: { ...byCwd, [cwd]: { ...cur, messages: [], sessionId: undefined } },
+      byCwd: { ...byCwd, [cwd]: { ...cur, messages: [], sessionId: undefined, usage: undefined } },
     });
+  },
+  addUsage: (cwd, result) => {
+    const { byCwd } = get();
+    const cur = byCwd[cwd];
+    if (!cur) return;
+    // result message shape: { type: "result", usage, total_cost_usd, num_turns }
+    const u: any = (result as any)?.usage ?? {};
+    const cur_u: UsageStats = cur.usage ?? {
+      inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0,
+      outputTokens: 0, costUsd: 0, turns: 0,
+    };
+    const next: UsageStats = {
+      inputTokens: cur_u.inputTokens + (u.input_tokens ?? 0),
+      cacheCreationTokens: cur_u.cacheCreationTokens + (u.cache_creation_input_tokens ?? 0),
+      cacheReadTokens: cur_u.cacheReadTokens + (u.cache_read_input_tokens ?? 0),
+      outputTokens: cur_u.outputTokens + (u.output_tokens ?? 0),
+      costUsd: cur_u.costUsd + ((result as any)?.total_cost_usd ?? 0),
+      turns: cur_u.turns + ((result as any)?.num_turns ?? 1),
+    };
+    set({ byCwd: { ...byCwd, [cwd]: { ...cur, usage: next } } });
   },
   ensureOpenAndActive: (p) => get().openProject(p),
 

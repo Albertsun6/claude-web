@@ -446,6 +446,32 @@ button.danger { background: var(--danger); color: white; }
 }
 .session-empty { color: var(--text-dim); font-size: 11px; padding: 8px; text-align: center; }
 .session-error { color: var(--danger); }
+
+.usage-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.usage-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.usage-label { font-size: 13px; }
+.usage-sep { opacity: 0.4; }
+.usage-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.usage-bar-cached {
+  height: 100%;
+  background: linear-gradient(90deg, var(--success), var(--accent));
+  transition: width 0.3s ease;
+}
 @keyframes offline-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

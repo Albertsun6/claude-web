@@ -10,6 +10,7 @@ import { VoiceBar } from "./components/VoiceBar";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionList } from "./components/SessionList";
 import { AuthGate } from "./components/AuthGate";
+import { UsageMeter } from "./components/UsageMeter";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 
 // Heavy: CodeMirror is ~250KB. Lazy-load when files panel actually opens.
@@ -112,6 +113,13 @@ function AppInner() {
       sendPrompt(text);
       return;
     }
+    // Smart-skip: short or visually-clean transcripts don't need a Haiku roundtrip.
+    // Heuristic: ≤ 12 chars OR no obvious filler words.
+    const FILLER = /嗯+|啊+|那个那个|就是就是|就是说|呢这个|呃+|额+|那么那么/;
+    if (text.length <= 12 || !FILLER.test(text)) {
+      sendPrompt(text);
+      return;
+    }
     patchProject(session.cwd, {
       voiceDraft: { original: text, cleaned: text, status: "pending" },
     });
@@ -174,6 +182,9 @@ function AppInner() {
           >
             new session ({session.name})
           </button>
+          <div style={{ marginTop: 12 }}>
+            <UsageMeter />
+          </div>
           <div style={{ marginTop: 12 }}>
             <SessionList />
           </div>

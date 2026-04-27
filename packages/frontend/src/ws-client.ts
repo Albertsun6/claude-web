@@ -70,6 +70,10 @@ function handleServerMessage(msg: ServerMessage): void {
       store.patchProject(cwd, { sessionId: undefined });
       return;
     }
+    // accumulate token usage from result events
+    if (sdkMsg?.type === "result" && sdkMsg.usage) {
+      store.addUsage(cwd, sdkMsg);
+    }
     if (
       voiceSink &&
       cwd === store.activeCwd &&
