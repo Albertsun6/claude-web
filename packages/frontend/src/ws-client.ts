@@ -51,6 +51,11 @@ function handleServerMessage(msg: ServerMessage): void {
     if (sdkMsg?.type === "system" && sdkMsg.subtype === "init" && sdkMsg.session_id) {
       store.setSessionId(sdkMsg.session_id);
     }
+    // backend signals that the resume id was stale and we restarted fresh
+    if (sdkMsg?.type === "system" && sdkMsg.subtype === "stale_session_recovered") {
+      store.setSessionId(undefined);
+      return; // don't render this as a message; the fresh system:init follows
+    }
     // feed assistant text chunks to voice sink for streaming TTS
     if (voiceSink && sdkMsg?.type === "assistant" && sdkMsg.message?.content) {
       for (const block of sdkMsg.message.content) {
