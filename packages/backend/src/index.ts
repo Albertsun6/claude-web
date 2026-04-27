@@ -6,7 +6,7 @@ import { WebSocketServer } from "ws";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { runSession } from "./cli-runner.js";
 import { fsRouter } from "./routes/fs.js";
@@ -88,22 +88,33 @@ if (existsSync(FRONTEND_DIST)) {
   const COMPRESSIBLE = /\.(js|mjs|css|html|svg|json|webmanifest|map)$/i;
   const IMMUTABLE = /\/assets\/.+-[A-Za-z0-9_-]{8,}\.(js|css|svg)$/;
 
-  const indexHtml = readFileSync(path.join(FRONTEND_DIST, "index.html"), "utf-8");
-  const indexHtmlGz = gzipSync(Buffer.from(indexHtml, "utf-8"));
+  // Cache index.html by mtime so a frontend rebuild while backend stays up
+  // is picked up automatically. Tiny file → safe to re-read on miss.
+  const indexPath = path.join(FRONTEND_DIST, "index.html");
+  let indexCache: { mtimeMs: number; html: string; htmlGz: Buffer } | null = null;
+  const loadIndex = () => {
+    const st = statSync(indexPath);
+    if (indexCache && indexCache.mtimeMs === st.mtimeMs) return indexCache;
+    const html = readFileSync(indexPath, "utf-8");
+    const htmlGz = gzipSync(Buffer.from(html, "utf-8"));
+    indexCache = { mtimeMs: st.mtimeMs, html, htmlGz };
+    return indexCache;
+  };
 
   const sendIndex = (c: any) => {
+    const { html, htmlGz } = loadIndex();
     const ae = c.req.header("accept-encoding") ?? "";
     if (ae.includes("gzip")) {
-      return new Response(indexHtmlGz as unknown as BodyInit, {
+      return new Response(htmlGz as unknown as BodyInit, {
         headers: {
           "content-type": "text/html; charset=utf-8",
           "content-encoding": "gzip",
-          "content-length": String(indexHtmlGz.length),
+          "content-length": String(htmlGz.length),
           "cache-control": "no-cache",
         },
       });
     }
-    return c.html(indexHtml);
+    return c.html(html);
   };
 
   app.use("/*", async (c, next) => {
