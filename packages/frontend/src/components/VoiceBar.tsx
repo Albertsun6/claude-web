@@ -48,6 +48,28 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
           />
           <span>整理</span>
         </label>
+        {voice.isSpeaking && (
+          <button
+            type="button"
+            className="voice-mute"
+            onClick={voice.cancelSpeak}
+            aria-label="停止朗读"
+            title="停止朗读"
+          >
+            ⏹
+          </button>
+        )}
+        {!voice.isSpeaking && voice.hasLastTurn && (
+          <button
+            type="button"
+            className="voice-mute"
+            onClick={voice.replayLastTurn}
+            aria-label="重听上一段"
+            title="重听上一段"
+          >
+            ↻
+          </button>
+        )}
         <button
           type="button"
           className="voice-mute"

@@ -52,10 +52,11 @@ declare global {
 
 export type VoiceMode = "web-speech" | "remote-stt" | "unsupported";
 
-const TRANSCRIBE_URL =
-  ((import.meta as any).env?.VITE_API_URL ??
-    `http://${typeof window !== "undefined" ? window.location.hostname : "localhost"}:3030`) +
-  "/api/voice/transcribe";
+const API_BASE =
+  (import.meta as any).env?.VITE_API_URL ??
+  `http://${typeof window !== "undefined" ? window.location.hostname : "localhost"}:3030`;
+const TRANSCRIBE_URL = API_BASE + "/api/voice/transcribe";
+const TTS_URL = API_BASE + "/api/voice/tts";
 
 export interface UseVoiceReturn {
   mode: VoiceMode;
@@ -73,6 +74,10 @@ export interface UseVoiceReturn {
   flushAssistantBuffer: () => void;
   muted: boolean;
   setMuted: (b: boolean) => void;
+  // playback state + replay
+  isSpeaking: boolean;
+  hasLastTurn: boolean;
+  replayLastTurn: () => void;
 }
 
 const MUTED_KEY = "claude-web:voice-muted";
@@ -162,9 +167,17 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const finalCbRef = useRef<((text: string) => void) | null>(null);
   const assistantBufRef = useRef<string>("");
-  const speakQueueRef = useRef<string[]>([]);
-  const speakingRef = useRef<boolean>(false);
   const mutedRef = useRef<boolean>(false);
+
+  // playback (Edge TTS via backend → mp3 → HTMLAudioElement)
+  type Pending = { sentence: string; promise: Promise<string | null> };
+  const audioQueueRef = useRef<Pending[]>([]);
+  const playingAudioRef = useRef<HTMLAudioElement | null>(null);
+  const playRunningRef = useRef<boolean>(false);
+  const turnSentencesRef = useRef<string[]>([]);
+  const generationRef = useRef<number>(0); // bumped on cancel to invalidate in-flight fetches
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [lastTurnText, setLastTurnText] = useState<string>("");
 
   // remote-stt refs
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -184,13 +197,14 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   useEffect(() => {
     mutedRef.current = muted;
     if (muted) {
-      try {
-        window.speechSynthesis?.cancel();
-      } catch {
-        /* ignore */
-      }
-      speakQueueRef.current = [];
-      speakingRef.current = false;
+      // immediately silence anything playing or queued
+      generationRef.current++;
+      const a = playingAudioRef.current;
+      if (a) { try { a.pause(); a.currentTime = 0; } catch { /* ignore */ } }
+      playingAudioRef.current = null;
+      audioQueueRef.current = [];
+      playRunningRef.current = false;
+      setIsSpeaking(false);
     }
   }, [muted]);
 
@@ -352,78 +366,121 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     finalCbRef.current = cb;
   }, []);
 
-  const drainSpeakQueue = useCallback(() => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    if (speakingRef.current) return;
-    const next = speakQueueRef.current.shift();
-    if (!next) return;
-    if (mutedRef.current) {
-      speakQueueRef.current = [];
-      return;
-    }
-    const u = new SpeechSynthesisUtterance(next);
-    u.lang = lang;
-    u.onend = () => {
-      speakingRef.current = false;
-      drainSpeakQueue();
-    };
-    u.onerror = () => {
-      speakingRef.current = false;
-      drainSpeakQueue();
-    };
-    speakingRef.current = true;
-    window.speechSynthesis.speak(u);
-  }, [lang]);
-
-  const speak = useCallback(
-    (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      if (mutedRef.current) return;
-      if (typeof window === "undefined" || !window.speechSynthesis) return;
-      speakQueueRef.current.push(trimmed);
-      drainSpeakQueue();
-    },
-    [drainSpeakQueue],
-  );
-
-  const cancelSpeak = useCallback(() => {
-    speakQueueRef.current = [];
-    speakingRef.current = false;
+  // Fetch one sentence's mp3 (returns object URL, or null on error/cancel).
+  const fetchTtsBlobUrl = useCallback(async (text: string, gen: number): Promise<string | null> => {
     try {
-      window.speechSynthesis?.cancel();
+      const res = await fetch(TTS_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return null;
+      if (gen !== generationRef.current) return null; // cancelled while in flight
+      const blob = await res.blob();
+      if (gen !== generationRef.current) return null;
+      return URL.createObjectURL(blob);
     } catch {
-      /* ignore */
+      return null;
     }
   }, []);
 
-  const feedAssistantChunk = useCallback(
-    (text: string) => {
-      if (!text) return;
-      assistantBufRef.current += text;
-      const buf = assistantBufRef.current;
-      const parts = buf.split(SENTENCE_SPLIT);
-      // parts: [chunk, sep, chunk, sep, ..., tail]
-      let consumed = 0;
-      let pending = "";
-      for (let i = 0; i + 1 < parts.length; i += 2) {
-        const chunk = parts[i] ?? "";
-        const sep = parts[i + 1] ?? "";
-        const sentence = (chunk + sep).trim();
-        if (sentence) speak(sentence);
-        consumed += (parts[i] ?? "").length + (parts[i + 1] ?? "").length;
+  const drainAudioQueue = useCallback(async () => {
+    if (playRunningRef.current) return;
+    playRunningRef.current = true;
+    while (true) {
+      if (mutedRef.current) {
+        audioQueueRef.current = [];
+        break;
       }
-      pending = buf.slice(consumed);
-      assistantBufRef.current = pending;
-    },
-    [speak],
-  );
+      const next = audioQueueRef.current.shift();
+      if (!next) break;
+      const url = await next.promise;
+      if (!url) continue;
+      if (mutedRef.current) { URL.revokeObjectURL(url); continue; }
+      await new Promise<void>((resolve) => {
+        const audio = new Audio(url);
+        playingAudioRef.current = audio;
+        setIsSpeaking(true);
+        const cleanup = () => {
+          URL.revokeObjectURL(url);
+          if (playingAudioRef.current === audio) playingAudioRef.current = null;
+          resolve();
+        };
+        audio.addEventListener("ended", cleanup);
+        audio.addEventListener("error", cleanup);
+        audio.play().catch((err) => { console.warn("[voice] play failed", err); cleanup(); });
+      });
+    }
+    playRunningRef.current = false;
+    if (audioQueueRef.current.length === 0 && !playingAudioRef.current) {
+      setIsSpeaking(false);
+    }
+  }, []);
+
+  const speak = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (mutedRef.current) return;
+    turnSentencesRef.current.push(trimmed);
+    const gen = generationRef.current;
+    audioQueueRef.current.push({ sentence: trimmed, promise: fetchTtsBlobUrl(trimmed, gen) });
+    void drainAudioQueue();
+  }, [fetchTtsBlobUrl, drainAudioQueue]);
+
+  const cancelSpeak = useCallback(() => {
+    generationRef.current++;
+    audioQueueRef.current = [];
+    const a = playingAudioRef.current;
+    if (a) { try { a.pause(); a.currentTime = 0; } catch { /* ignore */ } }
+    playingAudioRef.current = null;
+    playRunningRef.current = false;
+    setIsSpeaking(false);
+  }, []);
+
+  const feedAssistantChunk = useCallback((text: string) => {
+    if (!text) return;
+    assistantBufRef.current += text;
+    const buf = assistantBufRef.current;
+    const parts = buf.split(SENTENCE_SPLIT);
+    let consumed = 0;
+    for (let i = 0; i + 1 < parts.length; i += 2) {
+      const chunk = parts[i] ?? "";
+      const sep = parts[i + 1] ?? "";
+      const sentence = (chunk + sep).trim();
+      if (sentence) speak(sentence);
+      consumed += (parts[i] ?? "").length + (parts[i + 1] ?? "").length;
+    }
+    assistantBufRef.current = buf.slice(consumed);
+  }, [speak]);
 
   const flushAssistantBuffer = useCallback(() => {
     const tail = assistantBufRef.current.trim();
     assistantBufRef.current = "";
     if (tail) speak(tail);
+    // snapshot what we just spoke for replay
+    const joined = turnSentencesRef.current.join(" ").trim();
+    if (joined) setLastTurnText(joined);
+    turnSentencesRef.current = [];
   }, [speak]);
+
+  const replayLastTurn = useCallback(() => {
+    if (!lastTurnText) return;
+    cancelSpeak();
+    // brief delay to let cancellation propagate before queuing
+    setTimeout(() => {
+      // split the saved turn back into sentences for sequential playback
+      const parts = lastTurnText.split(SENTENCE_SPLIT);
+      const sentences: string[] = [];
+      for (let i = 0; i + 1 < parts.length; i += 2) {
+        const s = ((parts[i] ?? "") + (parts[i + 1] ?? "")).trim();
+        if (s) sentences.push(s);
+      }
+      const tail = parts[parts.length - 1]?.trim();
+      if (tail && tail.length && parts.length % 2 === 1) sentences.push(tail);
+      if (sentences.length === 0) sentences.push(lastTurnText);
+      for (const s of sentences) speak(s);
+    }, 30);
+  }, [lastTurnText, cancelSpeak, speak]);
 
   const setMuted = useCallback((b: boolean) => {
     persistMuted(b);
@@ -446,5 +503,8 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     flushAssistantBuffer,
     muted,
     setMuted,
+    isSpeaking,
+    hasLastTurn: lastTurnText.length > 0,
+    replayLastTurn,
   };
 }
