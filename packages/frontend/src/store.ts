@@ -102,12 +102,28 @@ interface AppState {
   // history-session list expanded?
   sessionListOpen: boolean;
   setSessionListOpen: (b: boolean) => void;
+
+  // currently-previewed file (overlay in main column)
+  previewFile: { cwd: string; relPath: string } | undefined;
+  setPreviewFile: (p: { cwd: string; relPath: string } | undefined) => void;
+
+  // panel layout (px) — persisted
+  sidebarWidth: number;
+  rightbarWidth: number;
+  setSidebarWidth: (w: number) => void;
+  setRightbarWidth: (w: number) => void;
+
+  // which right-panel tab (files / git)
+  rightTab: "files" | "git";
+  setRightTab: (t: "files" | "git") => void;
 }
 
 const LS_CONFIG = "claude-web:config";
 const LS_PROJECTS = "claude-web:projects";
 const LS_SESSIONS = "claude-web:sessions";
 const LS_TOOLS_BY_CWD = "claude-web:allowed-tools-by-cwd";
+const LS_LAYOUT = "claude-web:layout";
+const LS_RIGHT_TAB = "claude-web:right-tab";
 const LS_OPEN = "claude-web:open-cwds";
 const LS_VOICE_CLEANUP = "claude-web:voice-cleanup";
 const LS_SESSION_LIST_OPEN = "claude-web:session-list-open";
@@ -126,6 +142,15 @@ const persistedOpen: string[] = (() => {
 })();
 const persistedAllowedTools: Record<string, string[]> = (() => {
   try { return JSON.parse(localStorage.getItem(LS_TOOLS_BY_CWD) ?? "{}"); } catch { return {}; }
+})();
+const persistedLayout: { sidebarWidth?: number; rightbarWidth?: number } = (() => {
+  try { return JSON.parse(localStorage.getItem(LS_LAYOUT) ?? "{}"); } catch { return {}; }
+})();
+const persistedRightTab: "files" | "git" = (() => {
+  try {
+    const v = localStorage.getItem(LS_RIGHT_TAB);
+    return v === "git" ? "git" : "files";
+  } catch { return "files"; }
 })();
 
 const persistConfig = (s: Partial<AppState>) => {
@@ -345,6 +370,36 @@ export const useStore = create<AppState>((set, get) => ({
   setSessionListOpen: (b) => {
     try { localStorage.setItem(LS_SESSION_LIST_OPEN, b ? "1" : "0"); } catch { /* ignore */ }
     set({ sessionListOpen: b });
+  },
+
+  previewFile: undefined,
+  setPreviewFile: (p) => set({ previewFile: p }),
+
+  sidebarWidth: persistedLayout.sidebarWidth ?? 280,
+  rightbarWidth: persistedLayout.rightbarWidth ?? 320,
+  setSidebarWidth: (sidebarWidth) => {
+    const cur = get();
+    try {
+      localStorage.setItem(LS_LAYOUT, JSON.stringify({
+        sidebarWidth, rightbarWidth: cur.rightbarWidth,
+      }));
+    } catch { /* ignore */ }
+    set({ sidebarWidth });
+  },
+  setRightbarWidth: (rightbarWidth) => {
+    const cur = get();
+    try {
+      localStorage.setItem(LS_LAYOUT, JSON.stringify({
+        sidebarWidth: cur.sidebarWidth, rightbarWidth,
+      }));
+    } catch { /* ignore */ }
+    set({ rightbarWidth });
+  },
+
+  rightTab: persistedRightTab,
+  setRightTab: (rightTab) => {
+    try { localStorage.setItem(LS_RIGHT_TAB, rightTab); } catch { /* ignore */ }
+    set({ rightTab });
   },
 }));
 

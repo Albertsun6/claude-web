@@ -13,6 +13,8 @@ import { AuthGate } from "./components/AuthGate";
 import { UsageMeter } from "./components/UsageMeter";
 import { ClaudeMdBanner } from "./components/ClaudeMdBanner";
 import { StatusBar } from "./components/StatusBar";
+import { FilePreviewPane } from "./components/FilePreviewPane";
+import { Resizer } from "./components/Resizer";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 
 // Heavy: CodeMirror is ~250KB. Lazy-load when files panel actually opens.
@@ -24,7 +26,6 @@ const PanelFallback = () => (
 );
 
 type DrawerSide = "left" | "right" | null;
-type RightTab = "files" | "git";
 
 function ProjectTabs() {
   const openCwds = useStore((s) => s.openCwds);
@@ -75,8 +76,13 @@ function AppInner() {
   const resetSession = useStore((s) => s.resetSession);
   const patchProject = useStore((s) => s.patchProject);
   const cleanupEnabled = useStore((s) => s.voiceCleanupEnabled);
+  const sidebarWidth = useStore((s) => s.sidebarWidth);
+  const rightbarWidth = useStore((s) => s.rightbarWidth);
+  const setSidebarWidth = useStore((s) => s.setSidebarWidth);
+  const setRightbarWidth = useStore((s) => s.setRightbarWidth);
+  const rightTab = useStore((s) => s.rightTab);
+  const setRightTab = useStore((s) => s.setRightTab);
   const [drawer, setDrawer] = useState<DrawerSide>(null);
-  const [rightTab, setRightTab] = useState<RightTab>("files");
   const voice = useVoiceCtx();
 
   useEffect(() => {
@@ -220,7 +226,13 @@ function AppInner() {
   );
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={{
+        ["--sidebar-w" as any]: `${sidebarWidth}px`,
+        ["--rightbar-w" as any]: `${rightbarWidth}px`,
+      }}
+    >
       <div className="topbar">
         <button className="icon-btn" onClick={() => setDrawer(drawer === "left" ? null : "left")} aria-label="menu">
           ☰
@@ -232,6 +244,7 @@ function AppInner() {
       </div>
 
       <aside className="sidebar">{sidebar}</aside>
+      <Resizer side="left" initial={sidebarWidth} min={220} max={520} onChange={setSidebarWidth} />
 
       <main className="main">
         <ProjectTabs />
@@ -239,8 +252,10 @@ function AppInner() {
         <MessageStream />
         <InputBox />
         <StatusBar />
+        <FilePreviewPane />
       </main>
 
+      <Resizer side="right" initial={rightbarWidth} min={240} max={720} onChange={setRightbarWidth} />
       <aside className="rightbar">{rightPanel}</aside>
 
       {drawer && (
