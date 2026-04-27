@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStore, type Project } from "../store";
+import { DirectoryPicker } from "./DirectoryPicker";
 
 export function ProjectPicker() {
   const projects = useStore((s) => s.projects);
@@ -11,6 +12,7 @@ export function ProjectPicker() {
 
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<Project>({ name: "", cwd: "" });
+  const [picking, setPicking] = useState(false);
 
   const submit = () => {
     if (!draft.name.trim() || !draft.cwd.trim()) return;
@@ -73,16 +75,41 @@ export function ProjectPicker() {
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
           />
-          <input
-            type="text"
-            placeholder="/abs/path/to/project"
-            value={draft.cwd}
-            onChange={(e) => setDraft({ ...draft, cwd: e.target.value })}
-          />
+          <div className="path-input-row">
+            <input
+              type="text"
+              placeholder="/abs/path/to/project"
+              value={draft.cwd}
+              onChange={(e) => setDraft({ ...draft, cwd: e.target.value })}
+            />
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setPicking(true)}
+              title="选择目录"
+            >
+              📁
+            </button>
+          </div>
           <button onClick={submit} disabled={!draft.name.trim() || !draft.cwd.trim()}>
             保存
           </button>
         </div>
+      )}
+
+      {picking && (
+        <DirectoryPicker
+          initialPath={draft.cwd}
+          onCancel={() => setPicking(false)}
+          onSelect={(path) => {
+            setDraft((d) => ({
+              ...d,
+              cwd: path,
+              name: d.name.trim() || (path.split("/").filter(Boolean).pop() ?? ""),
+            }));
+            setPicking(false);
+          }}
+        />
       )}
     </div>
   );

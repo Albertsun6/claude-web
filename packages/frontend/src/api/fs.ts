@@ -48,3 +48,12 @@ export function fetchFile(
   const params = new URLSearchParams({ root, path: relPath });
   return getJson<FsFileResponse>(`${API_BASE}/api/fs/file?${params.toString()}`);
 }
+
+export interface FsHomeResponse {
+  home: string;
+  cwd: string;
+}
+
+export function fetchHome(): Promise<FsHomeResponse> {
+  return getJson<FsHomeResponse>(`${API_BASE}/api/fs/home`);
+}

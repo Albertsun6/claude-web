@@ -194,6 +194,52 @@ button.danger { background: var(--danger); color: white; }
 }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
+.dir-picker { width: min(560px, 90vw); display: flex; flex-direction: column; gap: 12px; }
+.dir-picker h3 { margin: 0; }
+.dir-path { display: flex; gap: 6px; align-items: center; }
+.dir-path input {
+  flex: 1;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+.dir-path button {
+  min-height: 38px;
+  min-width: 38px;
+  padding: 6px 10px;
+  font-size: 16px;
+}
+.dir-list {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.dir-item {
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.dir-item:hover { background: var(--panel); }
+.dir-empty { color: var(--text-dim); font-size: 13px; padding: 16px; text-align: center; }
+.dir-error { color: var(--danger); }
+
+.path-input-row { display: flex; gap: 6px; align-items: stretch; }
+.path-input-row input { flex: 1; }
+.path-input-row button { white-space: nowrap; }
+
 .connection-status {
   font-size: 11px;
   padding: 4px 8px;

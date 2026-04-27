@@ -33,6 +33,10 @@ function isInsideRoot(root: string, resolved: string): boolean {
 
 export const fsRouter = new Hono();
 
+fsRouter.get("/home", (c) =>
+  c.json({ home: process.env.HOME ?? "/", cwd: process.cwd() }),
+);
+
 fsRouter.get("/tree", async (c) => {
   const root = c.req.query("root");
   const relPath = c.req.query("path") ?? "";
