@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useStore } from "./store";
+import { useStore, useActiveSession } from "./store";
 import { connect, sendPrompt, setVoiceSink } from "./ws-client";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { ProjectPicker } from "./components/ProjectPicker";
@@ -14,11 +14,55 @@ import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 type DrawerSide = "left" | "right" | null;
 type RightTab = "files" | "git";
 
+function ProjectTabs() {
+  const openCwds = useStore((s) => s.openCwds);
+  const activeCwd = useStore((s) => s.activeCwd);
+  const byCwd = useStore((s) => s.byCwd);
+  const setActiveCwd = useStore((s) => s.setActiveCwd);
+  const closeProject = useStore((s) => s.closeProject);
+
+  if (openCwds.length === 0) return null;
+
+  return (
+    <div className="proj-tabs">
+      {openCwds.map((cwd) => {
+        const sess = byCwd[cwd];
+        if (!sess) return null;
+        const active = cwd === activeCwd;
+        return (
+          <div
+            key={cwd}
+            className={`proj-tab ${active ? "active" : ""}`}
+            onClick={() => setActiveCwd(cwd)}
+            title={cwd}
+          >
+            <span className="proj-tab-name">{sess.name}</span>
+            {sess.busy && <span className="proj-tab-busy">⏳</span>}
+            <button
+              className="proj-tab-close"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (sess.busy && !confirm(`「${sess.name}」还在执行，确定关闭吗？`)) return;
+                closeProject(cwd);
+              }}
+              aria-label="关闭"
+              title="关闭"
+            >
+              ✕
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AppInner() {
   const connected = useStore((s) => s.connected);
-  const sessionId = useStore((s) => s.sessionId);
-  const setSessionId = useStore((s) => s.setSessionId);
-  const clearMessages = useStore((s) => s.clearMessages);
+  const session = useActiveSession();
+  const resetSession = useStore((s) => s.resetSession);
+  const patchProject = useStore((s) => s.patchProject);
+  const cleanupEnabled = useStore((s) => s.voiceCleanupEnabled);
   const [drawer, setDrawer] = useState<DrawerSide>(null);
   const [rightTab, setRightTab] = useState<RightTab>("files");
   const voice = useVoiceCtx();
@@ -27,7 +71,6 @@ function AppInner() {
     connect();
   }, []);
 
-  // wire voice to streamed assistant text
   useEffect(() => {
     setVoiceSink({
       feedAssistantChunk: voice.feedAssistantChunk,
@@ -53,16 +96,16 @@ function AppInner() {
     };
   }, []);
 
-  const cleanupEnabled = useStore((s) => s.voiceCleanupEnabled);
-  const setVoiceDraft = useStore((s) => s.setVoiceDraft);
-
   const handleVoiceTranscript = async (text: string) => {
     voice.cancelSpeak();
+    if (!session) return;
     if (!cleanupEnabled) {
       sendPrompt(text);
       return;
     }
-    setVoiceDraft({ original: text, cleaned: text, status: "pending" });
+    patchProject(session.cwd, {
+      voiceDraft: { original: text, cleaned: text, status: "pending" },
+    });
     try {
       const apiBase =
         (import.meta as any).env?.VITE_API_URL ??
@@ -74,14 +117,18 @@ function AppInner() {
       });
       const body: { original?: string; cleaned?: string; fallback?: boolean } = await res.json();
       const cleaned = body.cleaned?.trim() || text;
-      setVoiceDraft({
-        original: text,
-        cleaned,
-        status: body.fallback ? "failed" : "ready",
+      patchProject(session.cwd, {
+        voiceDraft: {
+          original: text,
+          cleaned,
+          status: body.fallback ? "failed" : "ready",
+        },
       });
     } catch (err) {
       console.warn("[voice] cleanup failed", err);
-      setVoiceDraft({ original: text, cleaned: text, status: "failed" });
+      patchProject(session.cwd, {
+        voiceDraft: { original: text, cleaned: text, status: "failed" },
+      });
     }
   };
 
@@ -104,22 +151,23 @@ function AppInner() {
         <VoiceBar onTranscript={handleVoiceTranscript} />
       </div>
 
-      <div style={{ marginTop: 16, fontSize: 12, color: "var(--text-dim)" }}>
-        <div>
-          <b>session:</b>{" "}
-          {sessionId ? <code style={{ fontSize: 10 }}>{sessionId.slice(0, 8)}…</code> : "(new)"}
+      {session && (
+        <div style={{ marginTop: 16, fontSize: 12, color: "var(--text-dim)" }}>
+          <div>
+            <b>session:</b>{" "}
+            {session.sessionId
+              ? <code style={{ fontSize: 10 }}>{session.sessionId.slice(0, 8)}…</code>
+              : "(new)"}
+          </div>
+          <button
+            className="secondary"
+            style={{ marginTop: 8, fontSize: 11, padding: "4px 8px" }}
+            onClick={() => resetSession(session.cwd)}
+          >
+            new session ({session.name})
+          </button>
         </div>
-        <button
-          className="secondary"
-          style={{ marginTop: 8, fontSize: 11, padding: "4px 8px" }}
-          onClick={() => {
-            setSessionId(undefined);
-            clearMessages();
-          }}
-        >
-          new session
-        </button>
-      </div>
+      )}
     </>
   );
 
@@ -151,7 +199,7 @@ function AppInner() {
         <button className="icon-btn" onClick={() => setDrawer(drawer === "left" ? null : "left")} aria-label="menu">
           ☰
         </button>
-        <div className="topbar-title">claude-web</div>
+        <div className="topbar-title">{session?.name ?? "claude-web"}</div>
         <button className="icon-btn" onClick={() => setDrawer(drawer === "right" ? null : "right")} aria-label="files">
           📁
         </button>
@@ -160,6 +208,7 @@ function AppInner() {
       <aside className="sidebar">{sidebar}</aside>
 
       <main className="main">
+        <ProjectTabs />
         <MessageStream />
         <InputBox />
       </main>
@@ -168,10 +217,7 @@ function AppInner() {
 
       {drawer && (
         <div className="drawer-backdrop" onClick={() => setDrawer(null)}>
-          <div
-            className={`drawer drawer-${drawer}`}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className={`drawer drawer-${drawer}`} onClick={(e) => e.stopPropagation()}>
             {drawer === "left" ? sidebar : rightPanel}
           </div>
         </div>

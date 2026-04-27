@@ -17,6 +17,15 @@ export function setVoiceSink(sink: VoiceSink | undefined): void {
   voiceSink = sink;
 }
 
+// runId → cwd mapping (one in-flight prompt per cwd; runIds are unique)
+const runToCwd = new Map<string, string>();
+
+function genRunId(): string {
+  // crypto.randomUUID is widely supported, fall back to timestamp
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function connect(): void {
   if (ws && ws.readyState !== WebSocket.CLOSED) return;
   ws = new WebSocket(WS_URL);
@@ -29,7 +38,12 @@ export function connect(): void {
   ws.onclose = () => {
     console.log("[ws] disconnected");
     useStore.getState().setConnected(false);
-    useStore.getState().setBusy(false);
+    // mark all in-flight runs as not busy
+    const { byCwd, patchProject } = useStore.getState();
+    for (const cwd of Object.keys(byCwd)) {
+      if (byCwd[cwd]!.busy) patchProject(cwd, { busy: false, currentRunId: undefined });
+    }
+    runToCwd.clear();
     if (reconnectTimer) window.clearTimeout(reconnectTimer);
     reconnectTimer = window.setTimeout(connect, 2000);
   };
@@ -46,30 +60,37 @@ function handleServerMessage(msg: ServerMessage): void {
   const store = useStore.getState();
 
   if (msg.type === "sdk_message") {
+    const cwd = runToCwd.get(msg.runId);
+    if (!cwd) return; // unknown run (shouldn't happen)
     const sdkMsg = msg.message as any;
     // capture sessionId from system:init
     if (sdkMsg?.type === "system" && sdkMsg.subtype === "init" && sdkMsg.session_id) {
-      store.setSessionId(sdkMsg.session_id);
+      store.patchProject(cwd, { sessionId: sdkMsg.session_id });
     }
-    // backend signals that the resume id was stale and we restarted fresh
     if (sdkMsg?.type === "system" && sdkMsg.subtype === "stale_session_recovered") {
-      store.setSessionId(undefined);
-      return; // don't render this as a message; the fresh system:init follows
+      store.patchProject(cwd, { sessionId: undefined });
+      return;
     }
-    // feed assistant text chunks to voice sink for streaming TTS
-    if (voiceSink && sdkMsg?.type === "assistant" && sdkMsg.message?.content) {
+    // feed assistant text chunks to voice sink (only for active project, otherwise noisy)
+    if (
+      voiceSink &&
+      cwd === store.activeCwd &&
+      sdkMsg?.type === "assistant" &&
+      sdkMsg.message?.content
+    ) {
       for (const block of sdkMsg.message.content) {
         if (block?.type === "text" && typeof block.text === "string") {
           voiceSink.feedAssistantChunk(block.text);
         }
       }
     }
-    store.addMessage(sdkMsg);
+    store.appendMessage(cwd, sdkMsg);
     return;
   }
 
   if (msg.type === "permission_request") {
     store.setPendingPermission({
+      runId: msg.runId,
       requestId: msg.requestId,
       toolName: msg.toolName,
       input: msg.input,
@@ -78,14 +99,22 @@ function handleServerMessage(msg: ServerMessage): void {
   }
 
   if (msg.type === "error") {
-    store.addMessage({ type: "_error", error: msg.error });
-    store.setBusy(false);
+    const cwd = msg.runId ? runToCwd.get(msg.runId) : undefined;
+    if (cwd) store.appendMessage(cwd, { type: "_error", error: msg.error });
     return;
   }
 
   if (msg.type === "session_ended") {
-    voiceSink?.flushAssistantBuffer();
-    store.setBusy(false);
+    const cwd = runToCwd.get(msg.runId);
+    runToCwd.delete(msg.runId);
+    if (cwd) {
+      // if this was the project's current run, clear busy flag
+      const sess = store.byCwd[cwd];
+      if (sess && sess.currentRunId === msg.runId) {
+        store.patchProject(cwd, { busy: false, currentRunId: undefined });
+      }
+      if (cwd === store.activeCwd) voiceSink?.flushAssistantBuffer();
+    }
     return;
   }
 }
@@ -100,19 +129,29 @@ function send(msg: ClientMessage): void {
 
 export function sendPrompt(prompt: string): void {
   const s = useStore.getState();
-  if (!s.cwd.trim()) {
-    alert("请先在左侧填写工作目录");
+  const cwd = s.activeCwd;
+  if (!cwd) {
+    alert("请先打开一个项目");
     return;
   }
-  s.setBusy(true);
-  s.addMessage({ type: "_user_input", text: prompt });
+  const sess = s.byCwd[cwd];
+  if (!sess) return;
+  if (sess.busy) {
+    alert("当前项目还在执行，请等完成或先停止");
+    return;
+  }
+  const runId = genRunId();
+  runToCwd.set(runId, cwd);
+  s.patchProject(cwd, { busy: true, currentRunId: runId });
+  s.appendMessage(cwd, { type: "_user_input", text: prompt });
   send({
     type: "user_prompt",
+    runId,
     prompt,
-    cwd: s.cwd,
+    cwd,
     model: s.model,
     permissionMode: s.permissionMode,
-    resumeSessionId: s.sessionId,
+    resumeSessionId: sess.sessionId,
   });
 }
 
@@ -121,6 +160,6 @@ export function replyPermission(requestId: string, decision: "allow" | "deny"): 
   useStore.getState().setPendingPermission(undefined);
 }
 
-export function interrupt(): void {
-  send({ type: "interrupt" });
+export function interrupt(runId?: string): void {
+  send({ type: "interrupt", runId });
 }

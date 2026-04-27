@@ -31,7 +31,7 @@ function statusLabel(f: GitStatusFile): string {
 }
 
 export const GitPanel: React.FC = () => {
-  const cwd = useStore((s) => s.cwd);
+  const cwd = useStore((s) => s.activeCwd ?? "");
   const [tab, setTab] = useState<Tab>("status");
 
   return (

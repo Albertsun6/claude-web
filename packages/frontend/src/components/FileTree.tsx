@@ -14,7 +14,7 @@ interface DirState {
 }
 
 export function FileTree({ onOpenFile, selectedRelPath }: FileTreeProps) {
-  const cwd = useStore((s) => s.cwd);
+  const cwd = useStore((s) => s.activeCwd ?? "");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [dirCache, setDirCache] = useState<Record<string, DirState>>({});
 

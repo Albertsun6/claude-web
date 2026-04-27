@@ -73,7 +73,7 @@ function formatSize(bytes: number | undefined): string {
 }
 
 export function CodeViewer({ relPath }: CodeViewerProps) {
-  const cwd = useStore((s) => s.cwd);
+  const cwd = useStore((s) => s.activeCwd ?? "");
   const [state, setState] = useState<FileState>({ loading: false });
   const [langExt, setLangExt] = useState<Extension | null>(null);
 

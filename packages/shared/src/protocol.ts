@@ -12,6 +12,7 @@ export type ModelId =
 export type ClientMessage =
   | {
       type: "user_prompt";
+      runId: string;
       prompt: string;
       cwd: string;
       model: ModelId;
@@ -23,15 +24,20 @@ export type ClientMessage =
       requestId: string;
       decision: "allow" | "deny";
     }
-  | { type: "interrupt" };
+  | { type: "interrupt"; runId?: string };
 
 export type ServerMessage =
-  | { type: "sdk_message"; message: unknown }
+  | { type: "sdk_message"; runId: string; message: unknown }
   | {
       type: "permission_request";
+      runId: string;
       requestId: string;
       toolName: string;
       input: unknown;
     }
-  | { type: "error"; error: string }
-  | { type: "session_ended"; reason: "completed" | "interrupted" | "error" };
+  | { type: "error"; runId?: string; error: string }
+  | {
+      type: "session_ended";
+      runId: string;
+      reason: "completed" | "interrupted" | "error";
+    };

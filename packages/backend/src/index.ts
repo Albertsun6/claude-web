@@ -46,16 +46,19 @@ server.on("upgrade", (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
 });
 
+interface RunHandle {
+  abort: AbortController;
+  permissionToken: string;
+  unregisterPermission: () => void;
+}
+
 wss.on("connection", (ws) => {
   console.log("[ws] client connected");
-  let abort = new AbortController();
-  const permissionToken = randomUUID();
+  const runs = new Map<string, RunHandle>();
 
   const send = (msg: ServerMessage) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
   };
-
-  const unregister = registerPermissionChannel(permissionToken, send as (m: unknown) => void);
 
   ws.on("message", async (raw) => {
     let msg: ClientMessage;
@@ -67,42 +70,84 @@ wss.on("connection", (ws) => {
     }
 
     if (msg.type === "permission_reply") {
-      resolvePermission(permissionToken, msg.requestId, msg.decision);
+      // permission token is per-run; iterate to find the one with this requestId
+      for (const handle of runs.values()) {
+        resolvePermission(handle.permissionToken, msg.requestId, msg.decision);
+      }
       return;
     }
 
     if (msg.type === "interrupt") {
-      abort.abort();
-      abort = new AbortController();
+      if (msg.runId) {
+        runs.get(msg.runId)?.abort.abort();
+      } else {
+        for (const h of runs.values()) h.abort.abort();
+      }
       return;
     }
 
     if (msg.type === "user_prompt") {
-      try {
-        await runSession({
-          prompt: msg.prompt,
-          cwd: msg.cwd,
-          model: msg.model,
-          permissionMode: msg.permissionMode,
-          resumeSessionId: msg.resumeSessionId,
-          permissionToken,
-          backendBase: BACKEND_BASE,
-          signal: abort.signal,
-          onMessage: (cliMsg) => send({ type: "sdk_message", message: cliMsg }),
+      const runId = msg.runId;
+      const abort = new AbortController();
+      const permissionToken = randomUUID();
+
+      const sendForRun = (toolName: string, input: unknown) => {
+        send({
+          type: "permission_request",
+          runId,
+          requestId: randomUUID(), // unused (resolver uses its own); we keep a stable shape
+          toolName,
+          input,
         });
-        send({ type: "session_ended", reason: "completed" });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("[session error]", err);
-        send({ type: "error", error: message });
-        send({ type: "session_ended", reason: "error" });
-      }
+      };
+      void sendForRun;
+
+      // wrap permission channel send so each permission_request carries this runId
+      const channelSend = (m: unknown) => {
+        const obj = m as { type?: string };
+        if (obj?.type === "permission_request") {
+          send({ ...(m as any), runId });
+        } else {
+          send(m as ServerMessage);
+        }
+      };
+      const unregisterPermission = registerPermissionChannel(permissionToken, channelSend);
+
+      runs.set(runId, { abort, permissionToken, unregisterPermission });
+
+      void (async () => {
+        try {
+          await runSession({
+            prompt: msg.prompt,
+            cwd: msg.cwd,
+            model: msg.model,
+            permissionMode: msg.permissionMode,
+            resumeSessionId: msg.resumeSessionId,
+            permissionToken,
+            backendBase: BACKEND_BASE,
+            signal: abort.signal,
+            onMessage: (cliMsg) => send({ type: "sdk_message", runId, message: cliMsg }),
+          });
+          send({ type: "session_ended", runId, reason: abort.signal.aborted ? "interrupted" : "completed" });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error("[session error]", err);
+          send({ type: "error", runId, error: message });
+          send({ type: "session_ended", runId, reason: "error" });
+        } finally {
+          unregisterPermission();
+          runs.delete(runId);
+        }
+      })();
     }
   });
 
   ws.on("close", () => {
     console.log("[ws] client disconnected");
-    abort.abort();
-    unregister();
+    for (const h of runs.values()) {
+      h.abort.abort();
+      h.unregisterPermission();
+    }
+    runs.clear();
   });
 });
