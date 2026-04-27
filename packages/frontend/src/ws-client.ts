@@ -2,7 +2,8 @@ import type { ClientMessage, ServerMessage } from "@claude-web/shared";
 import { useStore } from "./store";
 
 const WS_URL =
-  import.meta.env.VITE_WS_URL ?? `ws://${window.location.hostname}:3030/ws`;
+  import.meta.env.VITE_WS_URL ??
+  `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
 
 let ws: WebSocket | undefined;
 let reconnectTimer: number | undefined;

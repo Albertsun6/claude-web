@@ -1,6 +1,4 @@
-const API_BASE =
-  (import.meta.env.VITE_API_URL as string | undefined) ??
-  `http://${window.location.hostname}:3030`;
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
 export interface GitStatusFile {
   path: string;

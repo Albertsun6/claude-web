@@ -14,9 +14,7 @@ export interface FsFileResponse {
   encoding: "utf-8";
 }
 
-const API_BASE: string =
-  (import.meta as any).env?.VITE_API_URL ??
-  `http://${window.location.hostname}:3030`;
+const API_BASE: string = (import.meta as any).env?.VITE_API_URL ?? "";
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);

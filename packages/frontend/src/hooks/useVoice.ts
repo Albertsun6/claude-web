@@ -52,9 +52,7 @@ declare global {
 
 export type VoiceMode = "web-speech" | "remote-stt" | "unsupported";
 
-const API_BASE =
-  (import.meta as any).env?.VITE_API_URL ??
-  `http://${typeof window !== "undefined" ? window.location.hostname : "localhost"}:3030`;
+const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "";
 const TRANSCRIBE_URL = API_BASE + "/api/voice/transcribe";
 const TTS_URL = API_BASE + "/api/voice/tts";
 

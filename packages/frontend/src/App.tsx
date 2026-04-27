@@ -107,9 +107,7 @@ function AppInner() {
       voiceDraft: { original: text, cleaned: text, status: "pending" },
     });
     try {
-      const apiBase =
-        (import.meta as any).env?.VITE_API_URL ??
-        `http://${window.location.hostname}:3030`;
+      const apiBase = (import.meta as any).env?.VITE_API_URL ?? "";
       const res = await fetch(`${apiBase}/api/voice/cleanup`, {
         method: "POST",
         headers: { "content-type": "application/json" },
