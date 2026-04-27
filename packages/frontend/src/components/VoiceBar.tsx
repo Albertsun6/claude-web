@@ -21,9 +21,10 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
 
   return (
     <div className="voice-bar">
-      <div className="voice-bar-mode">
+      <div className="voice-bar-controls">
         {canSwitch ? (
           <select
+            className="voice-mode-select"
             value={voice.mode}
             onChange={(e) => voice.setMode(e.target.value as typeof voice.mode)}
             aria-label="语音模式"
@@ -33,13 +34,9 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
             ))}
           </select>
         ) : (
-          MODE_LABELS[voice.mode] ?? voice.mode
+          <span className="voice-bar-mode">{MODE_LABELS[voice.mode] ?? voice.mode}</span>
         )}
-      </div>
-      <div className="voice-bar-center">
-        <VoiceButton onTranscript={onTranscript} />
-      </div>
-      <div className="voice-extra">
+
         <label className="voice-cleanup-toggle" title="语音转写后用 Claude 整理一下再发送">
           <input
             type="checkbox"
@@ -48,10 +45,11 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
           />
           <span>整理</span>
         </label>
+
         {voice.isSpeaking && (
           <button
             type="button"
-            className="voice-mute"
+            className="voice-icon-btn"
             onClick={voice.cancelSpeak}
             aria-label="停止朗读"
             title="停止朗读"
@@ -62,7 +60,7 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
         {!voice.isSpeaking && voice.hasLastTurn && (
           <button
             type="button"
-            className="voice-mute"
+            className="voice-icon-btn"
             onClick={voice.replayLastTurn}
             aria-label="重听上一段"
             title="重听上一段"
@@ -72,13 +70,17 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
         )}
         <button
           type="button"
-          className="voice-mute"
+          className="voice-icon-btn"
           onClick={() => voice.setMuted(!voice.muted)}
           aria-label={voice.muted ? "取消静音" : "静音"}
           title={voice.muted ? "取消静音" : "静音"}
         >
           {voice.muted ? "🔇" : "🔊"}
         </button>
+      </div>
+
+      <div className="voice-bar-mic">
+        <VoiceButton onTranscript={onTranscript} />
       </div>
     </div>
   );
