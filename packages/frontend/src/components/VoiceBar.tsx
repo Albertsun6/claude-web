@@ -6,15 +6,33 @@ export interface VoiceBarProps {
   onTranscript: (text: string) => void;
 }
 
+const MODE_LABELS: Record<string, string> = {
+  "web-speech": "浏览器",
+  "remote-stt": "Mac whisper",
+  "unsupported": "不支持",
+};
+
 export function VoiceBar({ onTranscript }: VoiceBarProps) {
   const voice = useVoiceCtx();
-
-  const modeLabel =
-    voice.mode === "web-speech" ? "web-speech" : "unsupported";
+  const canSwitch = voice.availableModes.length > 1;
 
   return (
     <div className="voice-bar">
-      <div className="voice-bar-mode">{modeLabel}</div>
+      <div className="voice-bar-mode">
+        {canSwitch ? (
+          <select
+            value={voice.mode}
+            onChange={(e) => voice.setMode(e.target.value as typeof voice.mode)}
+            aria-label="语音模式"
+          >
+            {voice.availableModes.map((m) => (
+              <option key={m} value={m}>{MODE_LABELS[m] ?? m}</option>
+            ))}
+          </select>
+        ) : (
+          MODE_LABELS[voice.mode] ?? voice.mode
+        )}
+      </div>
       <div className="voice-bar-center">
         <VoiceButton onTranscript={onTranscript} />
       </div>

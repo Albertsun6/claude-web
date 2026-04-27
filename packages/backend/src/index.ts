@@ -8,6 +8,7 @@ import { runSession } from "./cli-runner.js";
 import { fsRouter } from "./routes/fs.js";
 import { gitRouter } from "./routes/git.js";
 import { realtimeRouter } from "./routes/realtime.js";
+import { voiceRouter } from "./routes/voice.js";
 import {
   permissionRouter,
   registerPermissionChannel,
@@ -27,6 +28,7 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.route("/api/fs", fsRouter);
 app.route("/api/git", gitRouter);
 app.route("/api/realtime", realtimeRouter);
+app.route("/api/voice", voiceRouter);
 app.route("/api/permission", permissionRouter);
 
 const server = serve({ fetch: app.fetch, port: PORT }, (info) => {

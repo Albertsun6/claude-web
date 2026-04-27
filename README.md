@@ -6,6 +6,13 @@ Personal mobile-friendly web UI for the `claude` CLI — uses your Claude Pro/Ma
 
 - `claude` CLI installed and logged in (run `claude auth login` once)
 - Node 20+, pnpm 9+
+- (optional, for iOS-PWA / Firefox voice) `whisper-cpp` + `ffmpeg` and a model:
+  ```bash
+  brew install whisper-cpp ffmpeg
+  mkdir -p ~/.whisper-models && curl -L -o ~/.whisper-models/ggml-large-v3-turbo-q5_0.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+  ```
+  Override paths via `WHISPER_BIN`, `WHISPER_MODEL`, `FFMPEG_BIN` env vars.
 
 ## Quick start
 

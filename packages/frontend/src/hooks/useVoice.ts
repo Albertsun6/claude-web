@@ -50,10 +50,17 @@ declare global {
   }
 }
 
-export type VoiceMode = "web-speech" | "unsupported";
+export type VoiceMode = "web-speech" | "remote-stt" | "unsupported";
+
+const TRANSCRIBE_URL =
+  ((import.meta as any).env?.VITE_API_URL ??
+    `http://${typeof window !== "undefined" ? window.location.hostname : "localhost"}:3030`) +
+  "/api/voice/transcribe";
 
 export interface UseVoiceReturn {
   mode: VoiceMode;
+  availableModes: VoiceMode[];
+  setMode: (m: VoiceMode) => void;
   isRecording: boolean;
   interimTranscript: string;
   finalTranscript: string;
@@ -69,23 +76,58 @@ export interface UseVoiceReturn {
 }
 
 const MUTED_KEY = "claude-web:voice-muted";
+const PREFERRED_MODE_KEY = "claude-web:voice-mode";
 const SENTENCE_SPLIT = /([.!?。！？\n]+)/;
 
-function detectMode(): VoiceMode {
-  if (typeof window === "undefined") return "unsupported";
+function hasMediaRecorder(): boolean {
+  return typeof window !== "undefined" &&
+    typeof window.MediaRecorder !== "undefined" &&
+    !!navigator.mediaDevices?.getUserMedia;
+}
+
+function detectAvailable(): VoiceMode[] {
+  if (typeof window === "undefined") return [];
+  const out: VoiceMode[] = [];
+
+  const isIOSStandalone =
+    window.matchMedia("(display-mode: standalone)").matches &&
+    /iPhone|iPad|iPod/.test(navigator.userAgent);
+
   const ctor =
     window.SpeechRecognition ??
     (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionCtor })
       .webkitSpeechRecognition;
-  if (!ctor) return "unsupported";
+  if (ctor && !isIOSStandalone) out.push("web-speech");
+  if (hasMediaRecorder()) out.push("remote-stt");
+  return out;
+}
 
-  // iOS standalone PWA does not allow getUserMedia for SpeechRecognition reliably.
-  const isIOSStandalone =
-    window.matchMedia("(display-mode: standalone)").matches &&
-    /iPhone|iPad|iPod/.test(navigator.userAgent);
-  if (isIOSStandalone) return "unsupported";
+function pickDefaultMode(available: VoiceMode[]): VoiceMode {
+  if (available.length === 0) return "unsupported";
+  // user preference wins if still available
+  try {
+    const pref = localStorage.getItem(PREFERRED_MODE_KEY) as VoiceMode | null;
+    if (pref && available.includes(pref)) return pref;
+  } catch {
+    /* ignore */
+  }
+  // default: prefer web-speech (zero latency) when available; else remote-stt
+  return available[0]!;
+}
 
-  return "web-speech";
+function pickRecorderMimeType(): string {
+  // iOS Safari supports audio/mp4; Chrome/Firefox prefer webm/opus.
+  const candidates = [
+    "audio/mp4",
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+  ];
+  if (typeof window === "undefined" || !window.MediaRecorder) return "";
+  for (const t of candidates) {
+    if (window.MediaRecorder.isTypeSupported?.(t)) return t;
+  }
+  return "";
 }
 
 function loadMuted(): boolean {
@@ -105,11 +147,17 @@ function persistMuted(v: boolean): void {
 }
 
 export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
-  const [mode, setMode] = useState<VoiceMode>("unsupported");
+  const [availableModes, setAvailableModes] = useState<VoiceMode[]>([]);
+  const [mode, setModeState] = useState<VoiceMode>("unsupported");
   const [isRecording, setIsRecording] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const [finalTranscript, setFinalTranscript] = useState("");
   const [muted, setMutedState] = useState<boolean>(false);
+
+  const setMode = useCallback((m: VoiceMode) => {
+    try { localStorage.setItem(PREFERRED_MODE_KEY, m); } catch { /* ignore */ }
+    setModeState(m);
+  }, []);
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const finalCbRef = useRef<((text: string) => void) | null>(null);
@@ -118,9 +166,16 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const speakingRef = useRef<boolean>(false);
   const mutedRef = useRef<boolean>(false);
 
+  // remote-stt refs
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recorderChunksRef = useRef<Blob[]>([]);
+
   // init
   useEffect(() => {
-    setMode(detectMode());
+    const avail = detectAvailable();
+    setAvailableModes(avail);
+    setModeState(pickDefaultMode(avail));
     const m = loadMuted();
     setMutedState(m);
     mutedRef.current = m;
@@ -189,27 +244,109 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     return rec;
   }, [lang]);
 
-  const start = useCallback(() => {
-    if (mode !== "web-speech") return;
-    const rec = ensureRecognition();
-    if (!rec) return;
+  // ----- remote-stt: MediaRecorder → backend whisper -----
+  const startRemote = useCallback(async () => {
+    if (recorderRef.current) return;
+    setInterimTranscript("识别中…（录音）");
+    let stream: MediaStream;
     try {
-      rec.start();
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
-      // start() throws if already started; safely ignore
-      console.warn("[voice] start failed", err);
+      console.warn("[voice] mic permission denied", err);
+      setInterimTranscript("");
+      return;
     }
-  }, [mode, ensureRecognition]);
-
-  const stop = useCallback(() => {
-    const rec = recognitionRef.current;
-    if (!rec) return;
+    mediaStreamRef.current = stream;
+    const mimeType = pickRecorderMimeType();
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+    recorderChunksRef.current = [];
+    recorder.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) recorderChunksRef.current.push(ev.data);
+    };
+    recorder.onstop = async () => {
+      const chunks = recorderChunksRef.current;
+      recorderChunksRef.current = [];
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+      recorderRef.current = null;
+      setIsRecording(false);
+      const type = recorder.mimeType || "application/octet-stream";
+      const blob = new Blob(chunks, { type });
+      if (blob.size === 0) {
+        setInterimTranscript("");
+        return;
+      }
+      setInterimTranscript("识别中…（转写）");
+      try {
+        const res = await fetch(TRANSCRIBE_URL, {
+          method: "POST",
+          headers: { "content-type": type },
+          body: blob,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body: { text?: string; error?: string } = await res.json();
+        const text = (body.text ?? "").trim();
+        setInterimTranscript("");
+        if (text) {
+          setFinalTranscript(text);
+          finalCbRef.current?.(text);
+        }
+      } catch (err) {
+        console.warn("[voice] transcribe failed", err);
+        setInterimTranscript("");
+      }
+    };
+    recorderRef.current = recorder;
     try {
-      rec.stop();
+      recorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.warn("[voice] recorder start failed", err);
+      setIsRecording(false);
+      stream.getTracks().forEach((t) => t.stop());
+      recorderRef.current = null;
+      mediaStreamRef.current = null;
+      setInterimTranscript("");
+    }
+  }, []);
+
+  const stopRemote = useCallback(() => {
+    const r = recorderRef.current;
+    if (!r) return;
+    try {
+      if (r.state !== "inactive") r.stop();
     } catch {
       /* ignore */
     }
   }, []);
+
+  const start = useCallback(() => {
+    if (mode === "web-speech") {
+      const rec = ensureRecognition();
+      if (!rec) return;
+      try {
+        rec.start();
+      } catch (err) {
+        console.warn("[voice] start failed", err);
+      }
+    } else if (mode === "remote-stt") {
+      void startRemote();
+    }
+  }, [mode, ensureRecognition, startRemote]);
+
+  const stop = useCallback(() => {
+    if (mode === "web-speech") {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+    } else if (mode === "remote-stt") {
+      stopRemote();
+    }
+  }, [mode, stopRemote]);
 
   const onFinal = useCallback((cb: (text: string) => void) => {
     finalCbRef.current = cb;
@@ -295,6 +432,8 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
 
   return {
     mode,
+    availableModes,
+    setMode,
     isRecording,
     interimTranscript,
     finalTranscript,
