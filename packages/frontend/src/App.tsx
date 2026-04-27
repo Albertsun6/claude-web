@@ -10,6 +10,7 @@ import { VoiceBar } from "./components/VoiceBar";
 import { FilesPanel } from "./components/FilesPanel";
 import { GitPanel } from "./components/GitPanel";
 import { OfflineBanner } from "./components/OfflineBanner";
+import { SessionList } from "./components/SessionList";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 
 type DrawerSide = "left" | "right" | null;
@@ -165,6 +166,9 @@ function AppInner() {
           >
             new session ({session.name})
           </button>
+          <div style={{ marginTop: 12 }}>
+            <SessionList />
+          </div>
         </div>
       )}
     </>

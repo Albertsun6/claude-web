@@ -13,6 +13,7 @@ import { fsRouter } from "./routes/fs.js";
 import { gitRouter } from "./routes/git.js";
 import { realtimeRouter } from "./routes/realtime.js";
 import { voiceRouter } from "./routes/voice.js";
+import { sessionsRouter } from "./routes/sessions.js";
 import {
   permissionRouter,
   registerPermissionChannel,
@@ -33,6 +34,7 @@ app.route("/api/fs", fsRouter);
 app.route("/api/git", gitRouter);
 app.route("/api/realtime", realtimeRouter);
 app.route("/api/voice", voiceRouter);
+app.route("/api/sessions", sessionsRouter);
 app.route("/api/permission", permissionRouter);
 
 // Serve the frontend production build, if present.
