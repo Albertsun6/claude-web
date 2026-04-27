@@ -9,6 +9,7 @@ import { PermissionModal } from "./components/PermissionModal";
 import { VoiceBar } from "./components/VoiceBar";
 import { FilesPanel } from "./components/FilesPanel";
 import { GitPanel } from "./components/GitPanel";
+import { OfflineBanner } from "./components/OfflineBanner";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 
 type DrawerSide = "left" | "right" | null;
@@ -222,6 +223,7 @@ function AppInner() {
       )}
 
       <PermissionModal />
+      <OfflineBanner />
     </div>
   );
 }

@@ -333,6 +333,44 @@ button.danger { background: var(--danger); color: white; }
 .connection-status.connected { background: rgba(74, 222, 128, 0.15); color: var(--success); }
 .connection-status.disconnected { background: rgba(248, 113, 113, 0.15); color: var(--danger); }
 
+.offline-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  background: var(--danger);
+  color: white;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.offline-banner-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: white;
+  animation: offline-pulse 1s ease-in-out infinite;
+}
+.offline-banner-btn {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 4px;
+  padding: 4px 12px;
+  min-height: 28px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.offline-banner-btn:hover { background: rgba(255,255,255,0.3); }
+@keyframes offline-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .project-picker { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .project-picker-header { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .project-picker-actions { display: flex; gap: 4px; }
