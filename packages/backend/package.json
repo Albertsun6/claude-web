@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "test:cli": "tsx src/test-cli.ts",
-    "test:permission": "tsx src/test-permission.ts"
+    "test:permission": "tsx src/test-permission.ts",
+    "test:e2e": "tsx src/test-e2e.ts",
+    "test:auth": "tsx src/test-auth.ts"
   },
   "dependencies": {
     "@claude-web/shared": "workspace:*",

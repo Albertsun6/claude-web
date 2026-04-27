@@ -34,22 +34,24 @@ function runGit(cwd: string, args: string[], timeoutMs = 5000): Promise<RunResul
   });
 }
 
-async function verifyRepo(cwd: string): Promise<string | null> {
-  if (!cwd || !isAbsolute(cwd)) return "cwd must be an absolute path";
+type VerifyErr = { status: 400 | 403; error: string };
+
+async function verifyRepo(cwd: string): Promise<VerifyErr | null> {
+  if (!cwd || !isAbsolute(cwd)) return { status: 400, error: "cwd must be an absolute path" };
   const allowErr = verifyAllowedPath(cwd);
-  if (allowErr) return allowErr;
+  if (allowErr) return { status: 403, error: allowErr };
   try {
     const s = await stat(cwd);
-    if (!s.isDirectory()) return "cwd is not a directory";
+    if (!s.isDirectory()) return { status: 400, error: "cwd is not a directory" };
   } catch {
-    return "cwd does not exist";
+    return { status: 400, error: "cwd does not exist" };
   }
   try {
     // .git can be a directory (regular repo) or a file (worktree/submodule)
     await stat(join(cwd, ".git"));
     return null;
   } catch {
-    return "not a git repo";
+    return { status: 400, error: "not a git repo" };
   }
 }
 
@@ -113,7 +115,7 @@ function parseStatus(stdout: string): StatusResponse {
 gitRouter.get("/status", async (c) => {
   const cwd = c.req.query("cwd") ?? "";
   const err = await verifyRepo(cwd);
-  if (err) return c.json({ error: err }, 400);
+  if (err) return c.json({ error: err.error }, err.status);
   try {
     const r = await runGit(cwd, ["status", "--porcelain=v1", "-b"]);
     if (r.code !== 0) return c.json({ error: r.stderr || "git status failed" }, 500);
@@ -128,7 +130,7 @@ gitRouter.get("/diff", async (c) => {
   const path = c.req.query("path") ?? "";
   const staged = c.req.query("staged") === "1";
   const err = await verifyRepo(cwd);
-  if (err) return c.json({ error: err }, 400);
+  if (err) return c.json({ error: err.error }, err.status);
   if (!isSafeRelPath(path)) return c.json({ error: "invalid path" }, 400);
   const args = ["diff", "--no-color"];
   if (staged) args.push("--cached");
@@ -154,7 +156,7 @@ gitRouter.get("/log", async (c) => {
   const limitRaw = Number(c.req.query("limit") ?? 20);
   const limit = Math.min(100, Math.max(1, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 20));
   const err = await verifyRepo(cwd);
-  if (err) return c.json({ error: err }, 400);
+  if (err) return c.json({ error: err.error }, err.status);
   try {
     const r = await runGit(cwd, [
       "log",
@@ -189,7 +191,7 @@ interface BranchResponse {
 gitRouter.get("/branch", async (c) => {
   const cwd = c.req.query("cwd") ?? "";
   const err = await verifyRepo(cwd);
-  if (err) return c.json({ error: err }, 400);
+  if (err) return c.json({ error: err.error }, err.status);
   try {
     const r = await runGit(cwd, [
       "branch",
