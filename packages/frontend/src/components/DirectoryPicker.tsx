@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchTree, fetchHome } from "../api/fs";
+import { fetchTree, fetchHome, createDirectory } from "../api/fs";
 
 export interface DirectoryPickerProps {
   initialPath?: string;
@@ -29,6 +29,10 @@ export function DirectoryPicker({
   const [entries, setEntries] = useState<{ name: string; type: "dir" | "file" }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadCounter, setReloadCounter] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // bootstrap to home if no initial
   useEffect(() => {
@@ -58,10 +62,25 @@ export function DirectoryPicker({
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [current]);
+  }, [current, reloadCounter]);
 
   const goUp = () => setCurrent(dirname(current));
   const enter = (name: string) => setCurrent(joinPath(current, name));
+
+  const submitCreate = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setCreateError(null);
+    try {
+      await createDirectory(current, name);
+      setNewName("");
+      setCreating(false);
+      // navigate into the new dir
+      setCurrent(joinPath(current, name));
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
@@ -85,7 +104,43 @@ export function DirectoryPicker({
             spellCheck={false}
             placeholder="/Users/you"
           />
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setReloadCounter((n) => n + 1)}
+            title="刷新"
+          >
+            ⟳
+          </button>
+          <button
+            type="button"
+            onClick={() => { setCreating(true); setCreateError(null); }}
+            title="在当前目录下新建文件夹"
+          >
+            +
+          </button>
         </div>
+
+        {creating && (
+          <div className="dir-create">
+            <input
+              type="text"
+              autoFocus
+              placeholder="新文件夹名称"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitCreate();
+                if (e.key === "Escape") { setCreating(false); setNewName(""); setCreateError(null); }
+              }}
+            />
+            <button onClick={submitCreate} disabled={!newName.trim()}>创建</button>
+            <button className="secondary" onClick={() => { setCreating(false); setNewName(""); setCreateError(null); }}>
+              取消
+            </button>
+          </div>
+        )}
+        {createError && <div className="dir-error" style={{ fontSize: 12 }}>{createError}</div>}
 
         <div className="dir-list">
           {loading && <div className="dir-empty">加载中…</div>}

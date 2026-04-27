@@ -57,3 +57,21 @@ export interface FsHomeResponse {
 export function fetchHome(): Promise<FsHomeResponse> {
   return getJson<FsHomeResponse>(`${API_BASE}/api/fs/home`);
 }
+
+export interface FsMkdirResponse { ok: true; path: string }
+export async function createDirectory(parent: string, name: string): Promise<FsMkdirResponse> {
+  const res = await fetch(`${API_BASE}/api/fs/mkdir`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ parent, name }),
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.error) message = body.error;
+    } catch { /* ignore */ }
+    throw new Error(message);
+  }
+  return (await res.json()) as FsMkdirResponse;
+}

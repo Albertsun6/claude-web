@@ -235,6 +235,18 @@ button.danger { background: var(--danger); color: white; }
 .dir-item:hover { background: var(--panel); }
 .dir-empty { color: var(--text-dim); font-size: 13px; padding: 16px; text-align: center; }
 .dir-error { color: var(--danger); }
+.dir-create { display: flex; gap: 6px; align-items: stretch; }
+.dir-create input {
+  flex: 1;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+.dir-create button { min-height: 38px; }
 
 .path-input-row { display: flex; gap: 6px; align-items: stretch; }
 .path-input-row input { flex: 1; }

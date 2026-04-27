@@ -95,6 +95,47 @@ fsRouter.get("/tree", async (c) => {
   return c.json(body);
 });
 
+fsRouter.post("/mkdir", async (c) => {
+  let body: { parent?: unknown; name?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid JSON body" }, 400);
+  }
+  const parent = typeof body.parent === "string" ? body.parent : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!parent || !path.isAbsolute(parent)) {
+    return c.json({ error: "parent must be an absolute path" }, 400);
+  }
+  if (!name) return c.json({ error: "name is required" }, 400);
+  if (name.includes("/") || name.includes("\\") || name === "." || name === "..") {
+    return c.json({ error: "invalid folder name" }, 400);
+  }
+
+  // verify parent exists and is a directory
+  try {
+    const st = await fs.stat(parent);
+    if (!st.isDirectory()) return c.json({ error: "parent is not a directory" }, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 404);
+  }
+
+  const target = path.join(parent, name);
+  if (!isInsideRoot(parent, target)) {
+    return c.json({ error: "name escapes parent" }, 403);
+  }
+
+  try {
+    await fs.mkdir(target, { recursive: false });
+    return c.json({ ok: true, path: target });
+  } catch (err: unknown) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === "EEXIST") return c.json({ error: "目录已存在" }, 409);
+    return c.json({ error: e.message ?? String(err) }, 500);
+  }
+});
+
 fsRouter.get("/file", async (c) => {
   const root = c.req.query("root");
   const relPath = c.req.query("path") ?? "";
