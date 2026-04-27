@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FileTree } from "./FileTree";
-import { CodeViewer } from "./CodeViewer";
+import { FileViewer } from "./FileViewer";
 import "../files.css";
 
 export function FilesPanel() {
@@ -15,7 +15,7 @@ export function FilesPanel() {
         />
       </div>
       <div className="files-panel__viewer">
-        <CodeViewer relPath={selectedRelPath} />
+        <FileViewer relPath={selectedRelPath} />
       </div>
     </div>
   );

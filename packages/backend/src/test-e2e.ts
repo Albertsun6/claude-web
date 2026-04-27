@@ -94,6 +94,27 @@ async function testFsFile() {
   check("fs/file escape → 403", r3.status === 403);
 }
 
+async function testFsBlob() {
+  // The icon.svg in frontend/public is a known small image we ship.
+  const r = await fetch(`${BASE}/api/fs/blob?root=${encodeURIComponent(REPO)}&path=packages/frontend/public/icon.svg`);
+  check("fs/blob 200", r.status === 200);
+  check("fs/blob image content-type", (r.headers.get("content-type") ?? "").includes("svg"));
+  const buf = Buffer.from(await r.arrayBuffer());
+  check("fs/blob has bytes", buf.length > 0);
+
+  // missing
+  const r2 = await fetch(`${BASE}/api/fs/blob?root=${encodeURIComponent(REPO)}&path=does-not-exist.png`);
+  check("fs/blob missing → 404", r2.status === 404);
+
+  // path escape
+  const r3 = await fetch(`${BASE}/api/fs/blob?root=${encodeURIComponent(REPO)}&path=../../etc/hosts`);
+  check("fs/blob escape → 403", r3.status === 403);
+
+  // unknown extension defaults to octet-stream (still served)
+  const r4 = await fetch(`${BASE}/api/fs/blob?root=${encodeURIComponent(REPO)}&path=README.md`);
+  check("fs/blob octet-stream default", r4.status === 200);
+}
+
 async function testFsMkdir() {
   const dir = await mkdtemp(path.join(tmpdir(), "claude-web-e2e-"));
   // good
@@ -379,6 +400,7 @@ async function testWsInterrupt() {
     await testFsHome();
     await testFsTree();
     await testFsFile();
+    await testFsBlob();
     await testFsMkdir();
   });
   await group("REST: git", async () => { await testGit(); });

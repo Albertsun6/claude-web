@@ -190,3 +190,71 @@ fsRouter.get("/file", async (c) => {
   };
   return c.json(body);
 });
+
+const MAX_BLOB_BYTES = 20 * 1024 * 1024; // 20 MB — images / pdfs / small media
+
+const MIME_BY_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".bmp": "image/bmp",
+  ".ico": "image/x-icon",
+  ".heic": "image/heic",
+  ".pdf": "application/pdf",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".m4a": "audio/mp4",
+};
+
+fsRouter.get("/blob", async (c) => {
+  const root = c.req.query("root");
+  const relPath = c.req.query("path") ?? "";
+
+  if (!root || !path.isAbsolute(root)) {
+    return c.json({ error: "root must be an absolute path" }, 400);
+  }
+  const rootErr = verifyAllowedPath(root);
+  if (rootErr) return c.json({ error: rootErr }, 403);
+
+  const resolved = path.resolve(root, relPath);
+  if (!isInsideRoot(root, resolved)) {
+    return c.json({ error: "path escapes root" }, 403);
+  }
+
+  let stat;
+  try {
+    stat = await fs.stat(resolved);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
+  }
+  if (!stat.isFile()) return c.json({ error: "not a file" }, 400);
+  if (stat.size > MAX_BLOB_BYTES) {
+    return c.json({ error: `file too large (${stat.size} > ${MAX_BLOB_BYTES})` }, 413);
+  }
+
+  let buf: Buffer;
+  try { buf = await fs.readFile(resolved); }
+  catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+
+  const ext = path.extname(resolved).toLowerCase();
+  const contentType = MIME_BY_EXT[ext] ?? "application/octet-stream";
+
+  return new Response(buf as unknown as BodyInit, {
+    status: 200,
+    headers: {
+      "content-type": contentType,
+      "content-length": String(buf.length),
+      // images are typically immutable per-path; safe small cache helps zoom/pan flicker
+      "cache-control": "private, max-age=60",
+    },
+  });
+});
