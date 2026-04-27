@@ -1,7 +1,8 @@
 import type { ClientMessage, ServerMessage } from "@claude-web/shared";
 import { useStore } from "./store";
+import { withAuthQuery } from "./auth";
 
-const WS_URL =
+const RAW_WS_URL =
   import.meta.env.VITE_WS_URL ??
   `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
 
@@ -22,14 +23,13 @@ export function setVoiceSink(sink: VoiceSink | undefined): void {
 const runToCwd = new Map<string, string>();
 
 function genRunId(): string {
-  // crypto.randomUUID is widely supported, fall back to timestamp
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function connect(): void {
   if (ws && ws.readyState !== WebSocket.CLOSED) return;
-  ws = new WebSocket(WS_URL);
+  ws = new WebSocket(withAuthQuery(RAW_WS_URL));
 
   ws.onopen = () => {
     console.log("[ws] connected");
@@ -39,7 +39,6 @@ export function connect(): void {
   ws.onclose = () => {
     console.log("[ws] disconnected");
     useStore.getState().setConnected(false);
-    // mark all in-flight runs as not busy
     const { byCwd, patchProject } = useStore.getState();
     for (const cwd of Object.keys(byCwd)) {
       if (byCwd[cwd]!.busy) patchProject(cwd, { busy: false, currentRunId: undefined });
@@ -62,9 +61,8 @@ function handleServerMessage(msg: ServerMessage): void {
 
   if (msg.type === "sdk_message") {
     const cwd = runToCwd.get(msg.runId);
-    if (!cwd) return; // unknown run (shouldn't happen)
+    if (!cwd) return;
     const sdkMsg = msg.message as any;
-    // capture sessionId from system:init
     if (sdkMsg?.type === "system" && sdkMsg.subtype === "init" && sdkMsg.session_id) {
       store.patchProject(cwd, { sessionId: sdkMsg.session_id });
     }
@@ -72,7 +70,6 @@ function handleServerMessage(msg: ServerMessage): void {
       store.patchProject(cwd, { sessionId: undefined });
       return;
     }
-    // feed assistant text chunks to voice sink (only for active project, otherwise noisy)
     if (
       voiceSink &&
       cwd === store.activeCwd &&
@@ -85,11 +82,17 @@ function handleServerMessage(msg: ServerMessage): void {
         }
       }
     }
-    store.appendMessage(cwd, sdkMsg);
+    // Tag the message with its runId so we can selectively wipe it on stale-session restart.
+    store.appendMessage(cwd, { ...sdkMsg, _runId: msg.runId });
     return;
   }
 
   if (msg.type === "permission_request") {
+    // Auto-allow if user opted in for this run+tool.
+    if (store.isToolAllowedForRun(msg.runId, msg.toolName)) {
+      send({ type: "permission_reply", requestId: msg.requestId, decision: "allow", runId: msg.runId });
+      return;
+    }
     store.setPendingPermission({
       runId: msg.runId,
       requestId: msg.requestId,
@@ -99,17 +102,25 @@ function handleServerMessage(msg: ServerMessage): void {
     return;
   }
 
+  if (msg.type === "clear_run_messages") {
+    const cwd = runToCwd.get(msg.runId);
+    if (cwd) store.removeRunMessages(cwd, msg.runId);
+    return;
+  }
+
   if (msg.type === "error") {
     const cwd = msg.runId ? runToCwd.get(msg.runId) : undefined;
-    if (cwd) store.appendMessage(cwd, { type: "_error", error: msg.error });
+    if (cwd) {
+      store.appendMessage(cwd, { type: "_error", error: msg.error, _runId: msg.runId });
+    }
     return;
   }
 
   if (msg.type === "session_ended") {
     const cwd = runToCwd.get(msg.runId);
     runToCwd.delete(msg.runId);
+    store.forgetRunAllowlist(msg.runId);
     if (cwd) {
-      // if this was the project's current run, clear busy flag
       const sess = store.byCwd[cwd];
       if (sess && sess.currentRunId === msg.runId) {
         store.patchProject(cwd, { busy: false, currentRunId: undefined });
@@ -144,7 +155,7 @@ export function sendPrompt(prompt: string): void {
   const runId = genRunId();
   runToCwd.set(runId, cwd);
   s.patchProject(cwd, { busy: true, currentRunId: runId });
-  s.appendMessage(cwd, { type: "_user_input", text: prompt });
+  s.appendMessage(cwd, { type: "_user_input", text: prompt, _runId: runId });
   send({
     type: "user_prompt",
     runId,
@@ -156,11 +167,20 @@ export function sendPrompt(prompt: string): void {
   });
 }
 
-export function replyPermission(requestId: string, decision: "allow" | "deny"): void {
-  send({ type: "permission_reply", requestId, decision });
+export function replyPermission(
+  requestId: string,
+  decision: "allow" | "deny",
+  runId?: string,
+): void {
+  send({ type: "permission_reply", requestId, decision, runId });
   useStore.getState().setPendingPermission(undefined);
 }
 
 export function interrupt(runId?: string): void {
   send({ type: "interrupt", runId });
+}
+
+/** Force reconnect — used after token change so new auth takes effect. */
+export function reconnect(): void {
+  if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
 }

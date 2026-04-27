@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { authFetch } from "../auth";
 
 // Minimal local typings for the Web Speech API (not in lib.dom by default).
 interface SpeechRecognitionAlternative {
@@ -292,7 +293,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       }
       setInterimTranscript("识别中…（转写）");
       try {
-        const res = await fetch(TRANSCRIBE_URL, {
+        const res = await authFetch(TRANSCRIBE_URL, {
           method: "POST",
           headers: { "content-type": type },
           body: blob,
@@ -367,7 +368,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   // Fetch one sentence's mp3 (returns object URL, or null on error/cancel).
   const fetchTtsBlobUrl = useCallback(async (text: string, gen: number): Promise<string | null> => {
     try {
-      const res = await fetch(TTS_URL, {
+      const res = await authFetch(TTS_URL, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text }),

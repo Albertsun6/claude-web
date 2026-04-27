@@ -1,6 +1,23 @@
-import { useEffect, useRef } from "react";
+import { Component, useEffect, useRef, type ReactNode } from "react";
 import { useActiveSession } from "../store";
 import { MessageItem } from "./MessageItem";
+
+// Per-message boundary: a single bad payload from history must not blank the stream.
+class MsgBoundary extends Component<{ children: ReactNode }, { err: Error | null }> {
+  state = { err: null as Error | null };
+  static getDerivedStateFromError(err: Error) { return { err }; }
+  componentDidCatch(err: Error) { console.warn("[MessageItem] render error:", err); }
+  render() {
+    if (this.state.err) {
+      return (
+        <div className="msg" style={{ color: "var(--danger)", fontSize: 12 }}>
+          ⚠ 这条消息无法显示：{this.state.err.message}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export function MessageStream() {
   const session = useActiveSession();
@@ -35,7 +52,9 @@ export function MessageStream() {
   return (
     <div className="stream" ref={ref}>
       {messages.map((m) => (
-        <MessageItem key={m.id} raw={m.raw} />
+        <MsgBoundary key={m.id}>
+          <MessageItem raw={m.raw} />
+        </MsgBoundary>
       ))}
     </div>
   );

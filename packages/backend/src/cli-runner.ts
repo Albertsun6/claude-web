@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ModelId, PermissionMode } from "@claude-web/shared";
+import { verifyAllowedPath } from "./auth.js";
 
 export interface RunSessionParams {
   prompt: string;
@@ -11,23 +12,30 @@ export interface RunSessionParams {
   resumeSessionId?: string;
   permissionToken?: string;
   backendBase?: string;
+  /** When set, hook script will pass this as Bearer to /api/permission/ask. */
+  authToken?: string;
   onMessage: (msg: unknown) => void;
+  /** Called if we restart the run (e.g. stale session) so frontend can wipe state. */
+  onClearRunMessages?: () => void;
   signal?: AbortSignal;
 }
 
 const CLI_BIN = process.env.CLAUDE_CLI ?? "claude";
+const KILL_GRACE_MS = 5000;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK_SCRIPT = path.resolve(__dirname, "../scripts/permission-hook.mjs");
 
-function buildSettings(token: string, backendBase: string): string {
-  const command = `node ${HOOK_SCRIPT} ${token} ${backendBase}`;
+function buildSettings(token: string, backendBase: string, authToken?: string): string {
+  // Hook script signature: <token> <backendBase> [authToken]
+  const parts = ["node", HOOK_SCRIPT, token, backendBase];
+  if (authToken) parts.push(authToken);
   return JSON.stringify({
     hooks: {
       PreToolUse: [
         {
           matcher: ".*",
-          hooks: [{ type: "command", command, timeout: 600 }],
+          hooks: [{ type: "command", command: parts.join(" "), timeout: 600 }],
         },
       ],
     },
@@ -52,7 +60,7 @@ function buildArgs(p: RunSessionParams, resume?: string): string[] {
   ];
   if (resume) args.push("--resume", resume);
   if (p.permissionToken && p.backendBase && p.permissionMode !== "bypassPermissions") {
-    args.push("--settings", buildSettings(p.permissionToken, p.backendBase));
+    args.push("--settings", buildSettings(p.permissionToken, p.backendBase, p.authToken));
   }
   return args;
 }
@@ -66,8 +74,17 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
     env: process.env,
   });
 
+  let killTimer: NodeJS.Timeout | undefined;
   const onAbort = () => {
-    if (!child.killed) child.kill("SIGTERM");
+    if (child.killed || child.exitCode !== null) return;
+    try { child.kill("SIGTERM"); } catch { /* ignore */ }
+    // Escalate to SIGKILL if it doesn't exit promptly. Fixes hangs where
+    // the CLI is blocked in a hook fetch and won't ack SIGTERM.
+    killTimer = setTimeout(() => {
+      if (child.exitCode === null && !child.killed) {
+        try { child.kill("SIGKILL"); } catch { /* ignore */ }
+      }
+    }, KILL_GRACE_MS);
   };
   p.signal?.addEventListener("abort", onAbort);
 
@@ -78,7 +95,6 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
   child.stdin.end();
 
   let stdoutBuf = "";
-  let sawValidOutput = false;
   child.stdout.on("data", (chunk: Buffer) => {
     stdoutBuf += chunk.toString("utf8");
     let idx: number;
@@ -88,7 +104,6 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
       if (!line) continue;
       try {
         const msg = JSON.parse(line);
-        sawValidOutput = true;
         p.onMessage(msg);
       } catch {
         console.warn("[cli-runner] failed to parse line:", line.slice(0, 200));
@@ -103,19 +118,20 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
 
   return new Promise<SpawnResult>((resolve, reject) => {
     child.on("error", (err) => {
+      if (killTimer) clearTimeout(killTimer);
       p.signal?.removeEventListener("abort", onAbort);
       reject(err);
     });
     child.on("close", (code, signal) => {
+      if (killTimer) clearTimeout(killTimer);
       p.signal?.removeEventListener("abort", onAbort);
       const tail = stdoutBuf.trim();
       if (tail) {
-        try { p.onMessage(JSON.parse(tail)); sawValidOutput = true; } catch { /* noop */ }
+        try { p.onMessage(JSON.parse(tail)); } catch { /* noop */ }
       }
-      void sawValidOutput;
       resolve({
         code,
-        signaled: signal === "SIGTERM" || !!p.signal?.aborted,
+        signaled: signal === "SIGTERM" || signal === "SIGKILL" || !!p.signal?.aborted,
         stderr: stderrBuf,
       });
     });
@@ -125,13 +141,18 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
 const STALE_SESSION_RE = /No conversation found with session ID/i;
 
 export async function runSession(p: RunSessionParams): Promise<void> {
+  // Defense in depth: cli-runner enforces the path allowlist too.
+  const cwdErr = verifyAllowedPath(p.cwd);
+  if (cwdErr) throw new Error(cwdErr);
+
   let res = await runOnce(p, p.resumeSessionId);
 
   if (res.signaled) return;
 
   // Stale session — resume id from previous run no longer exists.
-  // Notify client (so it clears its localStorage) and retry without --resume.
+  // Notify client to wipe the partial messages it already saw, then retry without --resume.
   if (res.code !== 0 && p.resumeSessionId && STALE_SESSION_RE.test(res.stderr)) {
+    p.onClearRunMessages?.();
     p.onMessage({
       type: "system",
       subtype: "stale_session_recovered",

@@ -16,13 +16,13 @@ function formatRelative(ms: number): string {
 export function SessionList() {
   const session = useActiveSession();
   const patchProject = useStore((s) => s.patchProject);
-  const clearMessages = useStore((s) => s.clearMessages);
-  const appendMessage = useStore((s) => s.appendMessage);
+  const replaceMessages = useStore((s) => s.replaceMessages);
 
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const open = useStore((s) => s.sessionListOpen);
+  const setOpen = useStore((s) => s.setSessionListOpen);
 
   const refresh = useCallback(async () => {
     if (!session) return;
@@ -62,8 +62,8 @@ export function SessionList() {
     try {
       const transcript = await fetchTranscript(session.cwd, sid);
       patchProject(session.cwd, { sessionId: sid });
-      clearMessages(session.cwd);
-      for (const m of transcript) appendMessage(session.cwd, m);
+      // single store update — render flushes once instead of N times.
+      replaceMessages(session.cwd, transcript as any[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -77,7 +77,7 @@ export function SessionList() {
     <div className="session-list">
       <button
         className="secondary session-list-toggle"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(!open)}
       >
         {open ? "▼" : "▶"} 历史会话{sessions.length ? ` (${sessions.length})` : ""}
       </button>

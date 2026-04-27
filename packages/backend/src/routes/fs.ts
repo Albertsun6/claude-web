@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { verifyAllowedPath } from "../auth.js";
 
 const MAX_FILE_BYTES = 1024 * 1024; // 1 MB
 
@@ -46,6 +47,8 @@ fsRouter.get("/tree", async (c) => {
   if (!root || !path.isAbsolute(root)) {
     return c.json({ error: "root must be an absolute path" }, 400);
   }
+  const rootErr = verifyAllowedPath(root);
+  if (rootErr) return c.json({ error: rootErr }, 403);
 
   const resolved = path.resolve(root, relPath);
   if (!isInsideRoot(root, resolved)) {
@@ -107,6 +110,8 @@ fsRouter.post("/mkdir", async (c) => {
   if (!parent || !path.isAbsolute(parent)) {
     return c.json({ error: "parent must be an absolute path" }, 400);
   }
+  const parentErr = verifyAllowedPath(parent);
+  if (parentErr) return c.json({ error: parentErr }, 403);
   if (!name) return c.json({ error: "name is required" }, 400);
   if (name.includes("/") || name.includes("\\") || name === "." || name === "..") {
     return c.json({ error: "invalid folder name" }, 400);
@@ -143,6 +148,8 @@ fsRouter.get("/file", async (c) => {
   if (!root || !path.isAbsolute(root)) {
     return c.json({ error: "root must be an absolute path" }, 400);
   }
+  const rootErr = verifyAllowedPath(root);
+  if (rootErr) return c.json({ error: rootErr }, 403);
 
   const resolved = path.resolve(root, relPath);
   if (!isInsideRoot(root, resolved)) {

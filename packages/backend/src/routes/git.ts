@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import { verifyAllowedPath } from "../auth.js";
 
 export const gitRouter = new Hono();
 
@@ -35,6 +36,8 @@ function runGit(cwd: string, args: string[], timeoutMs = 5000): Promise<RunResul
 
 async function verifyRepo(cwd: string): Promise<string | null> {
   if (!cwd || !isAbsolute(cwd)) return "cwd must be an absolute path";
+  const allowErr = verifyAllowedPath(cwd);
+  if (allowErr) return allowErr;
   try {
     const s = await stat(cwd);
     if (!s.isDirectory()) return "cwd is not a directory";
@@ -127,7 +130,7 @@ gitRouter.get("/diff", async (c) => {
   const err = await verifyRepo(cwd);
   if (err) return c.json({ error: err }, 400);
   if (!isSafeRelPath(path)) return c.json({ error: "invalid path" }, 400);
-  const args = ["diff"];
+  const args = ["diff", "--no-color"];
   if (staged) args.push("--cached");
   args.push("--", path);
   try {

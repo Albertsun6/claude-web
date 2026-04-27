@@ -1,3 +1,5 @@
+import { authFetch } from "../auth";
+
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
 export interface GitStatusFile {
@@ -47,7 +49,7 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
 
 export async function fetchGitStatus(cwd: string): Promise<GitStatus> {
   const url = `${API_BASE}/api/git/status?cwd=${encodeURIComponent(cwd)}`;
-  return jsonOrThrow<GitStatus>(await fetch(url));
+  return jsonOrThrow<GitStatus>(await authFetch(url));
 }
 
 export async function fetchGitDiff(
@@ -58,7 +60,7 @@ export async function fetchGitDiff(
   const url = `${API_BASE}/api/git/diff?cwd=${encodeURIComponent(
     cwd,
   )}&path=${encodeURIComponent(path)}&staged=${staged ? 1 : 0}`;
-  const res = await fetch(url);
+  const res = await authFetch(url);
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try {
@@ -74,10 +76,10 @@ export async function fetchGitDiff(
 
 export async function fetchGitLog(cwd: string, limit = 20): Promise<GitLogEntry[]> {
   const url = `${API_BASE}/api/git/log?cwd=${encodeURIComponent(cwd)}&limit=${limit}`;
-  return jsonOrThrow<GitLogEntry[]>(await fetch(url));
+  return jsonOrThrow<GitLogEntry[]>(await authFetch(url));
 }
 
 export async function fetchGitBranches(cwd: string): Promise<GitBranches> {
   const url = `${API_BASE}/api/git/branch?cwd=${encodeURIComponent(cwd)}`;
-  return jsonOrThrow<GitBranches>(await fetch(url));
+  return jsonOrThrow<GitBranches>(await authFetch(url));
 }

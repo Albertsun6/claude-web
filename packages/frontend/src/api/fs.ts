@@ -1,3 +1,5 @@
+import { authFetch } from "../auth";
+
 export interface FsTreeEntry {
   name: string;
   type: "dir" | "file";
@@ -17,7 +19,7 @@ export interface FsFileResponse {
 const API_BASE: string = (import.meta as any).env?.VITE_API_URL ?? "";
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await authFetch(url);
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
@@ -58,7 +60,7 @@ export function fetchHome(): Promise<FsHomeResponse> {
 
 export interface FsMkdirResponse { ok: true; path: string }
 export async function createDirectory(parent: string, name: string): Promise<FsMkdirResponse> {
-  const res = await fetch(`${API_BASE}/api/fs/mkdir`, {
+  const res = await authFetch(`${API_BASE}/api/fs/mkdir`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ parent, name }),

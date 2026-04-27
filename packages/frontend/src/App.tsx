@@ -9,6 +9,7 @@ import { PermissionModal } from "./components/PermissionModal";
 import { VoiceBar } from "./components/VoiceBar";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionList } from "./components/SessionList";
+import { AuthGate } from "./components/AuthGate";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 
 // Heavy: CodeMirror is ~250KB. Lazy-load when files panel actually opens.
@@ -116,7 +117,8 @@ function AppInner() {
     });
     try {
       const apiBase = (import.meta as any).env?.VITE_API_URL ?? "";
-      const res = await fetch(`${apiBase}/api/voice/cleanup`, {
+      const { authFetch } = await import("./auth");
+      const res = await authFetch(`${apiBase}/api/voice/cleanup`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text }),
@@ -236,6 +238,7 @@ function AppInner() {
 
       <PermissionModal />
       <OfflineBanner />
+      <AuthGate />
     </div>
   );
 }

@@ -56,7 +56,11 @@ interface AppState {
   // mutate one project's session
   patchProject: (cwd: string, patch: Partial<ProjectSession>) => void;
   appendMessage: (cwd: string, raw: any) => void;
+  /** Replace all messages in one shot (used when loading a transcript). */
+  replaceMessages: (cwd: string, list: any[]) => void;
   clearMessages: (cwd: string) => void;
+  /** Drop messages whose `_runId` matches; used on stale-session restart. */
+  removeRunMessages: (cwd: string, runId: string) => void;
   resetSession: (cwd: string) => void; // clear messages + sessionId
   // helper: ensure cwd is open and active (used when adding a new project on the fly)
   ensureOpenAndActive: (project: Project) => void;
@@ -68,10 +72,19 @@ interface AppState {
   // permission (one modal global)
   pendingPermission: PermissionRequest | undefined;
   setPendingPermission: (p: PermissionRequest | undefined) => void;
+  // per-run "always allow" tools — cleared when run ends
+  allowedToolsByRun: Record<string, Set<string>>;
+  allowToolForRun: (runId: string, toolName: string) => void;
+  isToolAllowedForRun: (runId: string, toolName: string) => boolean;
+  forgetRunAllowlist: (runId: string) => void;
 
   // voice cleanup pref
   voiceCleanupEnabled: boolean;
   setVoiceCleanupEnabled: (b: boolean) => void;
+
+  // history-session list expanded?
+  sessionListOpen: boolean;
+  setSessionListOpen: (b: boolean) => void;
 }
 
 const LS_CONFIG = "claude-web:config";
@@ -79,6 +92,7 @@ const LS_PROJECTS = "claude-web:projects";
 const LS_SESSIONS = "claude-web:sessions";
 const LS_OPEN = "claude-web:open-cwds";
 const LS_VOICE_CLEANUP = "claude-web:voice-cleanup";
+const LS_SESSION_LIST_OPEN = "claude-web:session-list-open";
 
 const persistedConfig = (() => {
   try { return JSON.parse(localStorage.getItem(LS_CONFIG) ?? "{}"); } catch { return {}; }
@@ -195,11 +209,26 @@ export const useStore = create<AppState>((set, get) => ({
       },
     });
   },
+  replaceMessages: (cwd, list) => {
+    const { byCwd } = get();
+    const cur = byCwd[cwd];
+    if (!cur) return;
+    const messages: RenderedMessage[] = list.map((raw) => ({ id: `m${++msgId}`, raw }));
+    set({ byCwd: { ...byCwd, [cwd]: { ...cur, messages } } });
+  },
   clearMessages: (cwd) => {
     const { byCwd } = get();
     const cur = byCwd[cwd];
     if (!cur) return;
     set({ byCwd: { ...byCwd, [cwd]: { ...cur, messages: [] } } });
+  },
+  removeRunMessages: (cwd, runId) => {
+    const { byCwd } = get();
+    const cur = byCwd[cwd];
+    if (!cur) return;
+    const filtered = cur.messages.filter((m) => m.raw?._runId !== runId);
+    if (filtered.length === cur.messages.length) return;
+    set({ byCwd: { ...byCwd, [cwd]: { ...cur, messages: filtered } } });
   },
   resetSession: (cwd) => {
     const { byCwd } = get();
@@ -218,6 +247,23 @@ export const useStore = create<AppState>((set, get) => ({
   pendingPermission: undefined,
   setPendingPermission: (pendingPermission) => set({ pendingPermission }),
 
+  allowedToolsByRun: {},
+  allowToolForRun: (runId, toolName) => {
+    const cur = get().allowedToolsByRun;
+    const set0 = new Set(cur[runId] ?? []);
+    set0.add(toolName);
+    set({ allowedToolsByRun: { ...cur, [runId]: set0 } });
+  },
+  isToolAllowedForRun: (runId, toolName) =>
+    !!get().allowedToolsByRun[runId]?.has(toolName),
+  forgetRunAllowlist: (runId) => {
+    const cur = get().allowedToolsByRun;
+    if (!(runId in cur)) return;
+    const next = { ...cur };
+    delete next[runId];
+    set({ allowedToolsByRun: next });
+  },
+
   voiceCleanupEnabled: (() => {
     try {
       const v = localStorage.getItem(LS_VOICE_CLEANUP);
@@ -227,6 +273,17 @@ export const useStore = create<AppState>((set, get) => ({
   setVoiceCleanupEnabled: (b) => {
     try { localStorage.setItem(LS_VOICE_CLEANUP, b ? "1" : "0"); } catch { /* ignore */ }
     set({ voiceCleanupEnabled: b });
+  },
+
+  sessionListOpen: (() => {
+    try {
+      const v = localStorage.getItem(LS_SESSION_LIST_OPEN);
+      return v === null ? true : v === "1";
+    } catch { return true; }
+  })(),
+  setSessionListOpen: (b) => {
+    try { localStorage.setItem(LS_SESSION_LIST_OPEN, b ? "1" : "0"); } catch { /* ignore */ }
+    set({ sessionListOpen: b });
   },
 }));
 

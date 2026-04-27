@@ -188,12 +188,16 @@ voiceRouter.post("/tts", async (c) => {
       }
       resolve(Buffer.concat(chunks));
     });
-  }).catch((err) => {
-    return null as Buffer | null;
+  }).catch((err: Error) => {
+    console.warn("[voice] tts failed:", err.message);
+    return { error: err.message };
   });
 
+  if (audio && "error" in audio) {
+    return c.json({ error: `tts failed: ${audio.error}` }, 500);
+  }
   if (!audio || audio.length === 0) {
-    return c.json({ error: "tts failed" }, 500);
+    return c.json({ error: "tts failed: empty output" }, 500);
   }
 
   return new Response(audio as unknown as BodyInit, {

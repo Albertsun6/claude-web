@@ -5,6 +5,7 @@ export type PermissionDecision = "allow" | "deny";
 
 interface PendingResolver {
   resolve: (decision: PermissionDecision) => void;
+  timer: NodeJS.Timeout;
 }
 
 interface RegistryEntry {
@@ -12,8 +13,11 @@ interface RegistryEntry {
   pending: Map<string, PendingResolver>;
 }
 
-// keyed by per-WS-connection token. The hook script presents this token in its
-// HTTP POST so the backend knows which browser session to ask.
+// Hook-script timeout is 600s (configured in cli-runner). Match that here so
+// the HTTP request from the hook resolves before the hook itself times out
+// (which would yield an unbounded zombie hook process otherwise).
+const PENDING_TIMEOUT_MS = 590_000;
+
 const registry = new Map<string, RegistryEntry>();
 
 export function registerPermissionChannel(
@@ -25,7 +29,10 @@ export function registerPermissionChannel(
     const entry = registry.get(token);
     if (entry) {
       // resolve any in-flight requests as deny so hooks don't hang
-      for (const r of entry.pending.values()) r.resolve("deny");
+      for (const r of entry.pending.values()) {
+        clearTimeout(r.timer);
+        r.resolve("deny");
+      }
     }
     registry.delete(token);
   };
@@ -41,6 +48,7 @@ export function resolvePermission(
   const resolver = entry.pending.get(requestId);
   if (!resolver) return;
   entry.pending.delete(requestId);
+  clearTimeout(resolver.timer);
   resolver.resolve(decision);
 }
 
@@ -61,7 +69,14 @@ permissionRouter.post("/ask", async (c) => {
 
   const requestId = randomUUID();
   const decision = await new Promise<PermissionDecision>((resolve) => {
-    entry.pending.set(requestId, { resolve });
+    const timer = setTimeout(() => {
+      const e = registry.get(token);
+      if (e) e.pending.delete(requestId);
+      // Fail-open on timeout so the hook doesn't sit forever; the user can
+      // always interrupt the run if they didn't intend the tool to fire.
+      resolve("allow");
+    }, PENDING_TIMEOUT_MS);
+    entry.pending.set(requestId, { resolve, timer });
     entry.send({
       type: "permission_request",
       requestId,

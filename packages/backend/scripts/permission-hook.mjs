@@ -5,9 +5,10 @@
 // /api/permission/ask endpoint (which forwards to the user's browser via
 // WebSocket and waits for a click), and emits a hook-decision JSON to stdout.
 //
-// Usage (configured via --settings hooks): node permission-hook.mjs <token> <backendBase>
+// Usage (configured via --settings hooks):
+//   node permission-hook.mjs <token> <backendBase> [authToken]
 
-const [token, backendBase] = process.argv.slice(2);
+const [token, backendBase, authToken] = process.argv.slice(2);
 if (!token || !backendBase) {
   console.error("permission-hook: missing token or backendBase");
   process.exit(1);
@@ -52,9 +53,11 @@ process.stdin.on("end", async () => {
   }
   try {
     const url = `${backendBase}/api/permission/ask?token=${encodeURIComponent(token)}`;
+    const headers = { "content-type": "application/json" };
+    if (authToken) headers.authorization = `Bearer ${authToken}`;
     const res = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
     });
     if (!res.ok) {

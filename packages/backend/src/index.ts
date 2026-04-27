@@ -11,7 +11,6 @@ import { gzipSync } from "node:zlib";
 import { runSession } from "./cli-runner.js";
 import { fsRouter } from "./routes/fs.js";
 import { gitRouter } from "./routes/git.js";
-import { realtimeRouter } from "./routes/realtime.js";
 import { voiceRouter } from "./routes/voice.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import {
@@ -19,23 +18,63 @@ import {
   registerPermissionChannel,
   resolvePermission,
 } from "./routes/permission.js";
+import {
+  authMiddleware,
+  checkWsAuth,
+  isAuthEnabled,
+  isPathAllowlistEnabled,
+  getAllowedRoots,
+  verifyAllowedPath,
+} from "./auth.js";
 import type {
   ClientMessage,
   ServerMessage,
 } from "@claude-web/shared";
 
 const PORT = Number(process.env.PORT ?? 3030);
+// Default-bind to localhost; only listen on all interfaces if BACKEND_HOST is set
+// explicitly. Tailscale serve / reverse proxy handles external access.
+const HOST = process.env.BACKEND_HOST ?? "127.0.0.1";
 const BACKEND_BASE = process.env.BACKEND_BASE ?? `http://localhost:${PORT}`;
 
 const app = new Hono();
-app.use("*", cors());
-app.get("/health", (c) => c.json({ ok: true }));
+// CORS allow Authorization so the frontend can attach a Bearer token.
+app.use("*", cors({ origin: "*", allowHeaders: ["authorization", "content-type"] }));
+
+// Public: liveness + a tiny capability advertisement (no secrets).
+app.get("/health", (c) =>
+  c.json({
+    ok: true,
+    authRequired: isAuthEnabled(),
+    pathAllowlist: isPathAllowlistEnabled(),
+    activeRuns: globalActiveRuns(),
+    cliBin: process.env.CLAUDE_CLI ?? "claude",
+  }),
+);
+app.get("/api/auth/info", (c) =>
+  c.json({
+    authRequired: isAuthEnabled(),
+    pathAllowlist: isPathAllowlistEnabled(),
+    allowedRoots: isPathAllowlistEnabled() ? getAllowedRoots() : [],
+  }),
+);
+
+// Everything else under /api requires the token (when CLAUDE_WEB_TOKEN is set).
+app.use("/api/*", authMiddleware);
+
 app.route("/api/fs", fsRouter);
 app.route("/api/git", gitRouter);
-app.route("/api/realtime", realtimeRouter);
 app.route("/api/voice", voiceRouter);
 app.route("/api/sessions", sessionsRouter);
 app.route("/api/permission", permissionRouter);
+
+// Track active runs across all WS clients so /health can report.
+const allConnections = new Set<{ runs: Map<string, RunHandle> }>();
+function globalActiveRuns(): number {
+  let n = 0;
+  for (const c of allConnections) n += c.runs.size;
+  return n;
+}
 
 // Serve the frontend production build, if present.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -123,15 +162,26 @@ function mimeFor(p: string): string {
   return "application/octet-stream";
 }
 
-const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`[backend] http  http://localhost:${info.port}`);
-  console.log(`[backend] ws    ws://localhost:${info.port}/ws`);
+const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
+  console.log(`[backend] http  http://${info.address}:${info.port}`);
+  console.log(`[backend] ws    ws://${info.address}:${info.port}/ws`);
+  if (!isAuthEnabled()) {
+    console.log("[backend] ⚠ no auth token — set CLAUDE_WEB_TOKEN before exposing.");
+  }
+  if (!isPathAllowlistEnabled()) {
+    console.log("[backend] ⚠ no path allowlist — set CLAUDE_WEB_ALLOWED_ROOTS to limit cwd.");
+  }
 });
 
 const wss = new WebSocketServer({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
-  if (req.url !== "/ws") {
+  if (req.url?.split("?")[0] !== "/ws") {
+    socket.destroy();
+    return;
+  }
+  if (!checkWsAuth(req.url, req.headers.authorization as string | undefined)) {
+    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
     return;
   }
@@ -147,6 +197,8 @@ interface RunHandle {
 wss.on("connection", (ws) => {
   console.log("[ws] client connected");
   const runs = new Map<string, RunHandle>();
+  const conn = { runs };
+  allConnections.add(conn);
 
   const send = (msg: ServerMessage) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
@@ -162,7 +214,14 @@ wss.on("connection", (ws) => {
     }
 
     if (msg.type === "permission_reply") {
-      // permission token is per-run; iterate to find the one with this requestId
+      // O(1) routing when client supplies runId; fall back to scan otherwise.
+      if (msg.runId) {
+        const handle = runs.get(msg.runId);
+        if (handle) {
+          resolvePermission(handle.permissionToken, msg.requestId, msg.decision);
+          return;
+        }
+      }
       for (const handle of runs.values()) {
         resolvePermission(handle.permissionToken, msg.requestId, msg.decision);
       }
@@ -180,19 +239,18 @@ wss.on("connection", (ws) => {
 
     if (msg.type === "user_prompt") {
       const runId = msg.runId;
+
+      // Defense-in-depth: even though /api routes check this, the WS path
+      // accepts cwd directly — verify here too.
+      const cwdErr = verifyAllowedPath(msg.cwd);
+      if (cwdErr) {
+        send({ type: "error", runId, error: cwdErr });
+        send({ type: "session_ended", runId, reason: "error" });
+        return;
+      }
+
       const abort = new AbortController();
       const permissionToken = randomUUID();
-
-      const sendForRun = (toolName: string, input: unknown) => {
-        send({
-          type: "permission_request",
-          runId,
-          requestId: randomUUID(), // unused (resolver uses its own); we keep a stable shape
-          toolName,
-          input,
-        });
-      };
-      void sendForRun;
 
       // wrap permission channel send so each permission_request carries this runId
       const channelSend = (m: unknown) => {
@@ -217,8 +275,10 @@ wss.on("connection", (ws) => {
             resumeSessionId: msg.resumeSessionId,
             permissionToken,
             backendBase: BACKEND_BASE,
+            authToken: process.env.CLAUDE_WEB_TOKEN,
             signal: abort.signal,
             onMessage: (cliMsg) => send({ type: "sdk_message", runId, message: cliMsg }),
+            onClearRunMessages: () => send({ type: "clear_run_messages", runId }),
           });
           send({ type: "session_ended", runId, reason: abort.signal.aborted ? "interrupted" : "completed" });
         } catch (err) {
@@ -241,5 +301,6 @@ wss.on("connection", (ws) => {
       h.unregisterPermission();
     }
     runs.clear();
+    allConnections.delete(conn);
   });
 });
