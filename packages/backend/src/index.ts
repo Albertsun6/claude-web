@@ -2,12 +2,12 @@ import "dotenv/config";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { WebSocketServer } from "ws";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
 import { runSession } from "./cli-runner.js";
 import { fsRouter } from "./routes/fs.js";
 import { gitRouter } from "./routes/git.js";
@@ -42,10 +42,77 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIST = path.resolve(__dirname, "../../frontend/dist");
 if (existsSync(FRONTEND_DIST)) {
   console.log(`[backend] serving frontend from ${FRONTEND_DIST}`);
-  app.use("/*", serveStatic({ root: path.relative(process.cwd(), FRONTEND_DIST) }));
-  // SPA fallback: any non-API, non-asset path → index.html
+
+  // in-memory cache of pre-gzipped static assets keyed by file path.
+  // Wins big on cellular: 873KB JS → ~280KB over wire.
+  const gzipCache = new Map<string, Buffer>();
+  const COMPRESSIBLE = /\.(js|mjs|css|html|svg|json|webmanifest|map)$/i;
+  const IMMUTABLE = /\/assets\/.+-[A-Za-z0-9_-]{8,}\.(js|css|svg)$/;
+
   const indexHtml = readFileSync(path.join(FRONTEND_DIST, "index.html"), "utf-8");
-  app.get("*", (c) => c.html(indexHtml));
+  const indexHtmlGz = gzipSync(Buffer.from(indexHtml, "utf-8"));
+
+  app.use("/*", async (c, next) => {
+    const url = new URL(c.req.url);
+    if (url.pathname.startsWith("/api/") || url.pathname === "/ws" || url.pathname === "/health") {
+      return next();
+    }
+    // Try resolve to a file in dist
+    const safe = path.normalize(url.pathname).replace(/^\/+/, "");
+    const filePath = path.join(FRONTEND_DIST, safe);
+    if (!filePath.startsWith(FRONTEND_DIST)) return next();
+
+    if (!existsSync(filePath)) {
+      // SPA fallback: HTML
+      const ae = c.req.header("accept-encoding") ?? "";
+      if (ae.includes("gzip")) {
+        return new Response(indexHtmlGz as unknown as BodyInit, {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "content-encoding": "gzip",
+            "content-length": String(indexHtmlGz.length),
+            "cache-control": "no-cache",
+          },
+        });
+      }
+      return c.html(indexHtml);
+    }
+
+    let body: Buffer;
+    try { body = readFileSync(filePath); } catch { return next(); }
+
+    const compressible = COMPRESSIBLE.test(filePath);
+    const ae = c.req.header("accept-encoding") ?? "";
+    const wantsGzip = compressible && ae.includes("gzip");
+
+    let payload: Buffer = body;
+    const headers: Record<string, string> = {};
+    headers["cache-control"] = IMMUTABLE.test(url.pathname)
+      ? "public, max-age=31536000, immutable"
+      : "public, max-age=300";
+    headers["content-type"] = mimeFor(filePath);
+
+    if (wantsGzip) {
+      let gz = gzipCache.get(filePath);
+      if (!gz) { gz = gzipSync(body); gzipCache.set(filePath, gz); }
+      payload = gz;
+      headers["content-encoding"] = "gzip";
+    }
+    headers["content-length"] = String(payload.length);
+
+    return new Response(payload as unknown as BodyInit, { headers });
+  });
+}
+
+function mimeFor(p: string): string {
+  if (p.endsWith(".js") || p.endsWith(".mjs")) return "application/javascript; charset=utf-8";
+  if (p.endsWith(".css")) return "text/css; charset=utf-8";
+  if (p.endsWith(".html")) return "text/html; charset=utf-8";
+  if (p.endsWith(".svg")) return "image/svg+xml";
+  if (p.endsWith(".json") || p.endsWith(".webmanifest")) return "application/json; charset=utf-8";
+  if (p.endsWith(".png")) return "image/png";
+  if (p.endsWith(".ico")) return "image/x-icon";
+  return "application/octet-stream";
 }
 
 const server = serve({ fetch: app.fetch, port: PORT }, (info) => {

@@ -25,4 +25,21 @@ export default defineConfig({
       "/ws": { target: "ws://localhost:3030", ws: true },
     },
   },
+  build: {
+    target: "es2020",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-vendor": ["react", "react-dom"],
+          "markdown": ["react-markdown", "rehype-highlight", "highlight.js"],
+          "codemirror": [
+            "@uiw/react-codemirror",
+            "@codemirror/state",
+            "@codemirror/view",
+            "@codemirror/theme-one-dark",
+          ],
+        },
+      },
+    },
+  },
 });

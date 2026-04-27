@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useStore, useActiveSession } from "./store";
 import { connect, sendPrompt, setVoiceSink } from "./ws-client";
 import { ConfigPanel } from "./components/ConfigPanel";
@@ -7,11 +7,17 @@ import { MessageStream } from "./components/MessageStream";
 import { InputBox } from "./components/InputBox";
 import { PermissionModal } from "./components/PermissionModal";
 import { VoiceBar } from "./components/VoiceBar";
-import { FilesPanel } from "./components/FilesPanel";
-import { GitPanel } from "./components/GitPanel";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionList } from "./components/SessionList";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
+
+// Heavy: CodeMirror is ~250KB. Lazy-load when files panel actually opens.
+const FilesPanel = lazy(() => import("./components/FilesPanel").then((m) => ({ default: m.FilesPanel })));
+const GitPanel = lazy(() => import("./components/GitPanel").then((m) => ({ default: m.GitPanel })));
+
+const PanelFallback = () => (
+  <div style={{ padding: 16, color: "var(--text-dim)", fontSize: 12 }}>加载中…</div>
+);
 
 type DrawerSide = "left" | "right" | null;
 type RightTab = "files" | "git";
@@ -191,7 +197,9 @@ function AppInner() {
         </button>
       </div>
       <div className="rightbar-body">
-        {rightTab === "files" ? <FilesPanel /> : <GitPanel />}
+        <Suspense fallback={<PanelFallback />}>
+          {rightTab === "files" ? <FilesPanel /> : <GitPanel />}
+        </Suspense>
       </div>
     </div>
   );
