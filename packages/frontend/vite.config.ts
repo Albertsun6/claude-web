@@ -5,31 +5,21 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
   plugins: [
     react(),
+    // self-destroying: actively unregister any previously-installed SW.
+    // We keep the manifest (added as a static file in public/) for iOS
+    // "Add to Home Screen" PWA behavior — no caching, always network.
     VitePWA({
+      selfDestroying: true,
       registerType: "autoUpdate",
-      includeAssets: ["icon.svg"],
-      manifest: {
-        name: "claude-web",
-        short_name: "Claude",
-        description: "Mobile-friendly UI for the Claude CLI",
-        theme_color: "#0f1115",
-        background_color: "#0f1115",
-        display: "standalone",
-        start_url: "/",
-        icons: [
-          { src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
-        ],
-      },
-      workbox: {
-        // never cache the websocket or backend API; only the static shell
-        navigateFallbackDenylist: [/^\/ws/, /^\/api/],
-      },
+      manifest: false,        // we ship a static manifest in /public
+      injectManifest: { globPatterns: [] },
+      workbox: { globPatterns: [] },
     }),
   ],
   server: {
     port: 5173,
     host: true,
-    allowedHosts: true, // accept cloudflare tunnel / tailscale hostnames
+    allowedHosts: true,
     proxy: {
       "/api": "http://localhost:3030",
       "/ws": { target: "ws://localhost:3030", ws: true },
