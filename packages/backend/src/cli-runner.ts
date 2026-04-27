@@ -1,4 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ModelId, PermissionMode } from "@claude-web/shared";
 
 export interface RunSessionParams {
@@ -7,15 +9,31 @@ export interface RunSessionParams {
   model: ModelId;
   permissionMode: PermissionMode;
   resumeSessionId?: string;
+  permissionToken?: string;
+  backendBase?: string;
   onMessage: (msg: unknown) => void;
   signal?: AbortSignal;
 }
 
 const CLI_BIN = process.env.CLAUDE_CLI ?? "claude";
 
-// permissionMode → CLI flag value. CLI accepts: default, acceptEdits, bypassPermissions, plan, auto, dontAsk
-function mapPermissionMode(m: PermissionMode): string {
-  return m;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const HOOK_SCRIPT = path.resolve(__dirname, "../scripts/permission-hook.mjs");
+
+function buildSettings(token: string, backendBase: string): string {
+  // Per-tool permission gating via PreToolUse hook. The hook posts to backend,
+  // backend asks the browser via WS, browser click resolves the hook.
+  const command = `node ${HOOK_SCRIPT} ${token} ${backendBase}`;
+  return JSON.stringify({
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: ".*",
+          hooks: [{ type: "command", command, timeout: 600 }],
+        },
+      ],
+    },
+  });
 }
 
 export async function runSession(p: RunSessionParams): Promise<void> {
@@ -25,10 +43,19 @@ export async function runSession(p: RunSessionParams): Promise<void> {
     "--output-format", "stream-json",
     "--verbose",
     "--include-partial-messages",
-    "--permission-mode", mapPermissionMode(p.permissionMode),
+    "--permission-mode", p.permissionMode,
     "--model", p.model,
   ];
   if (p.resumeSessionId) args.push("--resume", p.resumeSessionId);
+
+  // Wire per-tool permission hook only when not bypassing.
+  if (
+    p.permissionToken &&
+    p.backendBase &&
+    p.permissionMode !== "bypassPermissions"
+  ) {
+    args.push("--settings", buildSettings(p.permissionToken, p.backendBase));
+  }
 
   const child: ChildProcessWithoutNullStreams = spawn(CLI_BIN, args, {
     cwd: p.cwd,
@@ -41,12 +68,10 @@ export async function runSession(p: RunSessionParams): Promise<void> {
   };
   p.signal?.addEventListener("abort", onAbort);
 
-  // feed the user prompt as a single stream-json message, then close stdin
-  const userMsg = {
+  child.stdin.write(JSON.stringify({
     type: "user",
     message: { role: "user", content: p.prompt },
-  };
-  child.stdin.write(JSON.stringify(userMsg) + "\n");
+  }) + "\n");
   child.stdin.end();
 
   let stdoutBuf = "";
@@ -59,7 +84,7 @@ export async function runSession(p: RunSessionParams): Promise<void> {
       if (!line) continue;
       try {
         p.onMessage(JSON.parse(line));
-      } catch (e) {
+      } catch {
         console.warn("[cli-runner] failed to parse line:", line.slice(0, 200));
       }
     }
@@ -77,7 +102,6 @@ export async function runSession(p: RunSessionParams): Promise<void> {
     });
     child.on("close", (code, signal) => {
       p.signal?.removeEventListener("abort", onAbort);
-      // flush any trailing partial line
       const tail = stdoutBuf.trim();
       if (tail) {
         try { p.onMessage(JSON.parse(tail)); } catch { /* noop */ }

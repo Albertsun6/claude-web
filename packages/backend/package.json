@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "test:cli": "tsx src/test-cli.ts"
+    "test:cli": "tsx src/test-cli.ts",
+    "test:permission": "tsx src/test-permission.ts"
   },
   "dependencies": {
     "@claude-web/shared": "workspace:*",
