@@ -11,6 +11,7 @@ import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionList } from "./components/SessionList";
 import { AuthGate } from "./components/AuthGate";
 import { UsageMeter } from "./components/UsageMeter";
+import { ClaudeMdBanner } from "./components/ClaudeMdBanner";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 
 // Heavy: CodeMirror is ~250KB. Lazy-load when files panel actually opens.
@@ -233,6 +234,7 @@ function AppInner() {
 
       <main className="main">
         <ProjectTabs />
+        <ClaudeMdBanner />
         <MessageStream />
         <InputBox />
       </main>

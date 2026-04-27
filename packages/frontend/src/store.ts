@@ -89,6 +89,11 @@ interface AppState {
   allowToolForRun: (runId: string, toolName: string) => void;
   isToolAllowedForRun: (runId: string, toolName: string) => boolean;
   forgetRunAllowlist: (runId: string) => void;
+  // per-project persistent always-allow (survives reloads)
+  allowedToolsByCwd: Record<string, string[]>;
+  allowToolForProject: (cwd: string, toolName: string) => void;
+  revokeToolForProject: (cwd: string, toolName: string) => void;
+  isToolAllowedForProject: (cwd: string, toolName: string) => boolean;
 
   // voice cleanup pref
   voiceCleanupEnabled: boolean;
@@ -102,6 +107,7 @@ interface AppState {
 const LS_CONFIG = "claude-web:config";
 const LS_PROJECTS = "claude-web:projects";
 const LS_SESSIONS = "claude-web:sessions";
+const LS_TOOLS_BY_CWD = "claude-web:allowed-tools-by-cwd";
 const LS_OPEN = "claude-web:open-cwds";
 const LS_VOICE_CLEANUP = "claude-web:voice-cleanup";
 const LS_SESSION_LIST_OPEN = "claude-web:session-list-open";
@@ -117,6 +123,9 @@ const persistedSessions: Record<string, string> = (() => {
 })();
 const persistedOpen: string[] = (() => {
   try { return JSON.parse(localStorage.getItem(LS_OPEN) ?? "[]"); } catch { return []; }
+})();
+const persistedAllowedTools: Record<string, string[]> = (() => {
+  try { return JSON.parse(localStorage.getItem(LS_TOOLS_BY_CWD) ?? "{}"); } catch { return {}; }
 })();
 
 const persistConfig = (s: Partial<AppState>) => {
@@ -155,7 +164,7 @@ for (const cwd of persistedOpen) {
 }
 
 export const useStore = create<AppState>((set, get) => ({
-  model: persistedConfig.model ?? "claude-sonnet-4-6",
+  model: persistedConfig.model ?? "claude-haiku-4-5",
   permissionMode: persistedConfig.permissionMode ?? "default",
   setModel: (model) => { persistConfig({ model }); set({ model }); },
   setPermissionMode: (permissionMode) => { persistConfig({ permissionMode }); set({ permissionMode }); },
@@ -295,6 +304,26 @@ export const useStore = create<AppState>((set, get) => ({
     delete next[runId];
     set({ allowedToolsByRun: next });
   },
+
+  allowedToolsByCwd: persistedAllowedTools,
+  allowToolForProject: (cwd, toolName) => {
+    const cur = get().allowedToolsByCwd;
+    const list = cur[cwd] ?? [];
+    if (list.includes(toolName)) return;
+    const next = { ...cur, [cwd]: [...list, toolName] };
+    try { localStorage.setItem(LS_TOOLS_BY_CWD, JSON.stringify(next)); } catch { /* ignore */ }
+    set({ allowedToolsByCwd: next });
+  },
+  revokeToolForProject: (cwd, toolName) => {
+    const cur = get().allowedToolsByCwd;
+    const list = cur[cwd];
+    if (!list || !list.includes(toolName)) return;
+    const next = { ...cur, [cwd]: list.filter((t) => t !== toolName) };
+    try { localStorage.setItem(LS_TOOLS_BY_CWD, JSON.stringify(next)); } catch { /* ignore */ }
+    set({ allowedToolsByCwd: next });
+  },
+  isToolAllowedForProject: (cwd, toolName) =>
+    !!get().allowedToolsByCwd[cwd]?.includes(toolName),
 
   voiceCleanupEnabled: (() => {
     try {

@@ -92,8 +92,10 @@ function handleServerMessage(msg: ServerMessage): void {
   }
 
   if (msg.type === "permission_request") {
-    // Auto-allow if user opted in for this run+tool.
-    if (store.isToolAllowedForRun(msg.runId, msg.toolName)) {
+    // Auto-allow if user opted in for this run+tool, OR for this project+tool.
+    const cwd = runToCwd.get(msg.runId);
+    if (store.isToolAllowedForRun(msg.runId, msg.toolName)
+      || (cwd && store.isToolAllowedForProject(cwd, msg.toolName))) {
       send({ type: "permission_reply", requestId: msg.requestId, decision: "allow", runId: msg.runId });
       return;
     }
