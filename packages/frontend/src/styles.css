@@ -524,6 +524,107 @@ button.danger { background: var(--danger); color: white; }
   min-height: 28px;
   font-size: 12px;
 }
+
+/* TodoWrite checklist */
+.todo-card {
+  background: var(--tool);
+  border: 1px solid var(--border);
+  border-left: 3px solid #d4a72c;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+.todo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.todo-count {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: ui-monospace, monospace;
+}
+.todo-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.todo-item { display: flex; gap: 8px; font-size: 13px; line-height: 1.5; }
+.todo-icon { width: 18px; flex-shrink: 0; text-align: center; }
+.todo-text { flex: 1; }
+.todo-completed .todo-text { text-decoration: line-through; color: var(--text-dim); }
+.todo-completed .todo-icon { color: var(--success); }
+.todo-in_progress { color: var(--accent); font-weight: 600; }
+.todo-pending { color: var(--text-dim); }
+
+/* Edit/Write diff view */
+.edit-card { padding: 8px 10px; }
+.edit-path { font-size: 11px; color: var(--text-dim); font-family: ui-monospace, monospace; }
+.edit-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--danger);
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+}
+.diff-view {
+  margin-top: 8px;
+  background: #0b0d12;
+  border-radius: 4px;
+  padding: 6px 4px;
+  overflow-x: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.diff-line { display: flex; line-height: 1.5; padding: 0 8px; }
+.diff-line.diff-del { background: rgba(248, 113, 113, 0.12); color: #ffaaaa; }
+.diff-line.diff-add { background: rgba(74, 222, 128, 0.12); color: #b8e9c4; }
+.diff-line.diff-ctx { color: var(--text-dim); }
+.diff-marker { width: 14px; flex-shrink: 0; user-select: none; opacity: 0.6; }
+.diff-text { white-space: pre; }
+
+/* Bash card */
+.bash-card .bash-cmd {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: #0b0d12;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #b8e9c4;
+}
+
+/* Read card is single line */
+.read-card { padding: 6px 10px; }
+.read-card .tool-header { margin: 0; }
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: ui-monospace, monospace;
+  flex-shrink: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+.status-bar::-webkit-scrollbar { display: none; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.ok { background: var(--success); }
+.status-dot.bad { background: var(--danger); }
+.status-item { white-space: nowrap; }
+.status-cwd { color: var(--text); }
+.status-sep { opacity: 0.4; }
 @keyframes offline-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

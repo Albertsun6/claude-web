@@ -69,6 +69,136 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+type Todo = { content: string; status: "pending" | "in_progress" | "completed"; activeForm?: string };
+
+function TodoWriteCard({ input }: { input: any }) {
+  const todos: Todo[] = Array.isArray(input?.todos) ? input.todos : [];
+  if (todos.length === 0) return null;
+  const done = todos.filter((t) => t.status === "completed").length;
+  return (
+    <div className="todo-card">
+      <div className="todo-header">
+        <span className="tool-name">📋 TodoWrite</span>
+        <span className="todo-count">{done}/{todos.length}</span>
+      </div>
+      <ul className="todo-list">
+        {todos.map((t, i) => {
+          const icon = t.status === "completed" ? "✓"
+            : t.status === "in_progress" ? "⏳"
+            : "☐";
+          return (
+            <li key={i} className={`todo-item todo-${t.status}`}>
+              <span className="todo-icon">{icon}</span>
+              <span className="todo-text">
+                {t.status === "in_progress" && t.activeForm ? t.activeForm : t.content}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** Compute a simple line-based diff between two strings. Inline coloring only. */
+function lineDiff(a: string, b: string): { kind: "ctx" | "del" | "add"; text: string }[] {
+  const aLines = a.split("\n");
+  const bLines = b.split("\n");
+  // Trim common prefix/suffix lines so we focus on the changed region.
+  let pre = 0;
+  while (pre < aLines.length && pre < bLines.length && aLines[pre] === bLines[pre]) pre++;
+  let suf = 0;
+  while (
+    suf < aLines.length - pre &&
+    suf < bLines.length - pre &&
+    aLines[aLines.length - 1 - suf] === bLines[bLines.length - 1 - suf]
+  ) suf++;
+  const out: { kind: "ctx" | "del" | "add"; text: string }[] = [];
+  // Show 1 line of context before/after the change for orientation
+  const ctxBefore = Math.max(0, pre - 1);
+  for (let i = ctxBefore; i < pre; i++) out.push({ kind: "ctx", text: aLines[i] ?? "" });
+  for (let i = pre; i < aLines.length - suf; i++) out.push({ kind: "del", text: aLines[i] ?? "" });
+  for (let i = pre; i < bLines.length - suf; i++) out.push({ kind: "add", text: bLines[i] ?? "" });
+  const ctxAfterEnd = Math.min(aLines.length, aLines.length - suf + 1);
+  for (let i = aLines.length - suf; i < ctxAfterEnd; i++) out.push({ kind: "ctx", text: aLines[i] ?? "" });
+  return out;
+}
+
+function EditCard({ input, name }: { input: any; name: "Edit" | "Write" | "NotebookEdit" }) {
+  const filePath: string = typeof input?.file_path === "string" ? input.file_path : "";
+  const old = typeof input?.old_string === "string" ? input.old_string : "";
+  const next = typeof input?.new_string === "string" ? input.new_string
+    : typeof input?.content === "string" ? input.content : "";
+  const replaceAll = !!input?.replace_all;
+
+  let lines: { kind: "ctx" | "del" | "add"; text: string }[];
+  if (name === "Write") {
+    lines = next.split("\n").map((t: string) => ({ kind: "add" as const, text: t }));
+  } else {
+    lines = lineDiff(old, next);
+  }
+
+  return (
+    <div className="tool-use edit-card">
+      <div className="tool-header">
+        <span>
+          <span className="tool-name">✏️ {name}</span>{" "}
+          {filePath && <code className="edit-path">{filePath}</code>}
+          {replaceAll && <span className="edit-tag">replace_all</span>}
+        </span>
+        <CopyButton text={next || old} />
+      </div>
+      <div className="diff-view">
+        {lines.map((l, i) => (
+          <div key={i} className={`diff-line diff-${l.kind}`}>
+            <span className="diff-marker">
+              {l.kind === "del" ? "-" : l.kind === "add" ? "+" : " "}
+            </span>
+            <span className="diff-text">{l.text || " "}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BashCard({ input }: { input: any }) {
+  const cmd: string = typeof input?.command === "string" ? input.command : "";
+  const desc: string = typeof input?.description === "string" ? input.description : "";
+  return (
+    <div className="tool-use bash-card">
+      <div className="tool-header">
+        <span>
+          <span className="tool-name">▸ Bash</span>{" "}
+          {desc && <span style={{ color: "var(--text-dim)", fontSize: 11 }}>{desc}</span>}
+        </span>
+        <CopyButton text={cmd} />
+      </div>
+      <pre className="bash-cmd">{cmd}</pre>
+    </div>
+  );
+}
+
+function ReadCard({ input }: { input: any }) {
+  const fp: string = typeof input?.file_path === "string" ? input.file_path : "";
+  const offset = input?.offset, limit = input?.limit;
+  return (
+    <div className="tool-use read-card">
+      <div className="tool-header">
+        <span>
+          <span className="tool-name">📖 Read</span>{" "}
+          {fp && <code className="edit-path">{fp}</code>}
+          {(offset || limit) && (
+            <span style={{ color: "var(--text-dim)", fontSize: 11, marginLeft: 6 }}>
+              {offset ? `from ${offset}` : ""}{limit ? ` (${limit} lines)` : ""}
+            </span>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 const markdownComponents = {
   pre: ({ node: _node, children, ...props }: any) => {
     // Extract raw text from the inner code element for copy.
@@ -140,6 +270,20 @@ export function MessageItem({ raw }: { raw: any }) {
             );
           }
           if (b.type === "tool_use") {
+            // Specialized renderers for the most-used tools
+            if (b.name === "TodoWrite") {
+              return <TodoWriteCard key={i} input={b.input} />;
+            }
+            if (b.name === "Edit" || b.name === "Write" || b.name === "NotebookEdit") {
+              return <EditCard key={i} input={b.input} name={b.name} />;
+            }
+            if (b.name === "Bash") {
+              return <BashCard key={i} input={b.input} />;
+            }
+            if (b.name === "Read") {
+              return <ReadCard key={i} input={b.input} />;
+            }
+            // Generic fallback
             const payload = JSON.stringify(b.input, null, 2);
             return (
               <div key={i} className="tool-use">

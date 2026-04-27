@@ -12,6 +12,7 @@ import { SessionList } from "./components/SessionList";
 import { AuthGate } from "./components/AuthGate";
 import { UsageMeter } from "./components/UsageMeter";
 import { ClaudeMdBanner } from "./components/ClaudeMdBanner";
+import { StatusBar } from "./components/StatusBar";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 
 // Heavy: CodeMirror is ~250KB. Lazy-load when files panel actually opens.
@@ -237,6 +238,7 @@ function AppInner() {
         <ClaudeMdBanner />
         <MessageStream />
         <InputBox />
+        <StatusBar />
       </main>
 
       <aside className="rightbar">{rightPanel}</aside>
