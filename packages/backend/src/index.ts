@@ -4,16 +4,22 @@ import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import { WebSocketServer } from "ws";
 import { runSession } from "./cli-runner.js";
+import { fsRouter } from "./routes/fs.js";
+import { gitRouter } from "./routes/git.js";
+import { realtimeRouter } from "./routes/realtime.js";
 import type {
   ClientMessage,
   ServerMessage,
 } from "@claude-web/shared";
 
-const PORT = Number(process.env.PORT ?? 3000);
+const PORT = Number(process.env.PORT ?? 3030);
 
 const app = new Hono();
 app.use("*", cors());
 app.get("/health", (c) => c.json({ ok: true }));
+app.route("/api/fs", fsRouter);
+app.route("/api/git", gitRouter);
+app.route("/api/realtime", realtimeRouter);
 
 const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`[backend] http  http://localhost:${info.port}`);

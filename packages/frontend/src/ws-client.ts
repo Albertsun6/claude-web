@@ -2,10 +2,20 @@ import type { ClientMessage, ServerMessage } from "@claude-web/shared";
 import { useStore } from "./store";
 
 const WS_URL =
-  import.meta.env.VITE_WS_URL ?? `ws://${window.location.hostname}:3000/ws`;
+  import.meta.env.VITE_WS_URL ?? `ws://${window.location.hostname}:3030/ws`;
 
 let ws: WebSocket | undefined;
 let reconnectTimer: number | undefined;
+
+// Voice integration — App registers a sink that receives streamed assistant text.
+type VoiceSink = {
+  feedAssistantChunk: (text: string) => void;
+  flushAssistantBuffer: () => void;
+};
+let voiceSink: VoiceSink | undefined;
+export function setVoiceSink(sink: VoiceSink | undefined): void {
+  voiceSink = sink;
+}
 
 export function connect(): void {
   if (ws && ws.readyState !== WebSocket.CLOSED) return;
@@ -41,6 +51,14 @@ function handleServerMessage(msg: ServerMessage): void {
     if (sdkMsg?.type === "system" && sdkMsg.subtype === "init" && sdkMsg.session_id) {
       store.setSessionId(sdkMsg.session_id);
     }
+    // feed assistant text chunks to voice sink for streaming TTS
+    if (voiceSink && sdkMsg?.type === "assistant" && sdkMsg.message?.content) {
+      for (const block of sdkMsg.message.content) {
+        if (block?.type === "text" && typeof block.text === "string") {
+          voiceSink.feedAssistantChunk(block.text);
+        }
+      }
+    }
     store.addMessage(sdkMsg);
     return;
   }
@@ -61,6 +79,7 @@ function handleServerMessage(msg: ServerMessage): void {
   }
 
   if (msg.type === "session_ended") {
+    voiceSink?.flushAssistantBuffer();
     store.setBusy(false);
     return;
   }

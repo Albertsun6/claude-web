@@ -13,7 +13,7 @@ Personal mobile-friendly web UI for the `claude` CLI — uses your Claude Pro/Ma
 pnpm install
 cp packages/backend/.env.example packages/backend/.env  # optional, no key needed
 
-# 终端 1：跑后端 (port 3000)
+# 终端 1：跑后端 (port 3030)
 pnpm dev:backend
 
 # 终端 2：跑前端 (port 5173)

@@ -12,6 +12,11 @@ export interface PermissionRequest {
   input: unknown;
 }
 
+export interface Project {
+  name: string;
+  cwd: string;
+}
+
 interface AppState {
   // config
   cwd: string;
@@ -20,6 +25,12 @@ interface AppState {
   setCwd: (v: string) => void;
   setModel: (v: ModelId) => void;
   setPermissionMode: (v: PermissionMode) => void;
+
+  // projects
+  projects: Project[];
+  addProject: (p: Project) => void;
+  removeProject: (cwd: string) => void;
+  switchToProject: (cwd: string) => void;
 
   // session
   sessionId: string | undefined;
@@ -42,9 +53,28 @@ interface AppState {
 }
 
 const LS_KEY = "claude-web:config";
+const LS_PROJECTS = "claude-web:projects";
+const LS_SESSIONS = "claude-web:sessions"; // { [cwd]: sessionId }
+
 const persisted = (() => {
   try {
     return JSON.parse(localStorage.getItem(LS_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+})();
+
+const persistedProjects: Project[] = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(LS_PROJECTS) ?? "[]");
+  } catch {
+    return [];
+  }
+})();
+
+const persistedSessions: Record<string, string> = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(LS_SESSIONS) ?? "{}");
   } catch {
     return {};
   }
@@ -55,10 +85,20 @@ const persist = (s: Partial<AppState>) => {
   localStorage.setItem(LS_KEY, JSON.stringify({ ...cur, ...s }));
 };
 
+const persistProjects = (projects: Project[]) =>
+  localStorage.setItem(LS_PROJECTS, JSON.stringify(projects));
+
+const persistSessions = (sessions: Record<string, string>) =>
+  localStorage.setItem(LS_SESSIONS, JSON.stringify(sessions));
+
 let msgId = 0;
 
-export const useStore = create<AppState>((set) => ({
-  cwd: persisted.cwd ?? "",
+const initialCwd: string = persisted.cwd ?? "";
+const initialSessionId: string | undefined =
+  initialCwd && persistedSessions[initialCwd] ? persistedSessions[initialCwd] : persisted.sessionId;
+
+export const useStore = create<AppState>((set, get) => ({
+  cwd: initialCwd,
   model: persisted.model ?? "claude-sonnet-4-6",
   permissionMode: persisted.permissionMode ?? "default",
   setCwd: (cwd) => {
@@ -74,9 +114,43 @@ export const useStore = create<AppState>((set) => ({
     set({ permissionMode });
   },
 
-  sessionId: persisted.sessionId,
+  projects: persistedProjects,
+  addProject: (p) => {
+    const cur = get().projects;
+    if (cur.some((x) => x.cwd === p.cwd)) return;
+    const next = [...cur, p];
+    persistProjects(next);
+    set({ projects: next });
+  },
+  removeProject: (cwd) => {
+    const next = get().projects.filter((p) => p.cwd !== cwd);
+    persistProjects(next);
+    const sessions = { ...persistedSessions };
+    delete sessions[cwd];
+    persistSessions(sessions);
+    set({ projects: next });
+  },
+  switchToProject: (cwd) => {
+    const sessions: Record<string, string> = JSON.parse(
+      localStorage.getItem(LS_SESSIONS) ?? "{}",
+    );
+    const sessionId = sessions[cwd];
+    persist({ cwd });
+    set({ cwd, sessionId, messages: [] });
+  },
+
+  sessionId: initialSessionId,
   setSessionId: (sessionId) => {
     persist({ sessionId });
+    const cwd = get().cwd;
+    if (cwd) {
+      const sessions: Record<string, string> = JSON.parse(
+        localStorage.getItem(LS_SESSIONS) ?? "{}",
+      );
+      if (sessionId) sessions[cwd] = sessionId;
+      else delete sessions[cwd];
+      persistSessions(sessions);
+    }
     set({ sessionId });
   },
 

@@ -1,23 +1,40 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./store";
-import { connect } from "./ws-client";
+import { connect, sendPrompt, setVoiceSink } from "./ws-client";
 import { ConfigPanel } from "./components/ConfigPanel";
+import { ProjectPicker } from "./components/ProjectPicker";
 import { MessageStream } from "./components/MessageStream";
 import { InputBox } from "./components/InputBox";
 import { PermissionModal } from "./components/PermissionModal";
+import { VoiceBar } from "./components/VoiceBar";
+import { FilesPanel } from "./components/FilesPanel";
+import { GitPanel } from "./components/GitPanel";
+import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 
 type DrawerSide = "left" | "right" | null;
+type RightTab = "files" | "git";
 
-export function App() {
+function AppInner() {
   const connected = useStore((s) => s.connected);
   const sessionId = useStore((s) => s.sessionId);
   const setSessionId = useStore((s) => s.setSessionId);
   const clearMessages = useStore((s) => s.clearMessages);
   const [drawer, setDrawer] = useState<DrawerSide>(null);
+  const [rightTab, setRightTab] = useState<RightTab>("files");
+  const voice = useVoiceCtx();
 
   useEffect(() => {
     connect();
   }, []);
+
+  // wire voice to streamed assistant text
+  useEffect(() => {
+    setVoiceSink({
+      feedAssistantChunk: voice.feedAssistantChunk,
+      flushAssistantBuffer: voice.flushAssistantBuffer,
+    });
+    return () => setVoiceSink(undefined);
+  }, [voice.feedAssistantChunk, voice.flushAssistantBuffer]);
 
   // visualViewport: keep input above mobile keyboard
   useEffect(() => {
@@ -36,6 +53,11 @@ export function App() {
     };
   }, []);
 
+  const handleVoiceTranscript = (text: string) => {
+    voice.cancelSpeak();
+    sendPrompt(text);
+  };
+
   const sidebar = (
     <>
       <h2 style={{ marginTop: 0, fontSize: 18 }}>claude-web</h2>
@@ -44,7 +66,15 @@ export function App() {
       </div>
 
       <div style={{ marginTop: 16 }}>
+        <ProjectPicker />
+      </div>
+
+      <div style={{ marginTop: 16 }}>
         <ConfigPanel />
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <VoiceBar onTranscript={handleVoiceTranscript} />
       </div>
 
       <div style={{ marginTop: 16, fontSize: 12, color: "var(--text-dim)" }}>
@@ -66,6 +96,28 @@ export function App() {
     </>
   );
 
+  const rightPanel = (
+    <div className="rightbar-inner">
+      <div className="rightbar-tabs">
+        <button
+          className={`rightbar-tab ${rightTab === "files" ? "active" : ""}`}
+          onClick={() => setRightTab("files")}
+        >
+          📁 文件
+        </button>
+        <button
+          className={`rightbar-tab ${rightTab === "git" ? "active" : ""}`}
+          onClick={() => setRightTab("git")}
+        >
+          ⎇ Git
+        </button>
+      </div>
+      <div className="rightbar-body">
+        {rightTab === "files" ? <FilesPanel /> : <GitPanel />}
+      </div>
+    </div>
+  );
+
   return (
     <div className="app">
       <div className="topbar">
@@ -85,11 +137,7 @@ export function App() {
         <InputBox />
       </main>
 
-      <aside className="rightbar">
-        <div style={{ padding: 16, color: "var(--text-dim)", fontSize: 12 }}>
-          (files / git panel — populated in later phases)
-        </div>
-      </aside>
+      <aside className="rightbar">{rightPanel}</aside>
 
       {drawer && (
         <div className="drawer-backdrop" onClick={() => setDrawer(null)}>
@@ -97,16 +145,20 @@ export function App() {
             className={`drawer drawer-${drawer}`}
             onClick={(e) => e.stopPropagation()}
           >
-            {drawer === "left" ? sidebar : (
-              <div style={{ padding: 16, color: "var(--text-dim)", fontSize: 12 }}>
-                (files / git panel — populated in later phases)
-              </div>
-            )}
+            {drawer === "left" ? sidebar : rightPanel}
           </div>
         </div>
       )}
 
       <PermissionModal />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <VoiceProvider>
+      <AppInner />
+    </VoiceProvider>
   );
 }

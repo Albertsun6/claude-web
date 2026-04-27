@@ -1,0 +1,288 @@
+.git-panel {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--text, #e5e5e5);
+}
+
+.git-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #333;
+  margin-bottom: 8px;
+}
+
+.git-tab {
+  background: transparent;
+  border: none;
+  color: #aaa;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+}
+
+.git-tab:hover {
+  color: #fff;
+}
+
+.git-tab.active {
+  color: #fff;
+  border-bottom-color: #4a9eff;
+}
+
+.git-loading,
+.git-empty {
+  color: #888;
+  padding: 12px;
+  font-style: italic;
+}
+
+.git-error {
+  color: #f87171;
+  padding: 8px;
+  background: rgba(248, 113, 113, 0.1);
+  border-radius: 4px;
+}
+
+.git-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px 8px;
+}
+
+.git-branch-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.git-ahead {
+  color: #4ade80;
+}
+
+.git-behind {
+  color: #fbbf24;
+}
+
+.git-refresh {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #ddd;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.git-refresh:hover {
+  background: #333;
+}
+
+.git-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.git-file {
+  border-bottom: 1px solid #222;
+}
+
+.git-file-row {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.git-file-row:hover {
+  background: #1f1f1f;
+}
+
+.git-file-status {
+  font-family: monospace;
+  width: 24px;
+  font-size: 12px;
+  color: #888;
+}
+
+.git-file-path {
+  flex: 1;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.git-file-staged .git-file-path {
+  color: #4ade80;
+}
+
+.git-file-modified .git-file-path {
+  color: #fbbf24;
+}
+
+.git-file-deleted .git-file-path {
+  color: #f87171;
+}
+
+.git-file-untracked .git-file-path {
+  color: #888;
+}
+
+.git-file-diff {
+  padding: 4px 8px 8px;
+  background: #0d0d0d;
+}
+
+.git-diff-toggle {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.git-diff {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  padding: 8px;
+  background: #111;
+  border-radius: 4px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.git-diff-empty {
+  color: #888;
+  font-style: italic;
+}
+
+.git-diff-line {
+  display: block;
+}
+
+.git-diff-add {
+  background: rgba(74, 222, 128, 0.12);
+  color: #86efac;
+}
+
+.git-diff-del {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+
+.git-diff-hunk {
+  background: #222;
+  color: #888;
+}
+
+.git-diff-meta {
+  color: #666;
+}
+
+.git-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.git-log-entry {
+  border-bottom: 1px solid #222;
+}
+
+.git-log-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.git-log-row:hover {
+  background: #1f1f1f;
+}
+
+.git-sha {
+  font-family: monospace;
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.git-log-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-log-meta {
+  font-size: 11px;
+  color: #888;
+}
+
+.git-log-detail {
+  padding: 8px 12px;
+  background: #0d0d0d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.git-branches {
+  padding: 4px 8px;
+}
+
+.git-branch-section h4 {
+  margin: 8px 0 4px;
+  color: #888;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.git-branch-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.git-branch-item {
+  font-family: monospace;
+  font-size: 12px;
+  padding: 3px 8px;
+  white-space: pre;
+}
+
+.git-branch-item.current {
+  color: #4ade80;
+  font-weight: bold;
+}
+
+.git-branch-item.remote {
+  color: #888;
+}
+
+@media (max-width: 600px) {
+  .git-log-row {
+    grid-template-columns: auto 1fr;
+  }
+  .git-log-meta {
+    grid-column: 1 / -1;
+    padding-left: 56px;
+  }
+}

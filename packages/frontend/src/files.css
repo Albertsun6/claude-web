@@ -1,0 +1,184 @@
+/* FilesPanel: vertical split on mobile, horizontal on tablet+ */
+.files-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.files-panel__tree {
+  flex: 0 0 40%;
+  min-height: 0;
+  overflow: auto;
+  border-bottom: 1px solid #2a2a2a;
+  background: #1a1a1a;
+}
+
+.files-panel__viewer {
+  flex: 1 1 60%;
+  min-height: 0;
+  overflow: auto;
+  background: #1e1e1e;
+}
+
+@media (min-width: 768px) {
+  .files-panel {
+    flex-direction: row;
+  }
+  .files-panel__tree {
+    flex: 0 0 280px;
+    border-bottom: none;
+    border-right: 1px solid #2a2a2a;
+  }
+  .files-panel__viewer {
+    flex: 1 1 auto;
+  }
+}
+
+/* File tree */
+.file-tree {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: #d4d4d4;
+  padding: 4px 0;
+  /* Prevent horizontal overflow on narrow screens; allow horizontal scroll within row if needed */
+  overflow-x: hidden;
+  width: 100%;
+}
+
+.file-tree--empty {
+  padding: 12px;
+  color: #888;
+  font-family: inherit;
+}
+
+.file-tree__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+  line-height: 1.6;
+}
+
+.file-tree__row:hover {
+  background: #2a2d2e;
+}
+
+.file-tree__row--selected {
+  background: #094771;
+}
+
+.file-tree__row--selected:hover {
+  background: #0a5a8c;
+}
+
+.file-tree__row--meta,
+.file-tree__row--error {
+  cursor: default;
+  color: #888;
+  font-style: italic;
+}
+
+.file-tree__row--error {
+  color: #f48771;
+}
+
+.file-tree__chevron {
+  display: inline-block;
+  width: 12px;
+  text-align: center;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.file-tree__chevron--blank {
+  /* keep alignment for files */
+}
+
+.file-tree__icon {
+  flex-shrink: 0;
+}
+
+.file-tree__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Code viewer */
+.code-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.code-viewer--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  height: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.code-viewer__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #2a2a2a;
+  background: #252526;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: #d4d4d4;
+  flex-shrink: 0;
+}
+
+.code-viewer__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.code-viewer__size {
+  color: #888;
+  flex-shrink: 0;
+}
+
+.code-viewer__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.code-viewer__meta {
+  padding: 12px;
+  color: #888;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.code-viewer__error {
+  padding: 12px;
+  color: #f48771;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* CodeMirror in our viewer fills the body */
+.code-viewer__body .cm-editor {
+  height: 100%;
+  font-size: 13px;
+}
+
+.code-viewer__body .cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
