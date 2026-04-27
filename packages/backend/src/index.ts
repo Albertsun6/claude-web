@@ -2,8 +2,12 @@ import "dotenv/config";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { WebSocketServer } from "ws";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync } from "node:fs";
 import { runSession } from "./cli-runner.js";
 import { fsRouter } from "./routes/fs.js";
 import { gitRouter } from "./routes/git.js";
@@ -30,6 +34,17 @@ app.route("/api/git", gitRouter);
 app.route("/api/realtime", realtimeRouter);
 app.route("/api/voice", voiceRouter);
 app.route("/api/permission", permissionRouter);
+
+// Serve the frontend production build, if present.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const FRONTEND_DIST = path.resolve(__dirname, "../../frontend/dist");
+if (existsSync(FRONTEND_DIST)) {
+  console.log(`[backend] serving frontend from ${FRONTEND_DIST}`);
+  app.use("/*", serveStatic({ root: path.relative(process.cwd(), FRONTEND_DIST) }));
+  // SPA fallback: any non-API, non-asset path → index.html
+  const indexHtml = readFileSync(path.join(FRONTEND_DIST, "index.html"), "utf-8");
+  app.get("*", (c) => c.html(indexHtml));
+}
 
 const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`[backend] http  http://localhost:${info.port}`);
