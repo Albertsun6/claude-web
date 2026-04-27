@@ -52,30 +52,38 @@ if (existsSync(FRONTEND_DIST)) {
   const indexHtml = readFileSync(path.join(FRONTEND_DIST, "index.html"), "utf-8");
   const indexHtmlGz = gzipSync(Buffer.from(indexHtml, "utf-8"));
 
+  const sendIndex = (c: any) => {
+    const ae = c.req.header("accept-encoding") ?? "";
+    if (ae.includes("gzip")) {
+      return new Response(indexHtmlGz as unknown as BodyInit, {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "content-encoding": "gzip",
+          "content-length": String(indexHtmlGz.length),
+          "cache-control": "no-cache",
+        },
+      });
+    }
+    return c.html(indexHtml);
+  };
+
   app.use("/*", async (c, next) => {
     const url = new URL(c.req.url);
     if (url.pathname.startsWith("/api/") || url.pathname === "/ws" || url.pathname === "/health") {
       return next();
     }
-    // Try resolve to a file in dist
+    // Root or any path without an extension → SPA index
+    if (url.pathname === "/" || !/\.[a-z0-9]+$/i.test(url.pathname)) {
+      return sendIndex(c);
+    }
+
     const safe = path.normalize(url.pathname).replace(/^\/+/, "");
     const filePath = path.join(FRONTEND_DIST, safe);
     if (!filePath.startsWith(FRONTEND_DIST)) return next();
 
     if (!existsSync(filePath)) {
-      // SPA fallback: HTML
-      const ae = c.req.header("accept-encoding") ?? "";
-      if (ae.includes("gzip")) {
-        return new Response(indexHtmlGz as unknown as BodyInit, {
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "content-encoding": "gzip",
-            "content-length": String(indexHtmlGz.length),
-            "cache-control": "no-cache",
-          },
-        });
-      }
-      return c.html(indexHtml);
+      // 404 for missing assets (don't fall back to index.html for asset-like requests)
+      return c.text("not found", 404);
     }
 
     let body: Buffer;
