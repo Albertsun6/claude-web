@@ -252,6 +252,35 @@ button.danger { background: var(--danger); color: white; }
 .path-input-row input { flex: 1; }
 .path-input-row button { white-space: nowrap; }
 
+.input-stack { display: flex; flex-direction: column; }
+.voice-draft-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--panel-2);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.voice-draft-pending { border-left: 3px solid var(--accent); }
+.voice-draft-ready { border-left: 3px solid var(--success); }
+.voice-draft-failed { border-left: 3px solid var(--danger); }
+.voice-draft-tag { color: var(--text); font-weight: 600; white-space: nowrap; }
+.voice-draft-original {
+  flex: 1;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, monospace;
+}
+.voice-draft-discard {
+  min-height: 28px;
+  min-width: 28px;
+  padding: 4px 8px;
+  font-size: 14px;
+}
+
 .connection-status {
   font-size: 11px;
   padding: 4px 8px;

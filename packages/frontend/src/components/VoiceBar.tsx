@@ -1,5 +1,6 @@
 import "../voice.css";
 import { useVoiceCtx } from "../hooks/VoiceContext";
+import { useStore } from "../store";
 import { VoiceButton } from "./VoiceButton";
 
 export interface VoiceBarProps {
@@ -14,6 +15,8 @@ const MODE_LABELS: Record<string, string> = {
 
 export function VoiceBar({ onTranscript }: VoiceBarProps) {
   const voice = useVoiceCtx();
+  const cleanupEnabled = useStore((s) => s.voiceCleanupEnabled);
+  const setCleanupEnabled = useStore((s) => s.setVoiceCleanupEnabled);
   const canSwitch = voice.availableModes.length > 1;
 
   return (
@@ -36,15 +39,25 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
       <div className="voice-bar-center">
         <VoiceButton onTranscript={onTranscript} />
       </div>
-      <button
-        type="button"
-        className="voice-mute"
-        onClick={() => voice.setMuted(!voice.muted)}
-        aria-label={voice.muted ? "取消静音" : "静音"}
-        title={voice.muted ? "取消静音" : "静音"}
-      >
-        {voice.muted ? "🔇" : "🔊"}
-      </button>
+      <div className="voice-extra">
+        <label className="voice-cleanup-toggle" title="语音转写后用 Claude 整理一下再发送">
+          <input
+            type="checkbox"
+            checked={cleanupEnabled}
+            onChange={(e) => setCleanupEnabled(e.target.checked)}
+          />
+          <span>整理</span>
+        </label>
+        <button
+          type="button"
+          className="voice-mute"
+          onClick={() => voice.setMuted(!voice.muted)}
+          aria-label={voice.muted ? "取消静音" : "静音"}
+          title={voice.muted ? "取消静音" : "静音"}
+        >
+          {voice.muted ? "🔇" : "🔊"}
+        </button>
+      </div>
     </div>
   );
 }

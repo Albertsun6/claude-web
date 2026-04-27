@@ -92,9 +92,25 @@
   }
 }
 
+.voice-extra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.voice-cleanup-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim, #888);
+  cursor: pointer;
+  user-select: none;
+}
+.voice-cleanup-toggle input { accent-color: var(--accent, #7aa7ff); }
+
 .voice-mute {
   background: transparent;
-  border: 1px solid #d0d0d0;
+  border: 1px solid var(--border, #d0d0d0);
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 18px;
@@ -103,5 +119,5 @@
 }
 
 .voice-mute:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.04);
 }

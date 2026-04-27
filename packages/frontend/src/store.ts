@@ -17,6 +17,12 @@ export interface Project {
   cwd: string;
 }
 
+export interface VoiceDraft {
+  original: string;
+  cleaned: string;
+  status: "pending" | "ready" | "failed";
+}
+
 interface AppState {
   // config
   cwd: string;
@@ -50,6 +56,12 @@ interface AppState {
   // permission
   pendingPermission: PermissionRequest | undefined;
   setPendingPermission: (p: PermissionRequest | undefined) => void;
+
+  // voice draft (raw → cleanup preview before send)
+  voiceDraft: VoiceDraft | undefined;
+  setVoiceDraft: (v: VoiceDraft | undefined) => void;
+  voiceCleanupEnabled: boolean;
+  setVoiceCleanupEnabled: (b: boolean) => void;
 }
 
 const LS_KEY = "claude-web:config";
@@ -166,4 +178,19 @@ export const useStore = create<AppState>((set, get) => ({
 
   pendingPermission: undefined,
   setPendingPermission: (pendingPermission) => set({ pendingPermission }),
+
+  voiceDraft: undefined,
+  setVoiceDraft: (voiceDraft) => set({ voiceDraft }),
+  voiceCleanupEnabled: (() => {
+    try {
+      const v = localStorage.getItem("claude-web:voice-cleanup");
+      return v === null ? true : v === "1";
+    } catch {
+      return true;
+    }
+  })(),
+  setVoiceCleanupEnabled: (b) => {
+    try { localStorage.setItem("claude-web:voice-cleanup", b ? "1" : "0"); } catch { /* ignore */ }
+    set({ voiceCleanupEnabled: b });
+  },
 }));

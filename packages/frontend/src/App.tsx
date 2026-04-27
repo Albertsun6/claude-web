@@ -53,9 +53,36 @@ function AppInner() {
     };
   }, []);
 
-  const handleVoiceTranscript = (text: string) => {
+  const cleanupEnabled = useStore((s) => s.voiceCleanupEnabled);
+  const setVoiceDraft = useStore((s) => s.setVoiceDraft);
+
+  const handleVoiceTranscript = async (text: string) => {
     voice.cancelSpeak();
-    sendPrompt(text);
+    if (!cleanupEnabled) {
+      sendPrompt(text);
+      return;
+    }
+    setVoiceDraft({ original: text, cleaned: text, status: "pending" });
+    try {
+      const apiBase =
+        (import.meta as any).env?.VITE_API_URL ??
+        `http://${window.location.hostname}:3030`;
+      const res = await fetch(`${apiBase}/api/voice/cleanup`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const body: { original?: string; cleaned?: string; fallback?: boolean } = await res.json();
+      const cleaned = body.cleaned?.trim() || text;
+      setVoiceDraft({
+        original: text,
+        cleaned,
+        status: body.fallback ? "failed" : "ready",
+      });
+    } catch (err) {
+      console.warn("[voice] cleanup failed", err);
+      setVoiceDraft({ original: text, cleaned: text, status: "failed" });
+    }
   };
 
   const sidebar = (
