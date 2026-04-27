@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useStore, type Project } from "../store";
 import { DirectoryPicker } from "./DirectoryPicker";
 
+type Mode = "idle" | "open" | "create";
+
 export function ProjectPicker() {
   const projects = useStore((s) => s.projects);
   const openCwds = useStore((s) => s.openCwds);
@@ -11,35 +13,54 @@ export function ProjectPicker() {
   const removeProject = useStore((s) => s.removeProject);
   const byCwd = useStore((s) => s.byCwd);
 
-  const [adding, setAdding] = useState(false);
+  const [mode, setMode] = useState<Mode>("idle");
   const [draft, setDraft] = useState<Project>({ name: "", cwd: "" });
-  const [picking, setPicking] = useState(false);
 
-  const submit = () => {
+  const submitCreate = () => {
     if (!draft.name.trim() || !draft.cwd.trim()) return;
     const p: Project = { name: draft.name.trim(), cwd: draft.cwd.trim() };
     addProject(p);
     openProject(p);
     setDraft({ name: "", cwd: "" });
-    setAdding(false);
+    setMode("idle");
+  };
+
+  // "Open" flow: directly pick a directory; auto-derive project name; register + open as tab.
+  const handleOpenSelect = (path: string) => {
+    const name = path.split("/").filter(Boolean).pop() || path;
+    const p: Project = { name, cwd: path };
+    addProject(p);   // no-op if cwd already saved
+    openProject(p);  // opens as active tab
+    setMode("idle");
   };
 
   return (
     <div className="project-picker">
       <div className="project-picker-header">
         <span className="project-picker-label">项目</span>
-        <button
-          className="secondary"
-          style={{ fontSize: 11, padding: "4px 8px", minHeight: 28 }}
-          onClick={() => setAdding((v) => !v)}
-        >
-          {adding ? "取消" : "+ 添加"}
-        </button>
+        <div className="project-picker-actions">
+          <button
+            className="secondary"
+            style={{ fontSize: 11, padding: "4px 8px", minHeight: 28 }}
+            onClick={() => setMode(mode === "open" ? "idle" : "open")}
+            title="打开磁盘上已有的目录"
+          >
+            📂 打开
+          </button>
+          <button
+            className="secondary"
+            style={{ fontSize: 11, padding: "4px 8px", minHeight: 28 }}
+            onClick={() => setMode(mode === "create" ? "idle" : "create")}
+            title="新建/手动添加项目"
+          >
+            {mode === "create" ? "取消" : "+ 新建"}
+          </button>
+        </div>
       </div>
 
       <ul className="project-list">
         {projects.length === 0 && (
-          <li className="project-empty">还没有项目，添加一个吧</li>
+          <li className="project-empty">还没有项目，点击 📂 打开 选一个目录</li>
         )}
         {projects.map((p) => {
           const isOpen = openCwds.includes(p.cwd);
@@ -77,7 +98,7 @@ export function ProjectPicker() {
         })}
       </ul>
 
-      {adding && (
+      {mode === "create" && (
         <div className="project-add-form">
           <input
             type="text"
@@ -95,29 +116,37 @@ export function ProjectPicker() {
             <button
               type="button"
               className="secondary"
-              onClick={() => setPicking(true)}
-              title="选择目录"
+              onClick={() => setMode("open")}
+              title="选择/新建目录"
             >
               📁
             </button>
           </div>
-          <button onClick={submit} disabled={!draft.name.trim() || !draft.cwd.trim()}>
+          <button onClick={submitCreate} disabled={!draft.name.trim() || !draft.cwd.trim()}>
             保存并打开
           </button>
         </div>
       )}
 
-      {picking && (
+      {mode === "open" && (
         <DirectoryPicker
           initialPath={draft.cwd}
-          onCancel={() => setPicking(false)}
+          onCancel={() => {
+            // if user came here via "+新建" flow, return to it; else go idle
+            setMode(draft.cwd || draft.name ? "create" : "idle");
+          }}
           onSelect={(path) => {
-            setDraft((d) => ({
-              ...d,
-              cwd: path,
-              name: d.name.trim() || (path.split("/").filter(Boolean).pop() ?? ""),
-            }));
-            setPicking(false);
+            // if 新建 form was open, just fill it; otherwise open directly
+            if (draft.name || draft.cwd) {
+              setDraft((d) => ({
+                ...d,
+                cwd: path,
+                name: d.name.trim() || (path.split("/").filter(Boolean).pop() ?? ""),
+              }));
+              setMode("create");
+            } else {
+              handleOpenSelect(path);
+            }
           }}
         />
       )}
