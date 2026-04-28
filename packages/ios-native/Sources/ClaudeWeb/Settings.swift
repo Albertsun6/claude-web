@@ -4,6 +4,19 @@
 import Foundation
 import Observation
 
+struct Project: Identifiable, Codable, Equatable {
+    var id: String { cwd }
+    var name: String
+    var cwd: String
+    var lastUsed: Date
+
+    init(name: String, cwd: String, lastUsed: Date = Date()) {
+        self.name = name
+        self.cwd = cwd
+        self.lastUsed = lastUsed
+    }
+}
+
 @MainActor
 @Observable
 final class AppSettings {
@@ -16,6 +29,8 @@ final class AppSettings {
     private static let authTokenKey = "com.albertsun6.claudeweb-native.authToken"
     private static let modelKey = "com.albertsun6.claudeweb-native.model"
     private static let silentKeepaliveKey = "com.albertsun6.claudeweb-native.silentKeepalive"
+    private static let currentConversationIdKey = "com.albertsun6.claudeweb-native.currentConversationId"
+    private static let fontSizeKey = "com.albertsun6.claudeweb-native.fontSize"
 
     var backendURL: URL {
         didSet {
@@ -71,6 +86,26 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(silentKeepalive, forKey: Self.silentKeepaliveKey) }
     }
 
+    /// Remembered focus from the previous app session so launching feels
+    /// like resuming. Mirrored from BackendClient.currentConversationId on
+    /// every change. Optional — first launch has no value.
+    var currentConversationId: String? {
+        didSet {
+            if let id = currentConversationId {
+                UserDefaults.standard.set(id, forKey: Self.currentConversationIdKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.currentConversationIdKey)
+            }
+        }
+    }
+
+    /// User-adjustable text size for the chat area. Maps to SwiftUI's
+    /// DynamicTypeSize so the OS handles all the layout math (and we get
+    /// proper accessibility behavior too). Stored as the raw enum string.
+    var fontSize: String {
+        didSet { UserDefaults.standard.set(fontSize, forKey: Self.fontSizeKey) }
+    }
+
     init() {
         // Default: simulator → http://localhost:3030; device → Tailscale URL.
         // We'll prompt the user to pick at first launch in the settings page.
@@ -87,6 +122,8 @@ final class AppSettings {
         self.authToken = UserDefaults.standard.string(forKey: Self.authTokenKey) ?? ""
         self.model = UserDefaults.standard.string(forKey: Self.modelKey) ?? "claude-haiku-4-5"
         self.silentKeepalive = UserDefaults.standard.bool(forKey: Self.silentKeepaliveKey)
+        self.currentConversationId = UserDefaults.standard.string(forKey: Self.currentConversationIdKey)
+        self.fontSize = UserDefaults.standard.string(forKey: Self.fontSizeKey) ?? "large"
     }
 
     private static func detectDefaultBackend() -> URL {
@@ -95,5 +132,24 @@ final class AppSettings {
         #else
         return URL(string: "https://mymac.tailcf3ccf.ts.net")!
         #endif
+    }
+}
+
+import SwiftUI
+
+extension AppSettings {
+    /// Map the persisted fontSize string to SwiftUI's DynamicTypeSize.
+    /// Unknown values fall back to `.large` (the iOS default).
+    var dynamicTypeSize: DynamicTypeSize {
+        switch fontSize {
+        case "medium": return .medium
+        case "large": return .large
+        case "xLarge": return .xLarge
+        case "xxLarge": return .xxLarge
+        case "xxxLarge": return .xxxLarge
+        case "accessibility1": return .accessibility1
+        case "accessibility2": return .accessibility2
+        default: return .large
+        }
     }
 }

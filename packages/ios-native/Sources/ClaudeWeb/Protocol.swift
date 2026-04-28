@@ -51,6 +51,36 @@ enum ServerMessage {
     case permissionRequest(runId: String, requestId: String, toolName: String, input: [String: Any])
     case unknown(type: String)
 
+    /// Used by BackendClient to route a message to the conversation that
+    /// originated the run. `unknown` and global `error` (without runId) → nil
+    /// → the message gets dropped (no conversation to attribute it to).
+    var runId: String? {
+        switch self {
+        case .sdkMessage(let r, _),
+             .sessionEnded(let r, _),
+             .clearRunMessages(let r):
+            return r
+        case .permissionRequest(let r, _, _, _):
+            return r
+        case .error(let r, _):
+            return r
+        case .unknown:
+            return nil
+        }
+    }
+
+    /// Stable string name for telemetry / debug logs.
+    var typeName: String {
+        switch self {
+        case .sdkMessage: return "sdk_message"
+        case .sessionEnded: return "session_ended"
+        case .error: return "error"
+        case .clearRunMessages: return "clear_run_messages"
+        case .permissionRequest: return "permission_request"
+        case .unknown(let t): return "unknown:\(t)"
+        }
+    }
+
     static func decode(_ data: Data) throws -> ServerMessage {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = json["type"] as? String else {
@@ -85,10 +115,17 @@ enum ServerMessage {
 /// Subset of stream-json SDK messages we actually render.
 enum SDKMessage {
     case systemInit(sessionId: String?, model: String?)
-    case assistantText(String)
-    case toolUse(name: String)             // M1 just shows "[tool: Bash]" placeholder
-    case toolResult                         // ditto
-    case result(usd: Double?)               // turn finished, usage info
+    /// One assistant message with any combination of text + tool_use blocks.
+    /// `text` is the joined text content (nil if none); `toolUses` is each
+    /// individual tool_use block in the order they appeared. Thinking blocks
+    /// are filtered at parse time. BackendClient emits one ChatLine per
+    /// piece (assistant text, then a tool_use row per tool call).
+    case assistantContent(text: String?, toolUses: [ToolUseInfo])
+    /// A user-wrapped tool_result block. v1 doesn't link it back to its
+    /// tool_use; the row just shows "✓ tool result" placeholder.
+    case toolResult
+    /// Turn finished, with optional cost telemetry.
+    case result(usd: Double?)
     case other
 
     static func parse(_ dict: [String: Any]) -> SDKMessage {
@@ -101,19 +138,40 @@ enum SDKMessage {
                 model: dict["model"] as? String
             )
         case ("assistant", _):
-            // assistant.message.content[].type == "text" | "tool_use" → flatten to text
+            // Walk content blocks. Join text blocks; capture each tool_use
+            // independently. Thinking blocks are silently ignored.
             if let message = dict["message"] as? [String: Any],
                let content = message["content"] as? [[String: Any]] {
-                let texts = content.compactMap { block -> String? in
-                    if (block["type"] as? String) == "text" {
-                        return block["text"] as? String
+                var texts: [String] = []
+                var tools: [ToolUseInfo] = []
+                for block in content {
+                    let blockType = block["type"] as? String ?? ""
+                    switch blockType {
+                    case "text":
+                        if let s = block["text"] as? String { texts.append(s) }
+                    case "tool_use":
+                        let name = block["name"] as? String ?? "?"
+                        let id = block["id"] as? String
+                        let input = block["input"] as? [String: Any] ?? [:]
+                        let inputJSON: String
+                        if let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys, .prettyPrinted]),
+                           let s = String(data: data, encoding: .utf8) {
+                            inputJSON = s
+                        } else {
+                            inputJSON = "{}"
+                        }
+                        tools.append(ToolUseInfo(id: id, name: name, inputJSON: inputJSON))
+                    default:
+                        // thinking, redacted_thinking, etc — drop silently
+                        break
                     }
-                    return nil
-                }.joined()
-                if !texts.isEmpty { return .assistantText(texts) }
-                if let firstTool = content.first(where: { ($0["type"] as? String) == "tool_use" }),
-                   let name = firstTool["name"] as? String {
-                    return .toolUse(name: name)
+                }
+                let joined = texts.joined()
+                if !joined.isEmpty || !tools.isEmpty {
+                    return .assistantContent(
+                        text: joined.isEmpty ? nil : joined,
+                        toolUses: tools
+                    )
                 }
             }
             return .other
@@ -126,4 +184,13 @@ enum SDKMessage {
             return .other
         }
     }
+}
+
+/// One tool_use block extracted from an assistant message. Carries the data
+/// each tool card view needs to decode — name picks the card type, inputJSON
+/// is the raw blob the card decodes to typed fields.
+struct ToolUseInfo: Equatable {
+    let id: String?
+    let name: String
+    let inputJSON: String
 }
