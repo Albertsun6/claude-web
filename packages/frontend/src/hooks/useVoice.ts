@@ -56,6 +56,7 @@ export type VoiceMode = "web-speech" | "remote-stt" | "unsupported";
 const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "";
 const TRANSCRIBE_URL = API_BASE + "/api/voice/transcribe";
 const TTS_URL = API_BASE + "/api/voice/tts";
+const SUMMARIZE_URL = API_BASE + "/api/voice/summarize";
 
 export interface UseVoiceReturn {
   mode: VoiceMode;
@@ -77,10 +78,16 @@ export interface UseVoiceReturn {
   isSpeaking: boolean;
   hasLastTurn: boolean;
   replayLastTurn: () => void;
+  // speaking style: short Haiku summary (default) vs verbatim per-sentence
+  speakStyle: SpeakStyle;
+  setSpeakStyle: (s: SpeakStyle) => void;
 }
 
 const MUTED_KEY = "claude-web:voice-muted";
 const PREFERRED_MODE_KEY = "claude-web:voice-mode";
+const SPEAK_STYLE_KEY = "claude-web:voice-speak-style";
+
+export type SpeakStyle = "summary" | "verbatim";
 const SENTENCE_SPLIT = /([.!?。！？\n]+)/;
 
 function hasMediaRecorder(): boolean {
@@ -157,10 +164,15 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const [interimTranscript, setInterimTranscript] = useState("");
   const [finalTranscript, setFinalTranscript] = useState("");
   const [muted, setMutedState] = useState<boolean>(false);
+  const [speakStyle, setSpeakStyleState] = useState<SpeakStyle>("summary");
 
   const setMode = useCallback((m: VoiceMode) => {
     try { localStorage.setItem(PREFERRED_MODE_KEY, m); } catch { /* ignore */ }
     setModeState(m);
+  }, []);
+  const setSpeakStyle = useCallback((s: SpeakStyle) => {
+    try { localStorage.setItem(SPEAK_STYLE_KEY, s); } catch { /* ignore */ }
+    setSpeakStyleState(s);
   }, []);
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
@@ -191,6 +203,10 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     const m = loadMuted();
     setMutedState(m);
     mutedRef.current = m;
+    try {
+      const v = localStorage.getItem(SPEAK_STYLE_KEY);
+      if (v === "verbatim" || v === "summary") setSpeakStyleState(v);
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
@@ -436,9 +452,15 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     setIsSpeaking(false);
   }, []);
 
+  const speakStyleRef = useRef<SpeakStyle>("summary");
+  useEffect(() => { speakStyleRef.current = speakStyle; }, [speakStyle]);
+
+  // In summary mode we just buffer; speaking happens once at flush.
+  // In verbatim mode we keep the legacy per-sentence streaming.
   const feedAssistantChunk = useCallback((text: string) => {
     if (!text) return;
     assistantBufRef.current += text;
+    if (speakStyleRef.current === "summary") return;
     const buf = assistantBufRef.current;
     const parts = buf.split(SENTENCE_SPLIT);
     let consumed = 0;
@@ -453,13 +475,41 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   }, [speak]);
 
   const flushAssistantBuffer = useCallback(() => {
-    const tail = assistantBufRef.current.trim();
+    const full = assistantBufRef.current.trim();
     assistantBufRef.current = "";
-    if (tail) speak(tail);
-    // snapshot what we just spoke for replay
-    const joined = turnSentencesRef.current.join(" ").trim();
-    if (joined) setLastTurnText(joined);
-    turnSentencesRef.current = [];
+    if (!full) return;
+    if (mutedRef.current) return;
+
+    if (speakStyleRef.current === "verbatim") {
+      // verbatim: speak whatever sentence tail is left
+      speak(full);
+      const joined = turnSentencesRef.current.join(" ").trim();
+      if (joined) setLastTurnText(joined);
+      turnSentencesRef.current = [];
+      return;
+    }
+
+    // summary mode: send full text to backend → speak the short version
+    const gen = generationRef.current;
+    void (async () => {
+      let summary = full;
+      try {
+        const res = await authFetch(SUMMARIZE_URL, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: full }),
+        });
+        if (gen !== generationRef.current || mutedRef.current) return;
+        if (res.ok) {
+          const body: { summary?: string; fallback?: boolean } = await res.json();
+          if (body.summary && !body.fallback) summary = body.summary.trim();
+        }
+      } catch { /* fall through with full text */ }
+      if (gen !== generationRef.current || mutedRef.current) return;
+      speak(summary);
+      setLastTurnText(summary);
+      turnSentencesRef.current = [];
+    })();
   }, [speak]);
 
   const replayLastTurn = useCallback(() => {
@@ -505,5 +555,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     isSpeaking,
     hasLastTurn: lastTurnText.length > 0,
     replayLastTurn,
+    speakStyle,
+    setSpeakStyle,
   };
 }

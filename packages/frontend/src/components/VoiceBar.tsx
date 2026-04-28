@@ -45,6 +45,14 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
           />
           <span>整理</span>
         </label>
+        <label className="voice-cleanup-toggle" title="开 = 用 Haiku 概括成口语版再播；关 = 逐句完整朗读">
+          <input
+            type="checkbox"
+            checked={voice.speakStyle === "summary"}
+            onChange={(e) => voice.setSpeakStyle(e.target.checked ? "summary" : "verbatim")}
+          />
+          <span>概要</span>
+        </label>
 
         {voice.isSpeaking && (
           <button

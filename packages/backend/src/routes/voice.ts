@@ -278,3 +278,67 @@ voiceRouter.post("/cleanup", async (c) => {
     durationMs: Date.now() - started,
   });
 });
+
+const SUMMARIZE_SYSTEM_PROMPT = `你是一个口播改写助手。下面是 Claude 的完整书面回答，里面有 markdown、表格、代码、列表等不适合朗读的内容。请改写成一段**短的、口语化的、能直接读出来的总结**，让听者立刻知道结果和下一步。
+
+铁律：
+- 只输出朗读文本，不要任何 markdown、引号、前缀
+- 1 到 4 句话，最长 80 个汉字
+- 不照搬原文，只挑重点：发生了什么 / 修复了什么 / 接下来该做什么
+- 跳过代码、命令、文件路径、表格、长列表
+- 不说"以下"、"如下"、"请参考屏幕"——直接说要点
+- 如果只是确认或简短回答，原样输出（≤ 30 字时不必改）
+- 用陈述句，自然停顿，避免书面词如"此外"、"综上"`;
+
+voiceRouter.post("/summarize", async (c) => {
+  let body: { text?: unknown };
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: "invalid JSON body" }, 400);
+  }
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text) return c.json({ error: "text required" }, 400);
+  if (text.length > 12_000) return c.json({ error: "text too long" }, 413);
+
+  // Trivially short responses skip the LLM round-trip.
+  if (text.length <= 30) {
+    return c.json({ original: text, summary: text, skipped: true, durationMs: 0 });
+  }
+
+  const started = Date.now();
+  const args = [
+    "-p",
+    "--model", "claude-haiku-4-5",
+    "--output-format", "json",
+    "--permission-mode", "bypassPermissions",
+    "--system-prompt", SUMMARIZE_SYSTEM_PROMPT,
+    "--setting-sources", "user",
+    text,
+  ];
+  const r = await new Promise<{ stdout: string; stderr: string; code: number }>(
+    (resolve, reject) => {
+      const child = spawn(CLAUDE_BIN, args, { stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "", stderr = "";
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(new Error("claude summarize timed out"));
+      }, 20_000);
+      child.stdout.on("data", (d) => (stdout += d.toString()));
+      child.stderr.on("data", (d) => (stderr += d.toString()));
+      child.on("error", (err) => { clearTimeout(timer); reject(err); });
+      child.on("close", (code) => { clearTimeout(timer); resolve({ stdout, stderr, code: code ?? 0 }); });
+    },
+  ).catch((err: Error) => ({ stdout: "", stderr: err.message ?? String(err), code: -1 }));
+
+  if (r.code !== 0) {
+    return c.json({ original: text, summary: text, fallback: true, error: r.stderr.slice(0, 200) });
+  }
+  let summary = text;
+  try {
+    const parsed = JSON.parse(r.stdout);
+    if (typeof parsed.result === "string" && parsed.result.trim()) summary = parsed.result.trim();
+  } catch {
+    const trimmed = r.stdout.trim();
+    if (trimmed) summary = trimmed;
+  }
+  return c.json({ original: text, summary, durationMs: Date.now() - started });
+});
