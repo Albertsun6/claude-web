@@ -101,6 +101,12 @@ interface AppState {
   voiceCleanupEnabled: boolean;
   setVoiceCleanupEnabled: (b: boolean) => void;
 
+  // explicit audio device selection ("" = system default)
+  audioInputId: string;
+  audioOutputId: string;
+  setAudioInputId: (id: string) => void;
+  setAudioOutputId: (id: string) => void;
+
   // history-session list expanded?
   sessionListOpen: boolean;
   setSessionListOpen: (b: boolean) => void;
@@ -139,6 +145,8 @@ const LS_RIGHT_TAB = "claude-web:right-tab";
 const LS_OPEN = "claude-web:open-cwds";
 const LS_VOICE_CLEANUP = "claude-web:voice-cleanup";
 const LS_SESSION_LIST_OPEN = "claude-web:session-list-open";
+const LS_AUDIO_INPUT = "claude-web:audio-input-id";
+const LS_AUDIO_OUTPUT = "claude-web:audio-output-id";
 
 const persistedConfig = (() => {
   try { return JSON.parse(localStorage.getItem(LS_CONFIG) ?? "{}"); } catch { return {}; }
@@ -371,6 +379,21 @@ export const useStore = create<AppState>((set, get) => ({
   setVoiceCleanupEnabled: (b) => {
     try { localStorage.setItem(LS_VOICE_CLEANUP, b ? "1" : "0"); } catch { /* ignore */ }
     set({ voiceCleanupEnabled: b });
+  },
+
+  audioInputId: (() => {
+    try { return localStorage.getItem(LS_AUDIO_INPUT) ?? ""; } catch { return ""; }
+  })(),
+  audioOutputId: (() => {
+    try { return localStorage.getItem(LS_AUDIO_OUTPUT) ?? ""; } catch { return ""; }
+  })(),
+  setAudioInputId: (id) => {
+    try { localStorage.setItem(LS_AUDIO_INPUT, id); } catch { /* ignore */ }
+    set({ audioInputId: id });
+  },
+  setAudioOutputId: (id) => {
+    try { localStorage.setItem(LS_AUDIO_OUTPUT, id); } catch { /* ignore */ }
+    set({ audioOutputId: id });
   },
 
   sessionListOpen: (() => {

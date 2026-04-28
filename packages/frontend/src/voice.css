@@ -17,6 +17,19 @@
   width: 100%;
 }
 
+.voice-bar-devices {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
+.voice-bar-devices .voice-mode-select {
+  max-width: 180px;
+  text-overflow: ellipsis;
+}
+
 .voice-bar-mic {
   display: flex;
   justify-content: center;

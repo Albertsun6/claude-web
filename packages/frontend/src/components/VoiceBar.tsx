@@ -13,10 +13,20 @@ const MODE_LABELS: Record<string, string> = {
   "unsupported": "不支持",
 };
 
+function deviceLabel(d: MediaDeviceInfo, fallbackIdx: number): string {
+  if (d.label) return d.label;
+  // Pre-permission: labels are blank — show a generic label so user can still pick.
+  return `${d.kind === "audioinput" ? "麦克风" : "扬声器"} ${fallbackIdx + 1}`;
+}
+
 export function VoiceBar({ onTranscript }: VoiceBarProps) {
   const voice = useVoiceCtx();
   const cleanupEnabled = useStore((s) => s.voiceCleanupEnabled);
   const setCleanupEnabled = useStore((s) => s.setVoiceCleanupEnabled);
+  const audioInputId = useStore((s) => s.audioInputId);
+  const audioOutputId = useStore((s) => s.audioOutputId);
+  const setAudioInputId = useStore((s) => s.setAudioInputId);
+  const setAudioOutputId = useStore((s) => s.setAudioOutputId);
   const canSwitch = voice.availableModes.length > 1;
 
   return (
@@ -104,6 +114,48 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
           title={voice.muted ? "取消静音" : "静音"}
         >
           {voice.muted ? "🔇" : "🔊"}
+        </button>
+      </div>
+
+      <div className="voice-bar-devices" title="选择音频输入/输出设备 — 看到正在使用的麦克风和扬声器">
+        <select
+          className="voice-mode-select"
+          value={audioInputId}
+          onChange={(e) => setAudioInputId(e.target.value)}
+          aria-label="音频输入"
+        >
+          <option value="">🎤 默认麦克风</option>
+          {voice.inputDevices.map((d, i) => (
+            <option key={d.deviceId || `in-${i}`} value={d.deviceId}>
+              🎤 {deviceLabel(d, i)}
+            </option>
+          ))}
+        </select>
+        {voice.outputSelectionSupported ? (
+          <select
+            className="voice-mode-select"
+            value={audioOutputId}
+            onChange={(e) => setAudioOutputId(e.target.value)}
+            aria-label="音频输出"
+          >
+            <option value="">🔈 默认扬声器</option>
+            {voice.outputDevices.map((d, i) => (
+              <option key={d.deviceId || `out-${i}`} value={d.deviceId}>
+                🔈 {deviceLabel(d, i)}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="voice-bar-mode" title="此浏览器不支持指定音频输出（如 Safari）">🔈 跟随系统</span>
+        )}
+        <button
+          type="button"
+          className="voice-icon-btn"
+          onClick={() => { void voice.refreshDevices(); }}
+          aria-label="刷新设备列表"
+          title="刷新设备列表（蓝牙耳机刚连上时点一下）"
+        >
+          ↻
         </button>
       </div>
 

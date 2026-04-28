@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authFetch } from "../auth";
+import { useStore } from "../store";
 import { cueListening, cueSubmit, cueStop, cueError, cuePause, cueResume, cueClear } from "../audio/cues";
 
 // Minimal local typings for the Web Speech API (not in lib.dom by default).
@@ -98,6 +99,14 @@ export interface UseVoiceReturn {
   setUserPaused: (b: boolean) => void;
   /** Wipe convoBuf — same as the "清除" voice command. */
   clearConvoBuffer: () => void;
+  /** Available audio input devices (mic), populated after first permission grant. */
+  inputDevices: MediaDeviceInfo[];
+  /** Available audio output devices (speaker / headphones). Empty on Safari. */
+  outputDevices: MediaDeviceInfo[];
+  /** Re-query the device list (e.g. after plugging in headphones). */
+  refreshDevices: () => Promise<void>;
+  /** Whether `audio.setSinkId` is supported (Safari does not). */
+  outputSelectionSupported: boolean;
 }
 
 /**
@@ -266,6 +275,40 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const [slowTts, setSlowTtsState] = useState<boolean>(false);
   const slowTtsRef = useRef(false);
   useEffect(() => { slowTtsRef.current = slowTts; }, [slowTts]);
+
+  // Audio device selection — refs so getUserMedia / setSinkId always read latest.
+  const audioInputId = useStore((s) => s.audioInputId);
+  const audioOutputId = useStore((s) => s.audioOutputId);
+  const audioInputIdRef = useRef(audioInputId);
+  const audioOutputIdRef = useRef(audioOutputId);
+  useEffect(() => { audioInputIdRef.current = audioInputId; }, [audioInputId]);
+  useEffect(() => { audioOutputIdRef.current = audioOutputId; }, [audioOutputId]);
+  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
+  const outputSelectionSupported =
+    typeof window !== "undefined" &&
+    typeof HTMLAudioElement !== "undefined" &&
+    "setSinkId" in HTMLAudioElement.prototype;
+
+  const refreshDevices = useCallback(async () => {
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      const list = await navigator.mediaDevices.enumerateDevices();
+      setInputDevices(list.filter((d) => d.kind === "audioinput"));
+      setOutputDevices(list.filter((d) => d.kind === "audiooutput"));
+    } catch (err) {
+      console.warn("[voice] enumerateDevices failed", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshDevices();
+    const onChange = () => { void refreshDevices(); };
+    navigator.mediaDevices?.addEventListener?.("devicechange", onChange);
+    return () => {
+      navigator.mediaDevices?.removeEventListener?.("devicechange", onChange);
+    };
+  }, [refreshDevices]);
 
   const setMode = useCallback((m: VoiceMode) => {
     try { localStorage.setItem(PREFERRED_MODE_KEY, m); } catch { /* ignore */ }
@@ -484,13 +527,18 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     setInterimTranscript("识别中…（录音）");
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: audioInputIdRef.current
+          ? { deviceId: { exact: audioInputIdRef.current } }
+          : true,
+      });
     } catch (err) {
       console.warn("[voice] mic permission denied", err);
       setInterimTranscript("");
       return;
     }
     mediaStreamRef.current = stream;
+    void refreshDevices();
     const mimeType = pickRecorderMimeType();
     const recorder = mimeType
       ? new MediaRecorder(stream, { mimeType })
@@ -705,12 +753,17 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     if (vadActiveRef.current) return;
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: audioInputIdRef.current
+          ? { deviceId: { exact: audioInputIdRef.current } }
+          : true,
+      });
     } catch (err) {
       console.warn("[vad] mic denied", err);
       return;
     }
     mediaStreamRef.current = stream;
+    void refreshDevices();
     // @ts-expect-error webkit prefix on older Safari
     const C = window.AudioContext ?? window.webkitAudioContext;
     if (!C) {
@@ -867,7 +920,19 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
         };
         audio.addEventListener("ended", cleanup);
         audio.addEventListener("error", cleanup);
-        audio.play().catch((err) => { console.warn("[voice] play failed", err); cleanup(); });
+        const startPlay = () => {
+          audio.play().catch((err) => { console.warn("[voice] play failed", err); cleanup(); });
+        };
+        const sinkId = audioOutputIdRef.current;
+        const setSinkId = (audio as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId;
+        if (sinkId && typeof setSinkId === "function") {
+          setSinkId.call(audio, sinkId).then(startPlay).catch((err) => {
+            console.warn("[voice] setSinkId failed, falling back to default", err);
+            startPlay();
+          });
+        } else {
+          startPlay();
+        }
       });
     }
     playRunningRef.current = false;
@@ -1048,5 +1113,9 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       setLiveTranscript("");
       cueClear();
     },
+    inputDevices,
+    outputDevices,
+    refreshDevices,
+    outputSelectionSupported,
   };
 }

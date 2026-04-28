@@ -181,6 +181,15 @@ iOS PWA 里也支持（VAD-driven，每段 ~1-2s 延迟）。
 
 对话模式下"发送"触发**直接绕过整理**——你已经决定了。
 
+### 音频设备选择
+VoiceBar 麦克风按钮上方有两个下拉 + 刷新 ↻：
+
+- **🎤 输入** — 选录音用的麦克风（默认 / AirPods / 内置 …）。授权 mic 后才能看到真实设备名
+- **🔈 输出** — 选朗读音频去哪个扬声器（蓝牙耳机 / 内置喇叭）。基于 `setSinkId`，**Safari 不支持**会显示"跟随系统"
+- **↻ 刷新** — 蓝牙耳机刚连上、设备列表没更新时点一下；浏览器会发 `devicechange` 自动刷新，但偶尔需要手动
+
+选项保存在 `claude-web:audio-input-id` / `claude-web:audio-output-id`。空值 = 跟随系统默认。
+
 ---
 
 ## 语音输出（朗读）
@@ -299,6 +308,8 @@ iOS PWA 里也支持（VAD-driven，每段 ~1-2s 延迟）。
 | 概要 / 原话 | `claude-web:voice-speak-style` |
 | 对话模式 | `claude-web:conversation-mode` |
 | 慢读 | `claude-web:slow-tts` |
+| 音频输入设备 | `claude-web:audio-input-id` |
+| 音频输出设备 | `claude-web:audio-output-id` |
 | 项目永久 allow 工具 | `claude-web:allowed-tools-by-cwd` |
 | Auth token | `claude-web:auth-token` |
 | CLAUDE.md banner dismiss | `claude-web:claude-md-dismissed` |
