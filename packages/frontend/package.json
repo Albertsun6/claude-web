@@ -6,9 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:ios": "VITE_API_URL=https://mymac.tailcf3ccf.ts.net VITE_WS_URL=wss://mymac.tailcf3ccf.ts.net/ws tsc -b && VITE_API_URL=https://mymac.tailcf3ccf.ts.net VITE_WS_URL=wss://mymac.tailcf3ccf.ts.net/ws vite build",
+    "ios:sync": "pnpm build:ios && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/ios": "^8.3.1",
     "@claude-web/shared": "workspace:*",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
