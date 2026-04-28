@@ -1,13 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ImageAttachment } from "@claude-web/shared";
 import { useStore, useActiveSession } from "../store";
 import { sendPrompt, interrupt } from "../ws-client";
 import { fetchTree } from "../api/fs";
 
+interface PendingImage {
+  id: string;
+  mediaType: string;
+  dataBase64: string;
+  previewUrl: string;
+  size: number;
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const result = fr.result as string;
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(blob);
+  });
+}
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB per image — Claude API soft limit anyway
+
 const SLASH_COMMANDS: Array<{ cmd: string; desc: string }> = [
   { cmd: "/clear", desc: "清空当前对话视图" },
+  { cmd: "/usage", desc: "查看本会话 + 订阅 bucket 状态" },
   { cmd: "/compact", desc: "压缩上下文" },
   { cmd: "/help", desc: "Claude 内置帮助" },
-  { cmd: "/cost", desc: "查看本会话用量" },
+  { cmd: "/cost", desc: "查看本会话用量（CLI）" },
   { cmd: "/init", desc: "为项目生成 CLAUDE.md" },
 ];
 
@@ -21,6 +46,7 @@ export function InputBox() {
   const patchProject = useStore((s) => s.patchProject);
   const clearMessages = useStore((s) => s.clearMessages);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const [images, setImages] = useState<PendingImage[]>([]);
 
   const busy = !!session?.busy;
   const voiceDraft = session?.voiceDraft;
@@ -111,8 +137,65 @@ export function InputBox() {
       .slice(0, 8);
   }, [atFiles, atQuery]);
 
+  const addImageBlobs = async (blobs: Blob[]) => {
+    const next: PendingImage[] = [];
+    for (const blob of blobs) {
+      if (!blob.type.startsWith("image/")) continue;
+      if (blob.size > MAX_IMAGE_BYTES) {
+        alert(`图片太大: ${(blob.size / 1024 / 1024).toFixed(1)}MB > 5MB`);
+        continue;
+      }
+      const dataBase64 = await blobToBase64(blob);
+      next.push({
+        id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        mediaType: blob.type,
+        dataBase64,
+        previewUrl: URL.createObjectURL(blob),
+        size: blob.size,
+      });
+    }
+    if (next.length) setImages((cur) => [...cur, ...next]);
+  };
+
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const blobs: Blob[] = [];
+    for (const it of items) {
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) blobs.push(f);
+      }
+    }
+    if (blobs.length) {
+      e.preventDefault();
+      void addImageBlobs(blobs);
+    }
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (files.length) {
+      e.preventDefault();
+      void addImageBlobs(files);
+    }
+  };
+
+  const removeImage = (id: string) => {
+    setImages((cur) => {
+      const target = cur.find((i) => i.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return cur.filter((i) => i.id !== id);
+    });
+  };
+
+  // free blob URLs on unmount
+  useEffect(() => () => {
+    images.forEach((i) => URL.revokeObjectURL(i.previewUrl));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const submit = () => {
-    if (!text.trim() || busy || !session) return;
+    if ((!text.trim() && images.length === 0) || busy || !session) return;
     const trimmed = text.trim();
     // Local /clear short-circuit: clear UI but don't send.
     if (trimmed === "/clear") {
@@ -121,9 +204,47 @@ export function InputBox() {
       patchProject(session.cwd, { voiceDraft: undefined });
       return;
     }
-    sendPrompt(trimmed);
+    // Local /usage short-circuit: render a quota summary without burning a turn.
+    if (trimmed === "/usage") {
+      const s = useStore.getState();
+      const u = session.usage;
+      const rl = s.rateLimit;
+      const totalInput = u ? u.inputTokens + u.cacheCreationTokens + u.cacheReadTokens : 0;
+      const cachePct = u && totalInput > 0 ? Math.round((u.cacheReadTokens / totalInput) * 100) : 0;
+      const lines: string[] = [
+        "## 用量摘要",
+        "",
+        "**本会话**",
+        u ? `- 轮次: ${u.turns}` : `- (尚无 result 事件)`,
+        u ? `- 新 input: ${u.inputTokens}` : "",
+        u ? `- 写缓存: ${u.cacheCreationTokens}` : "",
+        u ? `- 读缓存: ${u.cacheReadTokens} (${cachePct}% 命中)` : "",
+        u ? `- 输出: ${u.outputTokens}` : "",
+        u ? `- 名义成本: $${u.costUsd.toFixed(4)}（订阅模式不实扣）` : "",
+        "",
+        "**订阅 bucket**",
+        rl ? `- 类型: ${rl.rateLimitType}` : "- 暂无（发一条消息即可拿到）",
+        rl ? `- 状态: ${rl.status}` : "",
+        rl ? `- 重置时间: ${new Date(rl.resetsAt * 1000).toLocaleString()}` : "",
+        rl?.isUsingOverage ? "- ⚠ 已进入 overage" : "",
+      ].filter((l) => l !== "");
+      useStore.getState().appendMessage(session.cwd, {
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text: lines.join("\n") }] },
+        _local: true,
+      });
+      setText("");
+      patchProject(session.cwd, { voiceDraft: undefined });
+      return;
+    }
+    const atts: ImageAttachment[] | undefined = images.length > 0
+      ? images.map((i) => ({ mediaType: i.mediaType, dataBase64: i.dataBase64 }))
+      : undefined;
+    sendPrompt(trimmed || "(image)", atts);
     setText("");
     setHistoryIdx(null);
+    images.forEach((i) => URL.revokeObjectURL(i.previewUrl));
+    setImages([]);
     patchProject(session.cwd, { voiceDraft: undefined });
   };
 
@@ -243,6 +364,23 @@ export function InputBox() {
 
   return (
     <div className="input-stack">
+      {images.length > 0 && (
+        <div className="image-tray">
+          {images.map((img) => (
+            <div key={img.id} className="image-thumb" title={`${(img.size / 1024).toFixed(1)} KB · ${img.mediaType}`}>
+              <img src={img.previewUrl} alt="attachment" />
+              <button
+                type="button"
+                className="image-thumb-remove"
+                onClick={() => removeImage(img.id)}
+                aria-label="移除"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {voiceDraft && (
         <div className={`voice-draft-bar voice-draft-${voiceDraft.status}`}>
           <div className="voice-draft-tag">
@@ -303,10 +441,13 @@ export function InputBox() {
           placeholder={
             !session ? "请先打开一个项目"
             : busy ? "Claude 正在思考…可切换到其他项目继续工作"
-            : "输入指令，⌘/Ctrl+Enter 发送，↑ 历史，/ 命令，@ 引用文件"
+            : "输入指令，⌘/Ctrl+Enter 发送；↑ 历史，/ 命令，@ 引用文件，可粘贴/拖入图片"
           }
           disabled={!session}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
+          onDrop={onDrop}
+          onDragOver={(e) => e.preventDefault()}
         />
         {busy ? (
           <button className="danger" onClick={stop}>停止</button>

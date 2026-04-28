@@ -116,6 +116,16 @@ interface AppState {
   // which right-panel tab (files / git)
   rightTab: "files" | "git";
   setRightTab: (t: "files" | "git") => void;
+
+  // latest rate-limit info from CLI (subscription bucket)
+  rateLimit?: {
+    status: string;
+    rateLimitType: string;
+    resetsAt: number; // unix seconds
+    overageStatus?: string;
+    isUsingOverage?: boolean;
+  };
+  setRateLimit: (r: AppState["rateLimit"]) => void;
 }
 
 const LS_CONFIG = "claude-web:config";
@@ -401,6 +411,9 @@ export const useStore = create<AppState>((set, get) => ({
     try { localStorage.setItem(LS_RIGHT_TAB, rightTab); } catch { /* ignore */ }
     set({ rightTab });
   },
+
+  rateLimit: undefined,
+  setRateLimit: (rateLimit) => set({ rateLimit }),
 }));
 
 // derived selector helpers

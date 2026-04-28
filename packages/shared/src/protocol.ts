@@ -9,6 +9,13 @@ export type ModelId =
   | "claude-sonnet-4-6"
   | "claude-haiku-4-5";
 
+export interface ImageAttachment {
+  /** image MIME type, e.g. "image/png", "image/jpeg" */
+  mediaType: string;
+  /** raw base64 (no `data:` prefix) */
+  dataBase64: string;
+}
+
 export type ClientMessage =
   | {
       type: "user_prompt";
@@ -18,6 +25,8 @@ export type ClientMessage =
       model: ModelId;
       permissionMode: PermissionMode;
       resumeSessionId?: string;
+      /** optional image attachments — sent alongside the text prompt */
+      attachments?: ImageAttachment[];
     }
   | {
       type: "permission_reply";

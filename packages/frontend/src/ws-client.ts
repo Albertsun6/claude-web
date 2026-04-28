@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from "@claude-web/shared";
+import type { ClientMessage, ImageAttachment, ServerMessage } from "@claude-web/shared";
 import { useStore } from "./store";
 import { withAuthQuery } from "./auth";
 
@@ -63,6 +63,20 @@ function handleServerMessage(msg: ServerMessage): void {
     const cwd = runToCwd.get(msg.runId);
     if (!cwd) return;
     const sdkMsg = msg.message as any;
+    // ignore partial-token chunks (we render complete assistant messages instead)
+    if (sdkMsg?.type === "stream_event") return;
+    // capture subscription bucket info — show in StatusBar / /usage
+    if (sdkMsg?.type === "rate_limit_event" && sdkMsg.rate_limit_info) {
+      const i = sdkMsg.rate_limit_info;
+      store.setRateLimit({
+        status: i.status,
+        rateLimitType: i.rateLimitType,
+        resetsAt: i.resetsAt,
+        overageStatus: i.overageStatus,
+        isUsingOverage: i.isUsingOverage,
+      });
+      return;
+    }
     if (sdkMsg?.type === "system" && sdkMsg.subtype === "init" && sdkMsg.session_id) {
       store.patchProject(cwd, { sessionId: sdkMsg.session_id });
     }
@@ -145,7 +159,7 @@ function send(msg: ClientMessage): void {
   ws.send(JSON.stringify(msg));
 }
 
-export function sendPrompt(prompt: string): void {
+export function sendPrompt(prompt: string, attachments?: ImageAttachment[]): void {
   const s = useStore.getState();
   const cwd = s.activeCwd;
   if (!cwd) {
@@ -161,7 +175,12 @@ export function sendPrompt(prompt: string): void {
   const runId = genRunId();
   runToCwd.set(runId, cwd);
   s.patchProject(cwd, { busy: true, currentRunId: runId });
-  s.appendMessage(cwd, { type: "_user_input", text: prompt, _runId: runId });
+  s.appendMessage(cwd, {
+    type: "_user_input",
+    text: prompt,
+    _runId: runId,
+    attachments: attachments?.map((a) => ({ mediaType: a.mediaType, dataBase64: a.dataBase64 })),
+  });
   send({
     type: "user_prompt",
     runId,
@@ -170,6 +189,7 @@ export function sendPrompt(prompt: string): void {
     model: s.model,
     permissionMode: s.permissionMode,
     resumeSessionId: sess.sessionId,
+    attachments,
   });
 }
 

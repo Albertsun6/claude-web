@@ -22,6 +22,7 @@ export function StatusBar() {
   const model = useStore((s) => s.model);
   const permissionMode = useStore((s) => s.permissionMode);
   const connected = useStore((s) => s.connected);
+  const rateLimit = useStore((s) => s.rateLimit);
   const [branch, setBranch] = useState<string | null>(null);
 
   // poll branch every 30s while a session is active
@@ -73,6 +74,31 @@ export function StatusBar() {
           <span className="status-item" title="缓存命中比例">💾{cachePct}%</span>
         </>
       )}
+      {rateLimit && (
+        <>
+          <span className="status-sep">·</span>
+          <span
+            className={`status-item ${rateLimit.status !== "allowed" ? "status-warn" : ""}`}
+            title={[
+              `订阅 bucket: ${rateLimit.rateLimitType}`,
+              `状态: ${rateLimit.status}`,
+              `重置时间: ${new Date(rateLimit.resetsAt * 1000).toLocaleString()}`,
+              rateLimit.isUsingOverage ? "已进入 overage" : "",
+            ].filter(Boolean).join("\n")}
+          >
+            ⏳ {fmtRelative(rateLimit.resetsAt)}
+          </span>
+        </>
+      )}
     </div>
   );
+}
+
+function fmtRelative(unixSec: number): string {
+  const diffMin = Math.round((unixSec * 1000 - Date.now()) / 60_000);
+  if (diffMin < 0) return "已重置";
+  if (diffMin < 60) return `${diffMin}m`;
+  const h = Math.floor(diffMin / 60);
+  const m = diffMin % 60;
+  return m > 0 ? `${h}h${m}m` : `${h}h`;
 }

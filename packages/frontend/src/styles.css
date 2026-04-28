@@ -760,6 +760,63 @@ button.danger { background: var(--danger); color: white; }
 .file-preview-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .files-panel--tree-only { height: 100%; overflow: auto; }
+
+/* Image attachment tray (above input) + thumbnails inside user message */
+.image-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border-top: 1px solid var(--border);
+}
+.image-thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0b0d12;
+  border: 1px solid var(--border);
+}
+.image-thumb img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.image-thumb-remove {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 20px; height: 20px;
+  min-height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.user-input-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.user-input-images img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: #0b0d12;
+}
+.user-input-image-placeholder {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: ui-monospace, monospace;
+}
+
+.status-warn { color: #d4a72c; font-weight: 600; }
 @keyframes offline-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

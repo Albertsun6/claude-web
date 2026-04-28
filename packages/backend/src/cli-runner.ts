@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ModelId, PermissionMode } from "@claude-web/shared";
+import type { ImageAttachment, ModelId, PermissionMode } from "@claude-web/shared";
 import { verifyAllowedPath } from "./auth.js";
 
 export interface RunSessionParams {
@@ -14,6 +14,7 @@ export interface RunSessionParams {
   backendBase?: string;
   /** When set, hook script will pass this as Bearer to /api/permission/ask. */
   authToken?: string;
+  attachments?: ImageAttachment[];
   onMessage: (msg: unknown) => void;
   /** Called if we restart the run (e.g. stale session) so frontend can wipe state. */
   onClearRunMessages?: () => void;
@@ -54,7 +55,6 @@ function buildArgs(p: RunSessionParams, resume?: string): string[] {
     "--input-format", "stream-json",
     "--output-format", "stream-json",
     "--verbose",
-    "--include-partial-messages",
     "--permission-mode", p.permissionMode,
     "--model", p.model,
     // Move per-machine bits (cwd / env / git status) out of the system prompt
@@ -92,9 +92,21 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
   };
   p.signal?.addEventListener("abort", onAbort);
 
+  // Build content: plain string when no images (cheap), array when images present.
+  const content: string | any[] =
+    p.attachments && p.attachments.length > 0
+      ? [
+          { type: "text", text: p.prompt },
+          ...p.attachments.map((a) => ({
+            type: "image",
+            source: { type: "base64", media_type: a.mediaType, data: a.dataBase64 },
+          })),
+        ]
+      : p.prompt;
+
   child.stdin.write(JSON.stringify({
     type: "user",
-    message: { role: "user", content: p.prompt },
+    message: { role: "user", content },
   }) + "\n");
   child.stdin.end();
 

@@ -220,7 +220,27 @@ const markdownComponents = {
 export function MessageItem({ raw }: { raw: any }) {
   // local helpers
   if (raw?.type === "_user_input") {
-    return <div className="msg msg-user">{raw.text}</div>;
+    const atts: Array<{ mediaType: string; dataBase64?: string }> = raw.attachments ?? [];
+    return (
+      <div className="msg msg-user">
+        {atts.length > 0 && (
+          <div className="user-input-images">
+            {atts.map((a, i) =>
+              a.dataBase64 ? (
+                <img
+                  key={i}
+                  src={`data:${a.mediaType};base64,${a.dataBase64}`}
+                  alt={`attachment ${i + 1}`}
+                />
+              ) : (
+                <span key={i} className="user-input-image-placeholder">📎 {a.mediaType}</span>
+              ),
+            )}
+          </div>
+        )}
+        {raw.text && <div>{raw.text}</div>}
+      </div>
+    );
   }
   if (raw?.type === "_error") {
     return (

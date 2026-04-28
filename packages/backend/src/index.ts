@@ -284,6 +284,7 @@ wss.on("connection", (ws) => {
             model: msg.model,
             permissionMode: msg.permissionMode,
             resumeSessionId: msg.resumeSessionId,
+            attachments: msg.attachments,
             permissionToken,
             backendBase: BACKEND_BASE,
             authToken: process.env.CLAUDE_WEB_TOKEN,
