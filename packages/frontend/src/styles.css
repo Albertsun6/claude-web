@@ -1104,8 +1104,53 @@ button.danger { background: var(--danger); color: white; }
     padding-top: env(safe-area-inset-top, 0px);
     z-index: 10;
   }
-  .topbar-title { font-weight: 600; font-size: 15px; }
+  .topbar-title { font-weight: 600; font-size: 17px; }
   .stream { padding: 12px 14px; }
   .msg-user { max-width: 90%; }
-  .input-bar { padding: 10px 12px; padding-bottom: calc(10px + var(--keyboard-inset) + env(safe-area-inset-bottom, 0px)); }
+  .input-bar {
+    padding: 10px 12px;
+    padding-bottom: calc(10px + var(--keyboard-inset) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ---- Mobile large-text overrides ---- */
+  /* Body text inside chat */
+  .msg-user, .msg-assistant { font-size: 17px; line-height: 1.55; }
+  .markdown p, .markdown li, .markdown blockquote { font-size: 17px; line-height: 1.6; }
+  .markdown h1 { font-size: 24px; }
+  .markdown h2 { font-size: 21px; }
+  .markdown h3 { font-size: 19px; }
+  .markdown h4, .markdown h5, .markdown h6 { font-size: 17px; }
+  .markdown table { font-size: 16px; }
+  .markdown code, .markdown pre, .markdown :not(pre) > code { font-size: 15px; }
+
+  /* Tool cards (Edit/Bash/Read) */
+  .tool-use, .tool-result, .tool-card, .todo-card, .edit-card, .bash-card, .read-card {
+    font-size: 15px;
+  }
+  .tool-name, .tool-card-title { font-size: 16px; }
+
+  /* Input + send button */
+  .input-bar textarea { font-size: 17px; line-height: 1.5; min-height: 72px; }
+  .input-bar button { font-size: 16px; min-height: 48px; padding: 10px 18px; }
+
+  /* Voice draft + convo bar */
+  .voice-draft-bar, .voice-draft-tag, .voice-draft-original { font-size: 15px; }
+
+  /* Status bar (bottom) */
+  .status-bar { font-size: 13px; }
+
+  /* Project tabs */
+  .proj-tab { font-size: 15px; padding: 10px 14px; }
+
+  /* Drawer (sidebar contents on mobile) */
+  .drawer { font-size: 15px; }
+  .drawer h2 { font-size: 20px; }
+  .drawer label, .drawer .config-panel label { font-size: 14px; }
+  .drawer button { font-size: 15px; min-height: 44px; }
+
+  /* System / result messages */
+  .msg-system, .msg-result { font-size: 14px; }
+
+  /* Permission modal text */
+  .permission-modal { font-size: 16px; }
 }
