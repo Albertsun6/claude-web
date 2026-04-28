@@ -16,6 +16,20 @@ struct ContentView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 connectionChip
+                if let err = voice.lastError {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(err).font(.caption)
+                        Spacer()
+                        Button("关闭") {
+                            voice.lastError = nil
+                        }
+                        .font(.caption)
+                    }
+                    .padding(8)
+                    .background(.orange.opacity(0.15))
+                }
                 ChatListView(messages: client.messages)
                     .frame(maxHeight: .infinity)
                 Divider()

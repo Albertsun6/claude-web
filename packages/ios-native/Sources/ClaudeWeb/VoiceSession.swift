@@ -63,6 +63,15 @@ final class VoiceSession {
     private weak var client: BackendClient?
     private weak var settings: AppSettings?
 
+    /// Plays silent audio at volume 0 in a loop while in voice mode. This is
+    /// the standard trick to convince iOS we're a real "media app" so:
+    ///   1. Now Playing card actually appears in Control Center / lock screen
+    ///   2. The audio session doesn't get suspended after a few minutes of idle
+    ///   3. Lock-screen MPRemoteCommandCenter events keep flowing
+    /// Without this, an "idle voice mode with active session" works briefly
+    /// but iOS demotes us within ~30s when no audio is playing.
+    private var silentLoop: AVAudioPlayer?
+
     /// Set by InputBar's onTranscript hook in voice mode. We need a way to
     /// fire prompts without going through the textfield.
     private var sendPromptHook: ((String) -> Void)?
@@ -98,6 +107,7 @@ final class VoiceSession {
             lastError = "音频会话激活失败: \(error.localizedDescription)"
             return
         }
+        startSilentLoop()
         registerRemoteCommands()
         active = true
         refresh()
@@ -120,9 +130,62 @@ final class VoiceSession {
             break
         }
         unregisterRemoteCommands()
+        stopSilentLoop()
         clearNowPlaying()
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         active = false
+    }
+
+    // MARK: - Silent loop (Now Playing keep-alive)
+
+    private func startSilentLoop() {
+        guard silentLoop == nil else { return }
+        do {
+            let p = try AVAudioPlayer(data: Self.silentWAV)
+            p.numberOfLoops = -1
+            p.volume = 0
+            p.prepareToPlay()
+            p.play()
+            silentLoop = p
+        } catch {
+            // Non-fatal: voice mode still works, but lock-screen Now Playing
+            // may not show consistently. Surface to UI for diagnosis.
+            lastError = "静音保活失败: \(error.localizedDescription)"
+        }
+    }
+
+    private func stopSilentLoop() {
+        silentLoop?.stop()
+        silentLoop = nil
+    }
+
+    /// Cached 0.5 second silent 16-bit mono WAV (16kHz). ~16KB.
+    private static let silentWAV: Data = {
+        let sampleRate: UInt32 = 16_000
+        let seconds: Double = 0.5
+        let samples = Int(Double(sampleRate) * seconds)
+        let dataBytes = samples * 2 // 16-bit
+        var d = Data()
+        d.append("RIFF".data(using: .ascii)!)
+        d.append(le(UInt32(36 + dataBytes)))
+        d.append("WAVE".data(using: .ascii)!)
+        d.append("fmt ".data(using: .ascii)!)
+        d.append(le(UInt32(16)))               // PCM chunk size
+        d.append(le(UInt16(1)))                // PCM
+        d.append(le(UInt16(1)))                // mono
+        d.append(le(sampleRate))
+        d.append(le(UInt32(sampleRate * 2)))   // byte rate
+        d.append(le(UInt16(2)))                // block align
+        d.append(le(UInt16(16)))               // bits per sample
+        d.append("data".data(using: .ascii)!)
+        d.append(le(UInt32(dataBytes)))
+        d.append(Data(repeating: 0, count: dataBytes))
+        return d
+    }()
+
+    private static func le<T: FixedWidthInteger>(_ v: T) -> Data {
+        var le = v.littleEndian
+        return withUnsafeBytes(of: &le) { Data($0) }
     }
 
     /// Recover from any .error state without restarting the app.
@@ -274,11 +337,14 @@ final class VoiceSession {
 
     private func updateNowPlaying() {
         var info: [String: Any] = [:]
-        info[MPMediaItemPropertyTitle] = title()
-        info[MPMediaItemPropertyArtist] = "Claude"
-        info[MPNowPlayingInfoPropertyPlaybackRate] = state == .playingTTS ? 1.0 : 0.0
-        // Always claim live=true so iOS shows controls without a duration bar
-        // (we don't have a duration for "thinking" states).
+        // Title format matches IOS_NATIVE_DEVICE_TEST.md verification text.
+        info[MPMediaItemPropertyTitle] = "Claude Voice · " + title()
+        info[MPMediaItemPropertyArtist] = "claude-web"
+        // playbackRate=1.0 even in non-playing states is intentional: lock-
+        // screen card requires it to display the play button as "current"
+        // when nothing is actively playing. Combined with the silent keep-
+        // alive loop, this stabilizes the Now Playing UI.
+        info[MPNowPlayingInfoPropertyPlaybackRate] = state == .pausedTTS ? 0.0 : 1.0
         info[MPNowPlayingInfoPropertyIsLiveStream] = true
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
