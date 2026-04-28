@@ -42,6 +42,8 @@ export interface ProjectSession {
   currentRunId?: string;
   voiceDraft?: VoiceDraft;
   usage?: UsageStats;
+  /** Slash commands this CLI session knows about (from system:init.slash_commands). */
+  slashCommands?: string[];
 }
 
 interface AppState {

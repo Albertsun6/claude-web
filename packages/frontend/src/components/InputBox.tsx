@@ -27,14 +27,47 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB per image — Claude API soft limit anyway
 
-const SLASH_COMMANDS: Array<{ cmd: string; desc: string }> = [
-  { cmd: "/clear", desc: "清空当前对话视图" },
+// Local-only commands (short-circuited in submit, never sent to CLI).
+const LOCAL_COMMANDS: Array<{ cmd: string; desc: string }> = [
+  { cmd: "/clear", desc: "清空当前对话视图（仅前端）" },
   { cmd: "/usage", desc: "查看本会话 + 订阅 bucket 状态" },
-  { cmd: "/compact", desc: "压缩上下文" },
-  { cmd: "/help", desc: "Claude 内置帮助" },
-  { cmd: "/cost", desc: "查看本会话用量（CLI）" },
-  { cmd: "/init", desc: "为项目生成 CLAUDE.md" },
 ];
+
+// Descriptions for commands the CLI advertises via system:init.slash_commands.
+// Anything not in this map shows the bare name.
+const COMMAND_DESCRIPTIONS: Record<string, string> = {
+  // Anthropic builtins
+  "compact": "压缩上下文（CLI）",
+  "context": "显示上下文使用情况",
+  "cost": "查看本会话用量",
+  "init": "扫描项目并生成 CLAUDE.md",
+  "review": "审查当前分支变更",
+  "security-review": "安全审查",
+  "help": "Claude 内置帮助",
+  "agents": "列出已配置的 agents",
+  "mcp": "查看 MCP 服务器",
+  "resume": "恢复一个会话",
+  "status": "诊断信息",
+  "model": "切换模型",
+  "memory": "管理记忆",
+  // skills (auto-loaded based on project)
+  "update-config": "修改 Claude Code 配置（settings.json）",
+  "debug": "开启 debug 模式",
+  "simplify": "审查刚改的代码、做简化",
+  "batch": "批量重复一个 prompt",
+  "loop": "周期性运行某 prompt",
+  "schedule": "调度远程 agent",
+  "claude-api": "构建/调试 Claude API 应用",
+  // diagnostics
+  "heapdump": "导出堆快照",
+  "extra-usage": "额外用量信息",
+  "insights": "团队洞察",
+  "team-onboarding": "团队上手向导",
+};
+
+function descFor(name: string): string {
+  return COMMAND_DESCRIPTIONS[name] ?? "";
+}
 
 export function InputBox() {
   const [text, setText] = useState("");
@@ -124,11 +157,26 @@ export function InputBox() {
     return () => { cancelled = true; };
   }, [showAt, session?.cwd]);
 
+  const allCommands = useMemo<Array<{ cmd: string; desc: string }>>(() => {
+    const fromSession: Array<{ cmd: string; desc: string }> = (session?.slashCommands ?? [])
+      .map((name) => ({ cmd: `/${name}`, desc: descFor(name) }));
+    const localCmds = new Set(LOCAL_COMMANDS.map((c) => c.cmd));
+    // local commands first; then dedupe session entries that aren't already local
+    const merged = [
+      ...LOCAL_COMMANDS,
+      ...fromSession.filter((c) => !localCmds.has(c.cmd)),
+    ];
+    // stable alphabetical within session block (locals stay on top)
+    const head = merged.slice(0, LOCAL_COMMANDS.length);
+    const tail = merged.slice(LOCAL_COMMANDS.length).sort((a, b) => a.cmd.localeCompare(b.cmd));
+    return [...head, ...tail];
+  }, [session?.slashCommands]);
+
   const filteredCmds = useMemo(() => {
     const q = text.trim().toLowerCase();
-    if (!q.startsWith("/")) return SLASH_COMMANDS;
-    return SLASH_COMMANDS.filter((c) => c.cmd.startsWith(q));
-  }, [text]);
+    if (!q.startsWith("/")) return allCommands;
+    return allCommands.filter((c) => c.cmd.toLowerCase().startsWith(q));
+  }, [text, allCommands]);
 
   const filteredFiles = useMemo(() => {
     const q = atQuery.toLowerCase();

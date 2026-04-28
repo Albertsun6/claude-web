@@ -79,8 +79,11 @@ function handleServerMessage(msg: ServerMessage): void {
       });
       return;
     }
-    if (sdkMsg?.type === "system" && sdkMsg.subtype === "init" && sdkMsg.session_id) {
-      store.patchProject(cwd, { sessionId: sdkMsg.session_id });
+    if (sdkMsg?.type === "system" && sdkMsg.subtype === "init") {
+      const patch: Record<string, unknown> = {};
+      if (sdkMsg.session_id) patch.sessionId = sdkMsg.session_id;
+      if (Array.isArray(sdkMsg.slash_commands)) patch.slashCommands = sdkMsg.slash_commands;
+      if (Object.keys(patch).length) store.patchProject(cwd, patch);
     }
     if (sdkMsg?.type === "system" && sdkMsg.subtype === "stale_session_recovered") {
       store.patchProject(cwd, { sessionId: undefined });
