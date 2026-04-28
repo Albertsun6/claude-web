@@ -107,7 +107,17 @@ final class VoiceSession {
             lastError = "音频会话激活失败: \(error.localizedDescription)"
             return
         }
-        startSilentLoop()
+        // Symmetrical defense to exit() — if silent keepalive was running
+        // under the .playback category, switching to .playAndRecord can
+        // briefly interrupt the looping AVAudioPlayer. startSilentLoop()
+        // would no-op because silentLoop != nil, leaving us thinking the
+        // loop is alive when it isn't. Detect + restart.
+        if settings?.silentKeepalive == true, silentLoop?.isPlaying != true {
+            stopSilentLoop()
+            startSilentLoop(force: true)
+        } else {
+            startSilentLoop()
+        }
         registerRemoteCommands()
         active = true
         refresh()
