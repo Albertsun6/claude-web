@@ -1075,6 +1075,10 @@ button.danger { background: var(--danger); color: white; }
 /* Tablet: hide right panel */
 @media (max-width: 1100px) {
   .app { grid-template-columns: var(--sidebar-w, 280px) 4px 1fr; }
+  /* Override the desktop 5-column collapse rule — at tablet width the
+     rightbar columns aren't rendered, so leaving them in the template would
+     reserve ~324px of dead space that shrinks main when sidebar collapses. */
+  .app.app-sidebar-hidden { grid-template-columns: 0 0 1fr; }
   .rightbar, .resizer-right { display: none; }
   .panel-toggle-right { display: none; }
 }
