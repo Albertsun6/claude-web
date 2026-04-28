@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authFetch } from "../auth";
+import { cueListening, cueSubmit, cueStop, cueError } from "../audio/cues";
 
 // Minimal local typings for the Web Speech API (not in lib.dom by default).
 interface SpeechRecognitionAlternative {
@@ -88,6 +89,9 @@ export interface UseVoiceReturn {
   liveTranscript: string;
   /** Re-arm continuous mic after assistant turn ends (called by App on session_ended). */
   resumeConversation: () => void;
+  /** Slower TTS for walking / headphones. */
+  slowTts: boolean;
+  setSlowTts: (b: boolean) => void;
 }
 
 /**
@@ -139,6 +143,7 @@ const MUTED_KEY = "claude-web:voice-muted";
 const PREFERRED_MODE_KEY = "claude-web:voice-mode";
 const SPEAK_STYLE_KEY = "claude-web:voice-speak-style";
 const CONVO_KEY = "claude-web:conversation-mode";
+const SLOW_TTS_KEY = "claude-web:slow-tts";
 
 export type SpeakStyle = "summary" | "verbatim";
 
@@ -228,6 +233,9 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const [conversationMode, setConversationModeState] = useState<boolean>(false);
   const conversationModeRef = useRef(false);
   useEffect(() => { conversationModeRef.current = conversationMode; }, [conversationMode]);
+  const [slowTts, setSlowTtsState] = useState<boolean>(false);
+  const slowTtsRef = useRef(false);
+  useEffect(() => { slowTtsRef.current = slowTts; }, [slowTts]);
 
   const setMode = useCallback((m: VoiceMode) => {
     try { localStorage.setItem(PREFERRED_MODE_KEY, m); } catch { /* ignore */ }
@@ -254,6 +262,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       convoBufRef.current = "";
       setLiveTranscript("");
       stopRef.current();
+      cueStop();
     }
   }, []);
 
@@ -272,10 +281,24 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastTurnText, setLastTurnText] = useState<string>("");
 
-  // remote-stt refs
+  // remote-stt refs (push-to-talk single-shot)
   const recorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recorderChunksRef = useRef<Blob[]>([]);
+
+  // remote-stt convo mode (VAD-driven continuous segments)
+  const vadActiveRef = useRef(false);
+  const vadAudioCtxRef = useRef<AudioContext | null>(null);
+  const vadAnalyserRef = useRef<AnalyserNode | null>(null);
+  const vadTimerRef = useRef<number | null>(null);
+  const vadNoiseFloorRef = useRef(0);
+  const vadCalibratedRef = useRef(false);
+  const vadCalibStartRef = useRef(0);
+  const vadInSpeechRef = useRef(false);
+  const vadSpeechStartRef = useRef(0);
+  const vadLastVoiceRef = useRef(0);
+  const segRecorderRef = useRef<MediaRecorder | null>(null);
+  const segChunksRef = useRef<Blob[]>([]);
 
   // init
   useEffect(() => {
@@ -296,6 +319,18 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
         conversationModeRef.current = true;
       }
     } catch { /* ignore */ }
+    try {
+      const v = localStorage.getItem(SLOW_TTS_KEY);
+      if (v === "1") {
+        setSlowTtsState(true);
+        slowTtsRef.current = true;
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const setSlowTts = useCallback((b: boolean) => {
+    try { localStorage.setItem(SLOW_TTS_KEY, b ? "1" : "0"); } catch { /* ignore */ }
+    setSlowTtsState(b);
   }, []);
 
   useEffect(() => {
@@ -388,7 +423,12 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
             const stripped = convoBufRef.current.slice(0, m.index).trim();
             convoBufRef.current = "";
             setLiveTranscript("");
-            if (stripped) finalCbRef.current?.(stripped);
+            if (stripped) {
+              cueSubmit();
+              finalCbRef.current?.(stripped);
+            } else {
+              cueError(); // user said only the trigger word with nothing before
+            }
             // pause mic until next turn ends; restart will be triggered by flushAssistantBuffer
             try { rec.stop(); } catch { /* ignore */ }
             // mark intent so onend doesn't auto-restart immediately
@@ -483,6 +523,182 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     }
   }, []);
 
+  // ----- VAD-driven remote-stt convo mode -----
+  // Constants tuned for typical phone-mic, indoor speech.
+  const VAD_TICK_MS = 50;
+  const VAD_CALIBRATION_MS = 500;
+  const VAD_SILENCE_END_MS = 1200;
+  const VAD_MIN_SPEECH_MS = 250;
+  const VAD_MIN_THRESHOLD = 8; // RMS units; floor so dead-quiet rooms don't false-trigger
+
+  const processVadSegment = useCallback(async (blob: Blob, type: string) => {
+    if (blob.size < 1000) return; // <1KB = noise
+    try {
+      const res = await authFetch(TRANSCRIBE_URL, {
+        method: "POST",
+        headers: { "content-type": type },
+        body: blob,
+      });
+      if (!res.ok) return;
+      const body: { text?: string } = await res.json();
+      const text = (body.text ?? "").trim();
+      if (!text) return;
+
+      convoBufRef.current = (convoBufRef.current + " " + text).trim();
+      setLiveTranscript(convoBufRef.current);
+      const m = TRIGGER_RE.exec(convoBufRef.current);
+      if (m) {
+        const stripped = convoBufRef.current.slice(0, m.index).trim();
+        convoBufRef.current = "";
+        setLiveTranscript("");
+        conversationPausedRef.current = true;
+        if (stripped) {
+          cueSubmit();
+          finalCbRef.current?.(stripped);
+        } else {
+          cueError();
+        }
+      }
+    } catch (err) {
+      console.warn("[vad] transcribe failed", err);
+    }
+  }, []);
+
+  const onVadSpeechStart = useCallback(() => {
+    if (segRecorderRef.current?.state === "recording") return;
+    const stream = mediaStreamRef.current;
+    if (!stream) return;
+    if (conversationPausedRef.current) return;
+    segChunksRef.current = [];
+    const mimeType = pickRecorderMimeType();
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) segChunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      const type = recorder.mimeType || "application/octet-stream";
+      const blob = new Blob(segChunksRef.current, { type });
+      segChunksRef.current = [];
+      segRecorderRef.current = null;
+      void processVadSegment(blob, type);
+    };
+    try {
+      recorder.start();
+      segRecorderRef.current = recorder;
+    } catch (err) {
+      console.warn("[vad] segment start failed", err);
+    }
+  }, [processVadSegment]);
+
+  const onVadSpeechEnd = useCallback((tooShort: boolean) => {
+    const r = segRecorderRef.current;
+    if (!r) return;
+    if (tooShort) {
+      // discard: stop and drop chunks without sending
+      r.onstop = () => {
+        segChunksRef.current = [];
+        segRecorderRef.current = null;
+      };
+    }
+    try { if (r.state !== "inactive") r.stop(); } catch { /* ignore */ }
+  }, []);
+
+  const stopVadConvo = useCallback(() => {
+    vadActiveRef.current = false;
+    if (vadTimerRef.current !== null) {
+      clearInterval(vadTimerRef.current);
+      vadTimerRef.current = null;
+    }
+    try {
+      if (segRecorderRef.current?.state === "recording") {
+        segRecorderRef.current.onstop = () => { segChunksRef.current = []; segRecorderRef.current = null; };
+        segRecorderRef.current.stop();
+      }
+    } catch { /* ignore */ }
+    segRecorderRef.current = null;
+    segChunksRef.current = [];
+    vadInSpeechRef.current = false;
+    vadCalibratedRef.current = false;
+    vadAnalyserRef.current = null;
+    vadAudioCtxRef.current?.close().catch(() => {});
+    vadAudioCtxRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    mediaStreamRef.current = null;
+    setIsRecording(false);
+  }, []);
+
+  const startVadConvo = useCallback(async () => {
+    if (vadActiveRef.current) return;
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      console.warn("[vad] mic denied", err);
+      return;
+    }
+    mediaStreamRef.current = stream;
+    // @ts-expect-error webkit prefix on older Safari
+    const C = window.AudioContext ?? window.webkitAudioContext;
+    if (!C) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    const ctx = new C();
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser);
+    vadAudioCtxRef.current = ctx;
+    vadAnalyserRef.current = analyser;
+    vadCalibratedRef.current = false;
+    vadNoiseFloorRef.current = 0;
+    vadCalibStartRef.current = Date.now();
+    vadInSpeechRef.current = false;
+    vadActiveRef.current = true;
+    setIsRecording(true);
+    setLiveTranscript(convoBufRef.current);
+    cueListening();
+
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    vadTimerRef.current = window.setInterval(() => {
+      if (!vadActiveRef.current || !vadAnalyserRef.current) return;
+      vadAnalyserRef.current.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const c = buf[i]! - 128;
+        sum += c * c;
+      }
+      const rms = Math.sqrt(sum / buf.length);
+      const now = Date.now();
+
+      if (!vadCalibratedRef.current) {
+        vadNoiseFloorRef.current = Math.max(vadNoiseFloorRef.current, rms);
+        if (now - vadCalibStartRef.current >= VAD_CALIBRATION_MS) {
+          vadCalibratedRef.current = true;
+        }
+        return;
+      }
+
+      const threshold = Math.max(vadNoiseFloorRef.current * 2.5, VAD_MIN_THRESHOLD);
+      const isVoice = rms > threshold;
+
+      if (isVoice) {
+        vadLastVoiceRef.current = now;
+        if (!vadInSpeechRef.current && !conversationPausedRef.current && !mutedRef.current) {
+          vadInSpeechRef.current = true;
+          vadSpeechStartRef.current = now;
+          onVadSpeechStart();
+        }
+      } else if (vadInSpeechRef.current && now - vadLastVoiceRef.current > VAD_SILENCE_END_MS) {
+        vadInSpeechRef.current = false;
+        const tooShort = now - vadSpeechStartRef.current < VAD_MIN_SPEECH_MS;
+        onVadSpeechEnd(tooShort);
+      }
+    }, VAD_TICK_MS);
+  }, [onVadSpeechStart, onVadSpeechEnd]);
+
   const start = useCallback(() => {
     if (mode === "web-speech") {
       const rec = ensureRecognition();
@@ -500,9 +716,14 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
         console.warn("[voice] start failed", err);
       }
     } else if (mode === "remote-stt") {
-      void startRemote();
+      conversationPausedRef.current = false;
+      if (conversationModeRef.current) {
+        void startVadConvo();
+      } else {
+        void startRemote();
+      }
     }
-  }, [mode, ensureRecognition, startRemote]);
+  }, [mode, ensureRecognition, startRemote, startVadConvo]);
   useEffect(() => { startRef.current = start; }, [start]);
 
   const stop = useCallback(() => {
@@ -515,9 +736,14 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
         /* ignore */
       }
     } else if (mode === "remote-stt") {
-      stopRemote();
+      conversationPausedRef.current = true;
+      if (vadActiveRef.current) {
+        stopVadConvo();
+      } else {
+        stopRemote();
+      }
     }
-  }, [mode, stopRemote]);
+  }, [mode, stopRemote, stopVadConvo]);
   useEffect(() => { stopRef.current = stop; }, [stop]);
 
   const onFinal = useCallback((cb: (text: string) => void) => {
@@ -530,7 +756,10 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       const res = await authFetch(TTS_URL, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          ...(slowTtsRef.current ? { rate: "-15%" } : {}),
+        }),
       });
       if (!res.ok) return null;
       if (gen !== generationRef.current) return null; // cancelled while in flight
@@ -662,21 +891,28 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   // App.tsx hooks this to session_ended via the voiceSink.
   const resumeConversation = useCallback(() => {
     if (!conversationModeRef.current || mutedRef.current) return;
-    if (mode !== "web-speech") return; // remote-stt convo mode is not yet supported
     // wait for any pending speak/audio to drain before re-arming the mic
     const wait = setInterval(() => {
       if (audioQueueRef.current.length === 0 && !playingAudioRef.current) {
         clearInterval(wait);
-        const rec = ensureRecognition();
-        if (!rec) return;
-        rec.continuous = true;
         conversationPausedRef.current = false;
         convoBufRef.current = "";
-        try { rec.start(); } catch { /* already running */ }
+        if (mode === "web-speech") {
+          const rec = ensureRecognition();
+          if (!rec) return;
+          rec.continuous = true;
+          try { rec.start(); } catch { /* already running */ }
+        } else if (mode === "remote-stt") {
+          // VAD loop may have stopped on submit (no — stays running with mediaStream alive,
+          // we only stopped per-segment recorders). If the whole VAD loop was torn down,
+          // restart it. If still alive, just clear the paused flag and let the next speech
+          // segment fire normally.
+          if (!vadActiveRef.current) void startVadConvo();
+        }
       }
     }, 250);
     setTimeout(() => clearInterval(wait), 30_000);
-  }, [mode, ensureRecognition]);
+  }, [mode, ensureRecognition, startVadConvo]);
 
   const replayLastTurn = useCallback(() => {
     if (!lastTurnText) return;
@@ -727,5 +963,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     setConversationMode,
     liveTranscript,
     resumeConversation,
+    slowTts,
+    setSlowTts,
   };
 }

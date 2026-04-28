@@ -351,6 +351,92 @@ button.danger { background: var(--danger); color: white; }
 .voice-draft-ready { border-left: 3px solid var(--success); }
 .voice-draft-failed { border-left: 3px solid var(--danger); }
 .voice-draft-live { border-left: 3px solid var(--danger); background: rgba(248, 113, 113, 0.05); }
+/* Call mode — full-screen hands-free voice */
+.callmode {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 60%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  gap: 24px;
+  -webkit-tap-highlight-color: transparent;
+}
+.callmode-exit {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: 40px; height: 40px;
+  min-height: 40px;
+  border-radius: 50%;
+  font-size: 18px;
+  padding: 0;
+}
+.callmode-status {
+  font-size: 14px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+.callmode-transcript {
+  font-size: 22px;
+  line-height: 1.55;
+  color: var(--text);
+  text-align: center;
+  max-width: 560px;
+  min-height: 80px;
+  font-weight: 500;
+}
+.callmode-wave {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 56px;
+}
+.callmode-bar {
+  display: inline-block;
+  width: 8px;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: height 80ms ease-out;
+}
+.callmode-controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+.callmode-controls button {
+  font-size: 16px;
+  padding: 12px 24px;
+  min-height: 48px;
+  border-radius: 24px;
+}
+.callmode-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 12px;
+  text-align: center;
+}
+.callmode-trigger {
+  position: fixed;
+  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  right: 18px;
+  width: 56px; height: 56px;
+  min-height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #0b0d12;
+  font-size: 22px;
+  z-index: 60;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  padding: 0;
+}
+
 .recording-dot {
   display: inline-block;
   width: 8px; height: 8px;

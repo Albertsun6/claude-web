@@ -153,7 +153,7 @@ const EDGE_TTS_BIN = process.env.EDGE_TTS_BIN ?? "edge-tts";
 const EDGE_TTS_VOICE = process.env.EDGE_TTS_VOICE ?? "zh-CN-XiaoxiaoNeural";
 
 voiceRouter.post("/tts", async (c) => {
-  let body: { text?: unknown; voice?: unknown };
+  let body: { text?: unknown; voice?: unknown; rate?: unknown };
   try {
     body = await c.req.json();
   } catch {
@@ -163,8 +163,12 @@ voiceRouter.post("/tts", async (c) => {
   if (!text) return c.json({ error: "text required" }, 400);
   if (text.length > 2000) return c.json({ error: "text too long" }, 413);
   const voice = typeof body.voice === "string" && body.voice.trim() ? body.voice.trim() : EDGE_TTS_VOICE;
+  // optional rate adjustment, e.g. "-15%" for slow, "+20%" for fast.
+  // Validate strictly to avoid arg injection.
+  const rate = typeof body.rate === "string" && /^[+-]?\d{1,3}%$/.test(body.rate) ? body.rate : null;
 
   const args = ["--voice", voice, "--text", text];
+  if (rate) args.push("--rate", rate);
 
   const audio = await new Promise<Buffer>((resolve, reject) => {
     const child = spawn(EDGE_TTS_BIN, args);

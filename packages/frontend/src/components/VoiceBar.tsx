@@ -61,9 +61,17 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
             type="checkbox"
             checked={voice.conversationMode}
             onChange={(e) => voice.setConversationMode(e.target.checked)}
-            disabled={voice.mode !== "web-speech"}
+            disabled={voice.mode === "unsupported"}
           />
           <span>对话</span>
+        </label>
+        <label className="voice-cleanup-toggle" title="慢速 TTS — 走路/戴耳机时听得清楚">
+          <input
+            type="checkbox"
+            checked={voice.slowTts}
+            onChange={(e) => voice.setSlowTts(e.target.checked)}
+          />
+          <span>慢读</span>
         </label>
 
         {voice.isSpeaking && (

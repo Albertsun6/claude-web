@@ -15,7 +15,9 @@ import { ClaudeMdBanner } from "./components/ClaudeMdBanner";
 import { StatusBar } from "./components/StatusBar";
 import { FilePreviewPane } from "./components/FilePreviewPane";
 import { Resizer } from "./components/Resizer";
+import { CallMode } from "./components/CallMode";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
+import { useWakeLock } from "./hooks/useWakeLock";
 
 // Heavy: CodeMirror is ~250KB. Lazy-load when files panel actually opens.
 const FilesPanel = lazy(() => import("./components/FilesPanel").then((m) => ({ default: m.FilesPanel })));
@@ -83,7 +85,10 @@ function AppInner() {
   const rightTab = useStore((s) => s.rightTab);
   const setRightTab = useStore((s) => s.setRightTab);
   const [drawer, setDrawer] = useState<DrawerSide>(null);
+  const [callMode, setCallMode] = useState(false);
   const voice = useVoiceCtx();
+  // keep screen awake during a hands-free conversation
+  useWakeLock(voice.conversationMode || callMode);
 
   useEffect(() => {
     connect();
@@ -292,6 +297,19 @@ function AppInner() {
       <PermissionModal />
       <OfflineBanner />
       <AuthGate />
+      <CallMode active={callMode} onClose={() => setCallMode(false)} />
+
+      {/* Floating hands-free trigger — visible only when convo mode is on */}
+      {voice.conversationMode && !callMode && (
+        <button
+          className="callmode-trigger"
+          onClick={() => setCallMode(true)}
+          title="进入通话模式（全屏）"
+          aria-label="进入通话模式"
+        >
+          📞
+        </button>
+      )}
     </div>
   );
 }
