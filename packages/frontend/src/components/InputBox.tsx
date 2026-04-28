@@ -4,6 +4,7 @@ import { useStore, useActiveSession } from "../store";
 import { sendPrompt, interrupt } from "../ws-client";
 import { fetchTree } from "../api/fs";
 import { useVoiceCtx } from "../hooks/VoiceContext";
+import { VoiceButton } from "./VoiceButton";
 
 function ConvoLiveBar() {
   const voice = useVoiceCtx();
@@ -102,7 +103,12 @@ function descFor(name: string): string {
   return COMMAND_DESCRIPTIONS[name] ?? "";
 }
 
-export function InputBox() {
+export interface InputBoxProps {
+  /** Called with a finalized voice transcript — same handler App used to give VoiceBar. */
+  onVoiceTranscript?: (text: string) => void;
+}
+
+export function InputBox({ onVoiceTranscript }: InputBoxProps = {}) {
   const [text, setText] = useState("");
   const [historyIdx, setHistoryIdx] = useState<number | null>(null);
   const [showSlash, setShowSlash] = useState(false);
@@ -531,6 +537,9 @@ export function InputBox() {
           onDrop={onDrop}
           onDragOver={(e) => e.preventDefault()}
         />
+        {onVoiceTranscript ? (
+          <VoiceButton onTranscript={onVoiceTranscript} />
+        ) : null}
         {busy ? (
           <button className="danger" onClick={stop}>停止</button>
         ) : (

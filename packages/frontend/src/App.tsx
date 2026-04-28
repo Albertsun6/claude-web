@@ -204,7 +204,7 @@ function AppInner() {
       </div>
 
       <div style={{ marginTop: 16 }}>
-        <VoiceBar onTranscript={handleVoiceTranscript} />
+        <VoiceBar />
       </div>
 
       {session && (
@@ -281,65 +281,40 @@ function AppInner() {
         </button>
       </div>
 
-      <aside className="sidebar">
-        <button
-          type="button"
-          className="panel-collapse-btn panel-collapse-left"
-          onClick={() => setSidebarHidden(true)}
-          aria-label="隐藏左侧栏"
-          title="隐藏左侧栏"
-        >
-          ◀
-        </button>
-        {sidebar}
-      </aside>
+      <aside className="sidebar">{sidebar}</aside>
       <Resizer side="left" initial={sidebarWidth} min={220} max={520} onChange={setSidebarWidth} />
 
       <main className="main">
         <ProjectTabs />
         <ClaudeMdBanner />
         <MessageStream />
-        <InputBox />
+        <InputBox onVoiceTranscript={handleVoiceTranscript} />
         <StatusBar />
         <FilePreviewPane />
       </main>
 
       <Resizer side="right" initial={rightbarWidth} min={240} max={720} onChange={setRightbarWidth} />
-      <aside className="rightbar">
-        <button
-          type="button"
-          className="panel-collapse-btn panel-collapse-right"
-          onClick={() => setRightbarHidden(true)}
-          aria-label="隐藏右侧栏"
-          title="隐藏右侧栏"
-        >
-          ▶
-        </button>
-        {rightPanel}
-      </aside>
+      <aside className="rightbar">{rightPanel}</aside>
 
-      {sidebarHidden && (
-        <button
-          type="button"
-          className="panel-reveal panel-reveal-left"
-          onClick={() => setSidebarHidden(false)}
-          aria-label="显示左侧栏"
-          title="显示左侧栏"
-        >
-          ▶
-        </button>
-      )}
-      {rightbarHidden && (
-        <button
-          type="button"
-          className="panel-reveal panel-reveal-right"
-          onClick={() => setRightbarHidden(false)}
-          aria-label="显示右侧栏"
-          title="显示右侧栏"
-        >
-          ◀
-        </button>
-      )}
+      {/* Always-visible edge toggles (desktop only — mobile uses drawer). */}
+      <button
+        type="button"
+        className="panel-toggle panel-toggle-left"
+        onClick={() => setSidebarHidden(!sidebarHidden)}
+        aria-label={sidebarHidden ? "显示左侧栏" : "隐藏左侧栏"}
+        title={sidebarHidden ? "显示左侧栏" : "隐藏左侧栏"}
+      >
+        {sidebarHidden ? "▶" : "◀"}
+      </button>
+      <button
+        type="button"
+        className="panel-toggle panel-toggle-right"
+        onClick={() => setRightbarHidden(!rightbarHidden)}
+        aria-label={rightbarHidden ? "显示右侧栏" : "隐藏右侧栏"}
+        title={rightbarHidden ? "显示右侧栏" : "隐藏右侧栏"}
+      >
+        {rightbarHidden ? "◀" : "▶"}
+      </button>
 
       {drawer && (
         <div className="drawer-backdrop" onClick={() => setDrawer(null)}>

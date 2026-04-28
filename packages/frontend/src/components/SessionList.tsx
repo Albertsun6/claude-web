@@ -71,6 +71,25 @@ export function SessionList() {
     }
   };
 
+  // Auto-load transcript on mount/sessionId change when messages are empty.
+  // Covers the page-refresh case: sessionId is persisted in localStorage but
+  // messages are in-memory only — without this the user sees a blank main area
+  // and can't click the "active" session in the list to reload it.
+  useEffect(() => {
+    if (!session?.sessionId || session.messages.length > 0 || session.busy) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const transcript = await fetchTranscript(session.cwd, session.sessionId!);
+        if (!cancelled && transcript.length > 0) {
+          replaceMessages(session.cwd, transcript as any[]);
+        }
+      } catch { /* brand-new session — no .jsonl yet, ignore */ }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.cwd, session?.sessionId]);
+
   if (!session) return null;
 
   return (
@@ -95,7 +114,7 @@ export function SessionList() {
               <div
                 key={s.sessionId}
                 className={`session-item ${active ? "active" : ""}`}
-                onClick={() => !active && switchTo(s.sessionId)}
+                onClick={() => (!active || session.messages.length === 0) && switchTo(s.sessionId)}
                 title={s.sessionId}
               >
                 <div className="session-preview">{s.preview || "(无预览)"}</div>

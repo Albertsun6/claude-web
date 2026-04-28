@@ -1,11 +1,6 @@
 import "../voice.css";
 import { useVoiceCtx } from "../hooks/VoiceContext";
 import { useStore } from "../store";
-import { VoiceButton } from "./VoiceButton";
-
-export interface VoiceBarProps {
-  onTranscript: (text: string) => void;
-}
 
 const MODE_LABELS: Record<string, string> = {
   "web-speech": "浏览器",
@@ -19,7 +14,7 @@ function deviceLabel(d: MediaDeviceInfo, fallbackIdx: number): string {
   return `${d.kind === "audioinput" ? "麦克风" : "扬声器"} ${fallbackIdx + 1}`;
 }
 
-export function VoiceBar({ onTranscript }: VoiceBarProps) {
+export function VoiceBar() {
   const voice = useVoiceCtx();
   const cleanupEnabled = useStore((s) => s.voiceCleanupEnabled);
   const setCleanupEnabled = useStore((s) => s.setVoiceCleanupEnabled);
@@ -159,9 +154,6 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
         </button>
       </div>
 
-      <div className="voice-bar-mic">
-        <VoiceButton onTranscript={onTranscript} />
-      </div>
     </div>
   );
 }
