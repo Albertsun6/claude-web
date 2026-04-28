@@ -13,6 +13,7 @@ final class AppSettings {
     private static let ttsEnabledKey = "com.albertsun6.claudeweb-native.ttsEnabled"
     private static let speakStyleKey = "com.albertsun6.claudeweb-native.speakStyle"
     private static let slowTtsKey = "com.albertsun6.claudeweb-native.slowTts"
+    private static let authTokenKey = "com.albertsun6.claudeweb-native.authToken"
 
     var backendURL: URL {
         didSet {
@@ -46,6 +47,12 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(slowTts, forKey: Self.slowTtsKey) }
     }
 
+    /// CLAUDE_WEB_TOKEN. Sent as `?token=` on WS upgrade and as
+    /// `Authorization: Bearer <t>` on HTTP. Empty → no auth header.
+    var authToken: String {
+        didSet { UserDefaults.standard.set(authToken, forKey: Self.authTokenKey) }
+    }
+
     init() {
         // Default: simulator → http://localhost:3030; device → Tailscale URL.
         // We'll prompt the user to pick at first launch in the settings page.
@@ -59,6 +66,7 @@ final class AppSettings {
         self.ttsEnabled = UserDefaults.standard.object(forKey: Self.ttsEnabledKey) as? Bool ?? true
         self.speakStyle = UserDefaults.standard.string(forKey: Self.speakStyleKey) ?? "summary"
         self.slowTts = UserDefaults.standard.bool(forKey: Self.slowTtsKey)
+        self.authToken = UserDefaults.standard.string(forKey: Self.authTokenKey) ?? ""
     }
 
     private static func detectDefaultBackend() -> URL {

@@ -32,14 +32,27 @@ final class TTSPlayer: NSObject {
 
     private var player: AVAudioPlayer?
     private let backendURL: () -> URL
+    private let authToken: () -> String
     private let settings: () -> AppSettings
 
     /// Bumped on cancel / new turn so in-flight fetches abandon.
     private var generation: Int = 0
 
-    init(backendURL: @escaping () -> URL, settings: @escaping () -> AppSettings) {
+    init(
+        backendURL: @escaping () -> URL,
+        authToken: @escaping () -> String = { "" },
+        settings: @escaping () -> AppSettings
+    ) {
         self.backendURL = backendURL
+        self.authToken = authToken
         self.settings = settings
+    }
+
+    private func authorize(_ req: inout URLRequest) {
+        let t = authToken()
+        if !t.isEmpty {
+            req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
+        }
     }
 
     var hasReplay: Bool { lastAudioData != nil && state != .playing }
@@ -106,6 +119,14 @@ final class TTSPlayer: NSObject {
         }
     }
 
+    /// Force back to idle from any state including .error.
+    func resetError() {
+        generation += 1
+        player?.stop()
+        player = nil
+        state = .idle
+    }
+
     // MARK: - Private
 
     private func play(_ mp3: Data) async {
@@ -130,6 +151,7 @@ final class TTSPlayer: NSObject {
         var req = URLRequest(url: backendURL().appendingPathComponent("/api/voice/summarize"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        authorize(&req)
         req.timeoutInterval = 25
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
         do {
@@ -148,6 +170,7 @@ final class TTSPlayer: NSObject {
         var req = URLRequest(url: backendURL().appendingPathComponent("/api/voice/tts"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        authorize(&req)
         req.timeoutInterval = 25
         let body: [String: Any] = settings().slowTts
             ? ["text": text, "rate": "-15%"]

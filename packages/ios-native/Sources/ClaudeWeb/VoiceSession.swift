@@ -104,10 +104,33 @@ final class VoiceSession {
     }
 
     func exit() {
+        // Clean up any in-flight subcomponent before tearing the session
+        // down. Otherwise we can leave a recorder still writing or a TTS
+        // player blocked from rearming the audio session next time.
+        switch state {
+        case .recording, .transcribing:
+            recorder?.cancel()
+        case .playingTTS, .pausedTTS:
+            tts?.cancel()
+        case .thinking:
+            // Don't auto-interrupt the in-flight Claude run — user might
+            // still want the answer to land in chat. Just tear down audio.
+            break
+        default:
+            break
+        }
         unregisterRemoteCommands()
         clearNowPlaying()
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         active = false
+    }
+
+    /// Recover from any .error state without restarting the app.
+    func dismissError() {
+        recorder?.resetError()
+        tts?.resetError()
+        lastError = nil
+        refresh()
     }
 
     /// Called from anywhere subcomponent state changes — keeps Now Playing
@@ -119,7 +142,8 @@ final class VoiceSession {
 
     // MARK: - Remote command handlers
 
-    /// Lock-screen / earphone play-pause toggle. Semantics depend on state.
+    /// Lock-screen / earphone togglePlayPauseCommand handler. Semantics
+    /// depend on current state — this is the "smart" remote button.
     @discardableResult
     func togglePlayPause() -> MPRemoteCommandHandlerStatus {
         switch state {
@@ -138,12 +162,50 @@ final class VoiceSession {
         case .pausedTTS:
             tts?.resume()
             refresh()
-        case .transcribing, .thinking:
-            return .commandFailed // intentional no-op
-        case .error:
+        case .transcribing, .thinking, .error:
             return .commandFailed
         }
         return .success
+    }
+
+    /// Explicit `playCommand`. NEVER reverses an active playback (unlike
+    /// togglePlayPause which would). Resumes paused TTS, kicks off recording
+    /// from idle, otherwise no-op.
+    @discardableResult
+    func handlePlay() -> MPRemoteCommandHandlerStatus {
+        switch state {
+        case .idle:
+            Task { await self.recorder?.start(); self.refresh() }
+            return .success
+        case .pausedTTS:
+            tts?.resume()
+            refresh()
+            return .success
+        default:
+            return .commandFailed
+        }
+    }
+
+    /// Explicit `pauseCommand`. NEVER starts something new. Pauses TTS,
+    /// stops a currently running recording, otherwise no-op.
+    @discardableResult
+    func handlePause() -> MPRemoteCommandHandlerStatus {
+        switch state {
+        case .playingTTS:
+            tts?.pause()
+            refresh()
+            return .success
+        case .recording:
+            Task {
+                if let text = await self.recorder?.stopAndTranscribe(), !text.isEmpty {
+                    self.sendPromptHook?(text)
+                }
+                self.refresh()
+            }
+            return .success
+        default:
+            return .commandFailed
+        }
     }
 
     @discardableResult
@@ -183,11 +245,11 @@ final class VoiceSession {
         }
         cc.playCommand.isEnabled = true
         cc.playCommand.addTarget { [weak self] _ in
-            self?.togglePlayPause() ?? .commandFailed
+            self?.handlePlay() ?? .commandFailed
         }
         cc.pauseCommand.isEnabled = true
         cc.pauseCommand.addTarget { [weak self] _ in
-            self?.togglePlayPause() ?? .commandFailed
+            self?.handlePause() ?? .commandFailed
         }
         cc.stopCommand.isEnabled = true
         cc.stopCommand.addTarget { [weak self] _ in

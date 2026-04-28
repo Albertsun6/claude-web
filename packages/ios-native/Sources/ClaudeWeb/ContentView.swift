@@ -90,6 +90,15 @@ struct ContentView: View {
 
     @ViewBuilder
     private var ttsControls: some View {
+        if voice.state == .error("") || isErrored {
+            Button {
+                voice.dismissError()
+            } label: {
+                Label("清除错误", systemImage: "exclamationmark.triangle.fill")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.orange)
+            }
+        }
         switch tts.state {
         case .fetching:
             ProgressView().scaleEffect(0.7)
@@ -116,6 +125,12 @@ struct ContentView: View {
         case .error:
             EmptyView()
         }
+    }
+
+    private var isErrored: Bool {
+        if case .error = recorder.state { return true }
+        if case .error = tts.state { return true }
+        return false
     }
 
     private var chipColor: Color {
@@ -358,6 +373,15 @@ struct SettingsView: View {
                     TextField("/Users/you/Desktop", text: $draftCwd)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                }
+                Section {
+                    SecureField("CLAUDE_WEB_TOKEN（可选）", text: $s.authToken)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("鉴权")
+                } footer: {
+                    Text("如果 backend 启用了 token 认证，粘贴这里。WS 用 ?token= 拼，HTTP 用 Bearer。改完会自动重连。")
                 }
                 Section("权限模式") {
                     Picker("权限模式", selection: $draftMode) {

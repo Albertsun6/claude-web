@@ -13,12 +13,14 @@ struct ClaudeWebApp: App {
     init() {
         let s = AppSettings()
         _settings = State(initialValue: s)
-        let c = BackendClient(backendBase: s.backendURL)
+        let c = BackendClient(backendBase: s.backendURL, authToken: { s.authToken })
         _client = State(initialValue: c)
         let backendRef: () -> URL = { [weak c] in c?.backendBase ?? s.backendURL }
-        _recorder = State(initialValue: VoiceRecorder(backendURL: backendRef))
+        let tokenRef: () -> String = { s.authToken }
+        _recorder = State(initialValue: VoiceRecorder(backendURL: backendRef, authToken: tokenRef))
         _tts = State(initialValue: TTSPlayer(
             backendURL: backendRef,
+            authToken: tokenRef,
             settings: { s }
         ))
         _voice = State(initialValue: VoiceSession())
@@ -63,6 +65,10 @@ struct ClaudeWebApp: App {
                 }
                 .onChange(of: settings.backendURL) { _, newURL in
                     client.backendBase = newURL
+                }
+                // Token change forces a reconnect so the new ?token= takes effect.
+                .onChange(of: settings.authToken) { _, _ in
+                    client.reconnect()
                 }
                 // Refresh Now Playing whenever any underlying state shifts.
                 .onChange(of: recorder.state) { _, _ in voice.refresh() }

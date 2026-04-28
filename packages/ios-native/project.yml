@@ -25,7 +25,9 @@ targets:
     info:
       path: Sources/ClaudeWeb/Info.plist
       properties:
-        CFBundleDisplayName: Claude
+        # Renamed from "Claude" to avoid confusion with Anthropic's official
+        # Claude app on Apple platforms.
+        CFBundleDisplayName: Claude Voice
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:
@@ -37,7 +39,11 @@ targets:
         # Future-proof: declare these now so M3/M4 don't need re-generate.
         UIBackgroundModes:
           - audio
-        NSMicrophoneUsageDescription: Claude needs your microphone for voice input.
+        NSMicrophoneUsageDescription: Claude Voice needs your microphone for voice input.
+        # Required when reaching the Mac mini over a LAN IP (vs Tailscale's
+        # public-routable hostname). Without this, iOS 14+ silently blocks the
+        # local-network connection until the user grants permission.
+        NSLocalNetworkUsageDescription: Claude Voice connects to your Mac running the claude-web backend on the local network.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:

@@ -31,14 +31,19 @@ final class BackendClient {
         didSet { reconnect() }
     }
 
+    /// Optional CLAUDE_WEB_TOKEN. Empty = no auth.
+    /// Read via closure so changes in Settings flow through immediately.
+    private let authToken: () -> String
+
     private var task: URLSessionWebSocketTask?
     private var session: URLSession
     private var reconnectDelay: TimeInterval = 1
     private var reconnectTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
 
-    init(backendBase: URL) {
+    init(backendBase: URL, authToken: @escaping () -> String = { "" }) {
         self.backendBase = backendBase
+        self.authToken = authToken
         let config = URLSessionConfiguration.default
         config.waitsForConnectivity = true
         config.timeoutIntervalForRequest = 30
@@ -52,6 +57,14 @@ final class BackendClient {
         var components = URLComponents(url: backendBase, resolvingAgainstBaseURL: false)!
         components.scheme = scheme
         components.path = "/ws"
+        // CLAUDE_WEB_TOKEN goes via ?token= so the WS upgrade can be auth'd
+        // before any frames are exchanged (matches the web frontend).
+        let token = authToken()
+        if !token.isEmpty {
+            var items = components.queryItems ?? []
+            items.append(URLQueryItem(name: "token", value: token))
+            components.queryItems = items
+        }
         guard let wsURL = components.url else { state = .error("bad URL"); return }
         let t = session.webSocketTask(with: wsURL)
         task = t
@@ -152,7 +165,7 @@ final class BackendClient {
 
     func replyPermission(_ request: PermissionRequest, decision: PermissionDecision) {
         Task { [weak self] in
-            await self?.send(.permissionReply(
+            try? await self?.send(.permissionReply(
                 requestId: request.requestId,
                 decision: decision.rawValue,
                 runId: request.runId
@@ -186,6 +199,12 @@ final class BackendClient {
         model: String = "claude-haiku-4-5",
         permissionMode: String = "plan"
     ) {
+        // Fail fast if WS isn't open — otherwise sendPrompt sets busy=true,
+        // the send silently fails, and the UI gets stuck in "thinking" forever.
+        guard task != nil else {
+            messages.append(ChatLine(role: .error, text: "未连接后端，发送失败"))
+            return
+        }
         let runId = UUID().uuidString
         currentRunId = runId
         busy = true
@@ -199,23 +218,37 @@ final class BackendClient {
             permissionMode: permissionMode,
             resumeSessionId: sessionId
         )
-        Task { [weak self] in await self?.send(msg) }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.send(msg)
+            } catch {
+                // Reset busy / runId so VoiceSession.state goes back to idle
+                // and remote commands work again. The user sees the error in
+                // chat and can retry.
+                self.messages.append(ChatLine(role: .error, text: "发送失败: \(error.localizedDescription)"))
+                if self.currentRunId == runId {
+                    self.busy = false
+                    self.currentRunId = nil
+                }
+            }
+        }
     }
 
     func interrupt() {
         guard let runId = currentRunId else { return }
-        Task { [weak self] in await self?.send(.interrupt(runId: runId)) }
+        Task { [weak self] in try? await self?.send(.interrupt(runId: runId)) }
     }
 
-    private func send(_ message: ClientMessage) async {
-        guard let t = task else { return }
-        do {
-            let data = try JSONEncoder().encode(message)
-            let s = String(data: data, encoding: .utf8) ?? "{}"
-            try await t.send(.string(s))
-        } catch {
-            state = .error("send: \(error.localizedDescription)")
+    /// Throws on encode / network failure so the caller can reset busy / runId.
+    private func send(_ message: ClientMessage) async throws {
+        guard let t = task else {
+            throw NSError(domain: "BackendClient", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "WebSocket not connected"])
         }
+        let data = try JSONEncoder().encode(message)
+        let s = String(data: data, encoding: .utf8) ?? "{}"
+        try await t.send(.string(s))
     }
 }
 

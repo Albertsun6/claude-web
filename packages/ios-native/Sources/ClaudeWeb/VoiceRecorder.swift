@@ -17,6 +17,7 @@ import Observation
 final class VoiceRecorder {
     enum State: Equatable {
         case idle
+        case starting   // mic permission / session config / file open in flight
         case recording
         case uploading
         case error(String)
@@ -27,10 +28,12 @@ final class VoiceRecorder {
 
     private var recorder: AVAudioRecorder?
     private let backendURL: () -> URL
+    private let authToken: () -> String
     private var fileURL: URL?
 
-    init(backendURL: @escaping () -> URL) {
+    init(backendURL: @escaping () -> URL, authToken: @escaping () -> String = { "" }) {
         self.backendURL = backendURL
+        self.authToken = authToken
     }
 
     /// Configure the audio session for record + playback. Idempotent — safe to
@@ -56,6 +59,9 @@ final class VoiceRecorder {
 
     func start() async {
         guard state == .idle else { return }
+        // CLAIM the slot synchronously before any async hop. If a second
+        // tap/remote-command races in, it sees .starting and bails.
+        state = .starting
         if !(await requestMicPermission()) {
             state = .error("麦克风权限被拒绝")
             return
@@ -122,10 +128,24 @@ final class VoiceRecorder {
         state = .idle
     }
 
+    /// Force back to idle from any state. Used by VoiceSession to recover
+    /// from .error without restarting the app.
+    func resetError() {
+        recorder?.stop()
+        recorder = nil
+        if let url = fileURL { try? FileManager.default.removeItem(at: url) }
+        fileURL = nil
+        state = .idle
+    }
+
     private func uploadForTranscription(_ data: Data) async throws -> String {
         var req = URLRequest(url: backendURL().appendingPathComponent("/api/voice/transcribe"))
         req.httpMethod = "POST"
         req.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
+        let token = authToken()
+        if !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         req.timeoutInterval = 60
         req.httpBody = data
 

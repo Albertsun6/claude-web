@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Claude</string>
+	<string>Claude Voice</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -25,8 +25,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Claude Voice connects to your Mac running the claude-web backend on the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Claude needs your microphone for voice input.</string>
+	<string>Claude Voice needs your microphone for voice input.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
