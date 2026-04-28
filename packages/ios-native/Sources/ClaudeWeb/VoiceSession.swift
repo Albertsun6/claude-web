@@ -139,6 +139,10 @@ final class VoiceSession {
     // MARK: - Silent loop (Now Playing keep-alive)
 
     private func startSilentLoop() {
+        // Opt-in only — see AppSettings.silentKeepalive doc for the App Store
+        // rejection caveat. Default OFF, user toggles in Settings if they
+        // want to test long-idle lock-screen behavior.
+        guard settings?.silentKeepalive == true else { return }
         guard silentLoop == nil else { return }
         do {
             let p = try AVAudioPlayer(data: Self.silentWAV)

@@ -14,6 +14,8 @@ final class AppSettings {
     private static let speakStyleKey = "com.albertsun6.claudeweb-native.speakStyle"
     private static let slowTtsKey = "com.albertsun6.claudeweb-native.slowTts"
     private static let authTokenKey = "com.albertsun6.claudeweb-native.authToken"
+    private static let modelKey = "com.albertsun6.claudeweb-native.model"
+    private static let silentKeepaliveKey = "com.albertsun6.claudeweb-native.silentKeepalive"
 
     var backendURL: URL {
         didSet {
@@ -53,6 +55,22 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(authToken, forKey: Self.authTokenKey) }
     }
 
+    /// Claude model id for new prompts. Persisted but applies only to
+    /// FUTURE prompts — in-flight runs keep their original model.
+    /// Values: claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-7.
+    var model: String {
+        didSet { UserDefaults.standard.set(model, forKey: Self.modelKey) }
+    }
+
+    /// EXPERIMENTAL — play 0-volume silent audio loop while in voice mode so
+    /// iOS keeps Now Playing card visible on lock screen indefinitely. Apple
+    /// docs / community forums consider this an "abuse of background audio
+    /// mode" and it has been a basis for App Store rejection. Safe for
+    /// personal sideload only. Default OFF.
+    var silentKeepalive: Bool {
+        didSet { UserDefaults.standard.set(silentKeepalive, forKey: Self.silentKeepaliveKey) }
+    }
+
     init() {
         // Default: simulator → http://localhost:3030; device → Tailscale URL.
         // We'll prompt the user to pick at first launch in the settings page.
@@ -67,6 +85,8 @@ final class AppSettings {
         self.speakStyle = UserDefaults.standard.string(forKey: Self.speakStyleKey) ?? "summary"
         self.slowTts = UserDefaults.standard.bool(forKey: Self.slowTtsKey)
         self.authToken = UserDefaults.standard.string(forKey: Self.authTokenKey) ?? ""
+        self.model = UserDefaults.standard.string(forKey: Self.modelKey) ?? "claude-haiku-4-5"
+        self.silentKeepalive = UserDefaults.standard.bool(forKey: Self.silentKeepaliveKey)
     }
 
     private static func detectDefaultBackend() -> URL {

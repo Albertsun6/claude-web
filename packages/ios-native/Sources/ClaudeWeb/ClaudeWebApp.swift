@@ -59,7 +59,7 @@ struct ClaudeWebApp: App {
                         client: client,
                         settings: settings,
                         sendPrompt: { [weak clientRef] text in
-                            clientRef?.sendPrompt(text, cwd: settings.cwd, permissionMode: settings.permissionMode)
+                            clientRef?.sendPrompt(text, cwd: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
                         }
                     )
                 }

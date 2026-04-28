@@ -4,6 +4,11 @@
 > 问题。跑完且全绿 → v1 可日常用。
 >
 > 跑法：从上到下逐条做，每条标 ✅ / ❌ / 💬（注释）。失败的发我修。
+>
+> **v1 验收范围 = Section 1, 2, 3, 5**。Section 4（锁屏长时间空闲后远程命令）
+> 是 iOS 平台层面的硬约束（参见 [WWDC22 PushToTalk](https://developer.apple.com/videos/play/wwdc2022/10117/)），
+> 已挂起，作为实验性 opt-in 功能（Settings 里的"锁屏保活"开关）。Section 4
+> 跑下来 fail 不算 v1 不通过。
 
 ## 准备
 
@@ -31,9 +36,11 @@ cd /Users/yongqian/Desktop/claude-web/packages/ios-native
 - [ ] 右上 ⚙️ → 设置：
   - Backend = `https://mymac.tailcf3ccf.ts.net`
   - 工作目录 = 一个真实存在的 cwd（如 `/Users/yongqian/Desktop/claude-web`）
+  - 模型 = Haiku 4.5（默认，省 token；测试 Sonnet/Opus 时切换）
   - 权限模式 = `Plan`（先安全跑）
   - CLAUDE_WEB_TOKEN = （如果 backend 设了 token 才填，没设就空）
   - 自动播报 = ON，风格 = 概要
+  - 锁屏保活（实验）= 默认关，Section 4 才需要开
 - [ ] 保存退出 → 顶部小圆点变 🟢 (已连接)
 
 ### D. 麦克风权限
@@ -57,6 +64,8 @@ cd /Users/yongqian/Desktop/claude-web/packages/ios-native
 | 1.8 | 念完后按 ↻ | 重听同一段（不重新调 Haiku，要快） | ☐ |
 | 1.9 | 设置切"逐句"→ 重新问 | 念出来明显比概要长 | ☐ |
 | 1.10 | 设置勾"慢速朗读"→ 重新问 | 速度明显慢 | ☐ |
+| 1.11 | 设置模型切到 Sonnet 4.6 → 问"用三句话介绍 React" | 走的是 Sonnet；Mac backend 日志能确认 model 字段 | ☐ |
+| 1.12 | 切回 Haiku 4.5 → 重新问 | 切换生效，无报错 | ☐ |
 
 ---
 
@@ -81,7 +90,12 @@ cd /Users/yongqian/Desktop/claude-web/packages/ios-native
 
 ---
 
-## 4. 锁屏 + Now Playing 远程命令（M4 最大未知）
+## 4. 锁屏 + Now Playing 远程命令（**实验性 / 已挂起**）
+
+> ⚠️ 这一节**不是 v1 必须通过的**。iOS 平台限制下"长时间空闲后锁屏远程命令"
+> 不能稳定做（参考 Apple Voice Memos 也是锁屏即停）。本节作为可选：你想试
+> "锁屏保活"实验开关，到设置里打开后跑这一节。失败不影响 v1 通过。
+
 
 进入语音模式。锁屏。
 

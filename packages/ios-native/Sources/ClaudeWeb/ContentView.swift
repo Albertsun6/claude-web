@@ -40,10 +40,8 @@ struct ContentView: View {
                     onStop: client.interrupt,
                     onTranscript: { text in
                         if voice.active {
-                            // Voice mode is hands-free — auto-send.
-                            client.sendPrompt(text, cwd: settings.cwd, permissionMode: settings.permissionMode)
+                            client.sendPrompt(text, cwd: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
                         } else {
-                            // Foreground review: fill the field, user taps send.
                             draft = text
                         }
                     }
@@ -168,7 +166,7 @@ struct ContentView: View {
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        client.sendPrompt(text, cwd: settings.cwd, permissionMode: settings.permissionMode)
+        client.sendPrompt(text, cwd: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
         draft = ""
     }
 }
@@ -397,6 +395,15 @@ struct SettingsView: View {
                 } footer: {
                     Text("如果 backend 启用了 token 认证，粘贴这里。WS 用 ?token= 拼，HTTP 用 Bearer。改完会自动重连。")
                 }
+                Section("模型") {
+                    Picker("模型", selection: $s.model) {
+                        Text("Haiku 4.5（快、便宜，默认）").tag("claude-haiku-4-5")
+                        Text("Sonnet 4.6（平衡）").tag("claude-sonnet-4-6")
+                        Text("Opus 4.7（最强、最贵）").tag("claude-opus-4-7")
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
                 Section("权限模式") {
                     Picker("权限模式", selection: $draftMode) {
                         Text("Plan（只读规划，最安全）").tag("plan")
@@ -417,6 +424,13 @@ struct SettingsView: View {
                     .disabled(!s.ttsEnabled)
                     Toggle("慢速朗读（-15%）", isOn: $s.slowTts)
                         .disabled(!s.ttsEnabled)
+                }
+                Section {
+                    Toggle("锁屏保活（实验性）", isOn: $s.silentKeepalive)
+                } header: {
+                    Text("实验功能")
+                } footer: {
+                    Text("开启后语音模式会播放 0 音量循环音频，让 Now Playing 卡片在锁屏长时间保持。Apple 视为对后台音频的滥用，**不要在 App Store 版本启用**。仅供 sideload 个人用。")
                 }
             }
             .navigationTitle("设置")
