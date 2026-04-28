@@ -361,7 +361,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recorderChunksRef = useRef<Blob[]>([]);
 
-  // remote-stt convo mode (VAD-driven continuous segments)
+  // remote-stt convo mode (VAD + continuous PCM ring buffer)
   const vadActiveRef = useRef(false);
   const vadAudioCtxRef = useRef<AudioContext | null>(null);
   const vadAnalyserRef = useRef<AnalyserNode | null>(null);
@@ -372,8 +372,15 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const vadInSpeechRef = useRef(false);
   const vadSpeechStartRef = useRef(0);
   const vadLastVoiceRef = useRef(0);
-  const segRecorderRef = useRef<MediaRecorder | null>(null);
-  const segChunksRef = useRef<Blob[]>([]);
+  // PCM ring buffer captured by AudioWorklet — replaces per-segment MediaRecorder.
+  // Eliminates 50-200ms speech-onset loss from MediaRecorder + WebM/Opus header init.
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const pcmRingRef = useRef<Float32Array | null>(null);
+  const pcmWritePosRef = useRef(0);
+  const pcmTotalRef = useRef(0); // monotonic sample counter
+  const pcmSampleRateRef = useRef(48000);
+  const pcmSegmentStartTotalRef = useRef(0);
+  const pcmLastTranscriptRef = useRef<string>(""); // for whisper context across segments
 
   // init
   useEffect(() => {
@@ -668,23 +675,99 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   // Constants tuned for typical phone-mic, indoor speech.
   const VAD_TICK_MS = 50;
   const VAD_CALIBRATION_MS = 500;
-  const VAD_SILENCE_END_MS = 1200;
+  const VAD_SILENCE_END_MS = 1500; // bumped from 1200ms — natural pauses no longer cut sentences
   const VAD_MIN_SPEECH_MS = 250;
-  const VAD_MIN_THRESHOLD = 8; // RMS units; floor so dead-quiet rooms don't false-trigger
+  const VAD_MIN_THRESHOLD = 8;     // RMS units; floor so dead-quiet rooms don't false-trigger
+  const VAD_PRE_ROLL_MS = 300;     // include this much audio BEFORE VAD trigger fires
+  const VAD_RING_SECONDS = 30;     // max segment we'll buffer before forced cut
+  const VAD_NOISE_EWMA = 0.05;     // adaptation rate for ambient noise floor (per 50ms tick)
 
-  const processVadSegment = useCallback(async (blob: Blob, type: string) => {
-    if (blob.size < 1000) return; // <1KB = noise
+  // Inline AudioWorklet that pumps Float32 PCM frames back to the main thread.
+  // Loaded as a Blob URL so we don't need a separate static asset.
+  const PCM_PROCESSOR_CODE = `
+    class PcmCapture extends AudioWorkletProcessor {
+      process(inputs) {
+        const ch = inputs[0] && inputs[0][0];
+        if (ch && ch.length) this.port.postMessage(new Float32Array(ch));
+        return true;
+      }
+    }
+    registerProcessor('pcm-capture', PcmCapture);
+  `;
+
+  // Encode mono Float32 samples as 16-bit PCM WAV (whisper / ffmpeg native input).
+  const encodeWav = useCallback((samples: Float32Array, sampleRate: number): Blob => {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const v = new DataView(buf);
+    const writeStr = (off: number, s: string) => {
+      for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i));
+    };
+    writeStr(0, "RIFF");
+    v.setUint32(4, 36 + samples.length * 2, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);             // PCM
+    v.setUint16(22, 1, true);             // mono
+    v.setUint32(24, sampleRate, true);
+    v.setUint32(28, sampleRate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    writeStr(36, "data");
+    v.setUint32(40, samples.length * 2, true);
+    let off = 44;
+    for (let i = 0; i < samples.length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]!));
+      v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      off += 2;
+    }
+    return new Blob([buf], { type: "audio/wav" });
+  }, []);
+
+  // Slice samples [fromTotal, toTotal) out of the ring buffer (handling wrap).
+  const sliceRing = useCallback((fromTotal: number, toTotal: number): Float32Array | null => {
+    const ring = pcmRingRef.current;
+    if (!ring) return null;
+    const total = pcmTotalRef.current;
+    const ringLen = ring.length;
+    // Clamp to what we still have
+    const oldest = Math.max(0, total - ringLen);
+    const from = Math.max(fromTotal, oldest);
+    const to = Math.min(toTotal, total);
+    const len = to - from;
+    if (len <= 0) return null;
+    const out = new Float32Array(len);
+    // ring index of `from`: writePos points to where the NEXT sample lands,
+    // so the most-recent sample is at writePos-1.
+    const writePos = pcmWritePosRef.current;
+    const offsetFromEnd = total - from; // how many samples back from "now"
+    let readPos = (writePos - offsetFromEnd + ringLen) % ringLen;
+    for (let i = 0; i < len; i++) {
+      out[i] = ring[readPos]!;
+      readPos = (readPos + 1) % ringLen;
+    }
+    return out;
+  }, []);
+
+  const processVadSegment = useCallback(async (blob: Blob) => {
+    if (blob.size < 4000) return; // <4KB at 16-bit/16kHz ≈ 125ms — likely noise
     try {
-      const res = await authFetch(TRANSCRIBE_URL, {
+      // Pass last transcript as `prev` so backend can extend whisper's --prompt
+      // with context from prior segment (improves coherence in multi-utterance turns).
+      const params = new URLSearchParams();
+      const prev = pcmLastTranscriptRef.current;
+      if (prev) params.set("prev", prev.slice(-200));
+      const url = params.size ? `${TRANSCRIBE_URL}?${params.toString()}` : TRANSCRIBE_URL;
+      const res = await authFetch(url, {
         method: "POST",
-        headers: { "content-type": type },
+        headers: { "content-type": blob.type || "audio/wav" },
         body: blob,
       });
       if (!res.ok) return;
       const body: { text?: string } = await res.json();
       const text = (body.text ?? "").trim();
       if (!text) return;
-      // VAD doesn't have its own recognition stream to stop, so onSubmit is a no-op.
+      pcmLastTranscriptRef.current = text;
       handleConvoSegmentRef.current(text);
     } catch (err) {
       console.warn("[vad] transcribe failed", err);
@@ -692,45 +775,21 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   }, []);
 
   const onVadSpeechStart = useCallback(() => {
-    if (segRecorderRef.current?.state === "recording") return;
-    const stream = mediaStreamRef.current;
-    if (!stream) return;
     if (conversationPausedRef.current) return;
-    segChunksRef.current = [];
-    const mimeType = pickRecorderMimeType();
-    const recorder = mimeType
-      ? new MediaRecorder(stream, { mimeType })
-      : new MediaRecorder(stream);
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) segChunksRef.current.push(e.data);
-    };
-    recorder.onstop = () => {
-      const type = recorder.mimeType || "application/octet-stream";
-      const blob = new Blob(segChunksRef.current, { type });
-      segChunksRef.current = [];
-      segRecorderRef.current = null;
-      void processVadSegment(blob, type);
-    };
-    try {
-      recorder.start();
-      segRecorderRef.current = recorder;
-    } catch (err) {
-      console.warn("[vad] segment start failed", err);
-    }
-  }, [processVadSegment]);
+    // Anchor segment start at VAD trigger MINUS pre-roll, so the first phoneme
+    // (which VAD takes 50-100ms to detect) is preserved.
+    const sr = pcmSampleRateRef.current;
+    const preRoll = Math.floor((sr * VAD_PRE_ROLL_MS) / 1000);
+    pcmSegmentStartTotalRef.current = Math.max(0, pcmTotalRef.current - preRoll);
+  }, []);
 
   const onVadSpeechEnd = useCallback((tooShort: boolean) => {
-    const r = segRecorderRef.current;
-    if (!r) return;
-    if (tooShort) {
-      // discard: stop and drop chunks without sending
-      r.onstop = () => {
-        segChunksRef.current = [];
-        segRecorderRef.current = null;
-      };
-    }
-    try { if (r.state !== "inactive") r.stop(); } catch { /* ignore */ }
-  }, []);
+    if (tooShort) return; // <250ms speech — discard, no transcribe
+    const samples = sliceRing(pcmSegmentStartTotalRef.current, pcmTotalRef.current);
+    if (!samples || samples.length === 0) return;
+    const wav = encodeWav(samples, pcmSampleRateRef.current);
+    void processVadSegment(wav);
+  }, [encodeWav, processVadSegment, sliceRing]);
 
   const stopVadConvo = useCallback(() => {
     vadActiveRef.current = false;
@@ -738,14 +797,12 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       clearInterval(vadTimerRef.current);
       vadTimerRef.current = null;
     }
-    try {
-      if (segRecorderRef.current?.state === "recording") {
-        segRecorderRef.current.onstop = () => { segChunksRef.current = []; segRecorderRef.current = null; };
-        segRecorderRef.current.stop();
-      }
-    } catch { /* ignore */ }
-    segRecorderRef.current = null;
-    segChunksRef.current = [];
+    try { workletNodeRef.current?.disconnect(); } catch { /* ignore */ }
+    workletNodeRef.current = null;
+    pcmRingRef.current = null;
+    pcmWritePosRef.current = 0;
+    pcmTotalRef.current = 0;
+    pcmSegmentStartTotalRef.current = 0;
     vadInSpeechRef.current = false;
     vadCalibratedRef.current = false;
     vadAnalyserRef.current = null;
@@ -786,6 +843,52 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     }
     const ctx = new C();
     const source = ctx.createMediaStreamSource(stream);
+
+    // ---------- AudioWorklet PCM capture ----------
+    // Loads our inline processor, connects it to source, allocates a 30s
+    // ring buffer at the context's native sample rate (typ. 48kHz). All
+    // audio flowing through here is Float32 mono — VAD reads RMS via the
+    // Analyser branch (cheap), segmenting reads from the ring buffer.
+    const sampleRate = ctx.sampleRate;
+    pcmSampleRateRef.current = sampleRate;
+    const ringSize = sampleRate * VAD_RING_SECONDS;
+    pcmRingRef.current = new Float32Array(ringSize);
+    pcmWritePosRef.current = 0;
+    pcmTotalRef.current = 0;
+    try {
+      const blob = new Blob([PCM_PROCESSOR_CODE], { type: "application/javascript" });
+      const moduleUrl = URL.createObjectURL(blob);
+      await ctx.audioWorklet.addModule(moduleUrl);
+      URL.revokeObjectURL(moduleUrl);
+      const node = new AudioWorkletNode(ctx, "pcm-capture");
+      node.port.onmessage = (e: MessageEvent<Float32Array>) => {
+        const ring = pcmRingRef.current;
+        if (!ring) return;
+        const samples = e.data;
+        let pos = pcmWritePosRef.current;
+        for (let i = 0; i < samples.length; i++) {
+          ring[pos] = samples[i]!;
+          pos = (pos + 1) % ring.length;
+        }
+        pcmWritePosRef.current = pos;
+        pcmTotalRef.current += samples.length;
+      };
+      source.connect(node);
+      // Worklet must be in the audio graph to actually run. Connecting to a
+      // muted GainNode is safer than ctx.destination (no risk of feedback).
+      const sink = ctx.createGain();
+      sink.gain.value = 0;
+      node.connect(sink);
+      sink.connect(ctx.destination);
+      workletNodeRef.current = node;
+    } catch (err) {
+      console.warn("[vad] AudioWorklet setup failed; convo mode unavailable", err);
+      stream.getTracks().forEach((t) => t.stop());
+      ctx.close().catch(() => {});
+      return;
+    }
+
+    // ---------- VAD branch (RMS via Analyser) ----------
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
     source.connect(analyser);
@@ -812,6 +915,10 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       const rms = Math.sqrt(sum / buf.length);
       const now = Date.now();
 
+      // Initial fast calibration: take MAX of first 500ms as noise floor.
+      // Using max (not avg) is conservative — if user starts talking during
+      // calibration, the high RMS lifts the floor temporarily; the EWMA
+      // below corrects it within a second of true silence.
       if (!vadCalibratedRef.current) {
         vadNoiseFloorRef.current = Math.max(vadNoiseFloorRef.current, rms);
         if (now - vadCalibStartRef.current >= VAD_CALIBRATION_MS) {
@@ -822,6 +929,13 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
 
       const threshold = Math.max(vadNoiseFloorRef.current * 2.5, VAD_MIN_THRESHOLD);
       const isVoice = rms > threshold;
+
+      // EWMA noise floor: update during quiet, hold during speech. This
+      // self-corrects if calibration started while user was already talking.
+      if (!isVoice && !vadInSpeechRef.current) {
+        vadNoiseFloorRef.current =
+          vadNoiseFloorRef.current * (1 - VAD_NOISE_EWMA) + rms * VAD_NOISE_EWMA;
+      }
 
       if (isVoice) {
         vadLastVoiceRef.current = now;
@@ -836,7 +950,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
         onVadSpeechEnd(tooShort);
       }
     }, VAD_TICK_MS);
-  }, [onVadSpeechStart, onVadSpeechEnd]);
+  }, [onVadSpeechStart, onVadSpeechEnd, PCM_PROCESSOR_CODE]);
 
   const start = useCallback(() => {
     if (mode === "web-speech") {

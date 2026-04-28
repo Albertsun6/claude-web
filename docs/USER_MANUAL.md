@@ -193,12 +193,16 @@ iOS PWA 里也支持（VAD-driven，每段 ~1-2s 延迟）。
 对话模式下"发送"触发**直接绕过整理**——你已经决定了。
 
 ### 识别准确度
-四道防线层层叠加：
+六道防线层层叠加：
 
 1. **浏览器 DSP**：`getUserMedia` 启用 `echoCancellation` / `noiseSuppression` / `autoGainControl`，移动 / 嘈杂场景大幅改善
 2. **ffmpeg 滤波**：`highpass=f=80` 砍低频隆隆声 + `afftdn` 自适应去噪 + `dynaudnorm` 动态归一化音量
 3. **whisper `--prompt` 词表注入**：把 `Claude / TypeScript / Tailscale / Hono / chokidar / Edge TTS / 晓晓 …` 等专有名词作为 initial_prompt 传入，让 whisper 解码时"知道"这些词，专业词错字率显著降低。可通过 `WHISPER_PROMPT_EXTRA` env 追加自定义词
 4. **模型自动选优**：[`resolveWhisperModel`](packages/backend/src/routes/voice.ts) 在 `~/.whisper-models/` 中按 `large-v3.bin` → `large-v3-turbo.bin` → `large-v3-turbo-q5_0.bin` 顺序挑最准的；下载新模型即生效，无需改配置或重启
+5. **AudioWorklet PCM 环形缓冲 + 300ms 预录**（仅对话模式）：取代 per-segment 重启 MediaRecorder 的旧做法。整个对话期间一个 AudioWorklet 持续抓 PCM 到 30s 环形 buffer，VAD 触发"开始说话"时往前回溯 300ms 切段 → 编码为 16-bit WAV → 送 whisper。**彻底消除每次 segment 起始 50-200ms 的截断**（首词辅音/声调丢失的根本原因）
+6. **EWMA 自适应噪声基线**：每 50ms tick 在静默期慢慢更新基线（`vadNoiseFloor = 0.95 * old + 0.05 * rms`），不再依赖启动时那 500ms 的"假设安静"窗口；启动时若用户已经在说话，基线会在 1s 内自动校正
+
+附加：对话模式下每段转写完后，前端会把上一段文本（最多 200 字）作为 `prev` query 参数发回 backend，拼到 whisper `--prompt` 末尾，给跨 segment 的连贯性打补丁。
 
 可手动用 `WHISPER_MODEL` env 强制指定模型路径。
 

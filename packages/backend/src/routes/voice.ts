@@ -111,6 +111,10 @@ voiceRouter.post("/transcribe", async (c) => {
     : "bin";
 
   const lang = c.req.query("lang") ?? DEFAULT_LANG;
+  // Optional `prev` from convo mode — last segment's transcript. Appending it
+  // to whisper's --prompt gives the decoder context across utterances, big
+  // accuracy bump for long multi-segment turns.
+  const prevHint = c.req.query("prev")?.slice(0, 200) ?? "";
   const dir = await mkdtemp(path.join(tmpdir(), "voice-"));
   const inputPath = path.join(dir, `in.${ext}`);
   const wavPath = path.join(dir, "out.wav");
@@ -138,11 +142,14 @@ voiceRouter.post("/transcribe", async (c) => {
     // whisper-cli: -nt (no timestamps), -np (no progress), --prompt for vocab bias
     const model = resolveWhisperModel();
     const outPrefix = path.join(dir, "transcript");
+    const promptArg = prevHint
+      ? `${WHISPER_PROMPT}. Previously: ${prevHint}`
+      : WHISPER_PROMPT;
     const w = await run(WHISPER_BIN, [
       "-m", model,
       "-l", lang,
       "-nt", "-np",
-      "--prompt", WHISPER_PROMPT,
+      "--prompt", promptArg,
       "-otxt",
       "-of", outPrefix,
       wavPath,
