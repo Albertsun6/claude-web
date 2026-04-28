@@ -1,10 +1,17 @@
 # iOS Native v2 第一波（F1）实施计划
 
-> 待另一个 AI 评审，**评审通过后才动手**。范围：A1 + A2 + A6 + A7。
+> ✅ **评审已过，可以开工**。范围：A1 + A2 + A6 + A7。
 > 完成后 iOS app 从"能跑通"升级到"用着不痛苦"。
 >
 > 全部移植自 web 已有功能，**没有协议层改动**，backend 一行不动。
-> 工时合计估 4-5 天专注开发。
+> 评审后预算修正为 5-6 天。
+>
+> **评审修正（必须执行）**：
+> 1. A2 切项目时**清空 messages + reset sessionId**（不仅切 cwd）
+> 2. A1 transcript 解析**新建 TranscriptParser**，不复用 SDKMessage.parse
+> 3. A6 v1 **不做 tool_result → BashCard 关联**，独立 ToolResultCard 即可
+> 4. A6 必须新增 `ChatLine.spokenText` helper，TTS 只读 text 块
+> 5. A2 项目删除时如果删的是当前项目，要 fallback 到第一个 / 默认
 
 ## 共同前提
 

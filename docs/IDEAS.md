@@ -203,18 +203,18 @@ iOS 后台持续 mic 监听技术上可行（Web Audio + 简单能量检测 / TF
 
 ### A — 从 web 移植到 iOS 原生
 
-#### A1. 历史会话浏览（jsonl 解析）⭐⭐⭐
-看昨天 / 上周聊过啥，**点进去恢复继续**。后端已有 [`/api/sessions`](packages/backend/src/routes/sessions.ts) 接口，iOS 调一下渲染即可。
-- iOS 列表页：按 cwd 分组 → 最近 N 条 session preview
-- 点击 → setResumeSessionId → 跟 Claude 接着聊
-- **工时**: 1 天
+#### A1. 历史会话浏览（jsonl 解析）⭐⭐⭐ 🔧 部分完成 (F1c3)
+**底层就绪，UI 待补**。F1c3 已实现：[SessionsAPI](packages/ios-native/Sources/ClaudeWeb/SessionsAPI.swift) (list / transcript) + [TranscriptParser](packages/ios-native/Sources/ClaudeWeb/TranscriptParser.swift) + [`ProjectRegistry.openHistoricalSession()`](packages/ios-native/Sources/ClaudeWeb/ProjectRegistry.swift) 的 dedup 加载逻辑。还差：
+- 切换器项目分组下展开"历史会话"列表（拉 sessionsAPI.list）
+- 点击 → 弹"覆盖当前对话？"确认 → 加载 transcript 进 BackendClient
+- **剩余工时**: 半天（F1c5）
 
-#### A2. 项目列表 + 快速切换 ⭐⭐⭐
-当前 iOS 设置里手动改 cwd。改成：
-- 主屏顶部下拉 / sheet 切项目
-- 持久化最近 5 个项目
-- 不做完整管理（添加 / 删除走设置）
-- **工时**: 半天
+#### A2. 项目列表 + 快速切换 ⭐⭐⭐ ✅ 完成 (F1c2 + F1c3)
+做法跟初稿不同：升级到**项目-对话两级**模型，不只是切 cwd。
+- 服务器 `~/.claude-web/projects.json` 是项目注册表（跨设备）
+- iOS [ProjectRegistry](packages/ios-native/Sources/ClaudeWeb/ProjectRegistry.swift) 镜像 + 缓存
+- 顶部 chip 点击进切换器；按 cwd 分组（F1c4 升级成抽屉 UX）
+- 多对话并行不打断；每对话独立 sessionId / TTS cache
 
 #### A3. @file 自动补全 ⭐⭐
 输入 `@` 弹文件选择 sheet（fuzzy 搜索当前 cwd）。手机在输入文件路径时极痛苦，这个救命。
@@ -255,8 +255,8 @@ iOS 自带 PhotoPicker，手机端实际可用度比想象的高（截屏发给 
 - attachments 走现成的 `ImageAttachment` 协议
 - **工时**: 1 天
 
-#### A10. 多项目并行 run ⭐
-手机上同时跑两个项目 = UX 复杂度激增（要 tab 系统）。我建议**不做**。
+#### A10. 多项目并行 run ⭐ ✅ 完成 (F1c2)
+F1c2 升级了模型 —— 多对话并行（同 cwd 或不同 cwd 都行）。runId → conversationId 路由表保证消息不串；切对话不打断后台 turn；顶部 Seaidea 标题旁 badge 显示全局活跃数。
 
 #### A11. 工具结果智能折叠 ⭐
 长 stdout 默认折叠，长按展开。
