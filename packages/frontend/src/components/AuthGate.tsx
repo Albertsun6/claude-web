@@ -36,8 +36,12 @@ export function AuthGate() {
         setStatus("bad-token");
       }
     } catch (err) {
+      // Network failure (e.g. Mac unreachable from iOS app) — DON'T pop the
+      // token modal, that's a misleading dead end. The OfflineBanner / WS
+      // reconnect already surface the connectivity issue properly.
+      console.warn("[auth] probe failed, assuming no auth:", err);
       setError(err instanceof Error ? err.message : String(err));
-      setStatus("bad-token");
+      setStatus("ok");
     }
   };
 

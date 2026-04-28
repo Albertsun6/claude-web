@@ -18,7 +18,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             try AVAudioSession.sharedInstance().setCategory(
                 .playback,
                 mode: .spokenAudio,
-                options: [.duckOthers, .allowBluetooth, .allowBluetoothA2DP]
+                options: [.duckOthers, .allowBluetoothHFP, .allowBluetoothA2DP]
             )
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
