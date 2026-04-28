@@ -34,12 +34,12 @@ export function DirectoryPicker({
   const [newName, setNewName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // bootstrap to home if no initial
+  // Bootstrap to ~/Desktop if it exists, else home, else "/".
   useEffect(() => {
     if (current) return;
     let cancelled = false;
     fetchHome()
-      .then((h) => { if (!cancelled) setCurrent(h.home); })
+      .then((h) => { if (!cancelled) setCurrent(h.desktop ?? h.home); })
       .catch(() => { if (!cancelled) setCurrent("/"); });
     return () => { cancelled = true; };
   }, [current]);

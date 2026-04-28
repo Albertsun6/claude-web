@@ -34,9 +34,16 @@ function isInsideRoot(root: string, resolved: string): boolean {
 
 export const fsRouter = new Hono();
 
-fsRouter.get("/home", (c) =>
-  c.json({ home: process.env.HOME ?? "/", cwd: process.cwd() }),
-);
+fsRouter.get("/home", async (c) => {
+  const home = process.env.HOME ?? "/";
+  const desktopPath = path.join(home, "Desktop");
+  let desktop: string | undefined;
+  try {
+    const st = await fs.stat(desktopPath);
+    if (st.isDirectory()) desktop = desktopPath;
+  } catch { /* no Desktop on this user — leave undefined */ }
+  return c.json({ home, desktop, cwd: process.cwd() });
+});
 
 fsRouter.get("/tree", async (c) => {
   const root = c.req.query("root");

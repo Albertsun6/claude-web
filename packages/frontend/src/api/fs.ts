@@ -51,6 +51,8 @@ export function fetchFile(
 
 export interface FsHomeResponse {
   home: string;
+  /** Absolute path to ~/Desktop if it exists; undefined otherwise. */
+  desktop?: string;
   cwd: string;
 }
 
