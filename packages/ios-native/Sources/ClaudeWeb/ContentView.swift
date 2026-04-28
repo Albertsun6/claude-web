@@ -404,14 +404,19 @@ struct SettingsView: View {
                     .pickerStyle(.inline)
                     .labelsHidden()
                 }
-                Section("权限模式") {
+                Section {
                     Picker("权限模式", selection: $draftMode) {
                         Text("Plan（只读规划，最安全）").tag("plan")
                         Text("Default（每次工具问允许 / 拒绝）").tag("default")
                         Text("Accept Edits（自动允许编辑，Bash 仍问）").tag("acceptEdits")
+                        Text("Bypass（自动允许所有工具）⚠️").tag("bypassPermissions")
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
+                } header: {
+                    Text("权限模式")
+                } footer: {
+                    Text("Bypass 模式下 Claude 可以直接跑 Bash / Edit / Write 等任何工具，不再弹询问。**只在你完全信任当前 cwd + 会话内容时**用。")
                 }
                 Section("语音播报") {
                     Toggle("自动播报回答", isOn: $s.ttsEnabled)
