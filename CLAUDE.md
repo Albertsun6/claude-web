@@ -89,6 +89,28 @@ Override paths via env: `CLAUDE_CLI`, `WHISPER_BIN`, `WHISPER_MODEL`, `FFMPEG_BI
 5. **Stream-json output_format messages and saved jsonl entries differ slightly** — saved transcripts include extra fields like `parentUuid`, `isSidechain`. Use [normalizeJsonlEntry](packages/backend/src/routes/sessions.ts#L100) when reading from disk.
 6. **CLI permission flow goes via PreToolUse hook**, not `canUseTool` — the SDK's mechanism doesn't apply to subprocess-mode.
 
+## Maintenance reflex
+
+After completing any **user-visible** feature change (new UI, voice command,
+slash command, env var, persistence key, deploy detail, mobile UX, etc.), check
+whether [docs/USER_MANUAL.md](docs/USER_MANUAL.md) needs updating. The
+[update-manual](.claude/skills/update-manual/SKILL.md) skill handles this — it
+auto-triggers on phrases like "完成了 / 搞定 / ship 了 / 更新手册" or after a
+`feat:` commit.
+
+When in doubt: ask the user "要更新手册吗？" rather than assume.
+
+## Docs map
+
+| File | Purpose |
+|---|---|
+| `docs/USER_MANUAL.md` | **What the app does today** — user-facing reference |
+| `docs/IDEAS.md` | Deferred features (yes-but-not-now) |
+| `docs/IMPROVEMENTS.md` | Historic audit (mostly closed) |
+| `docs/MOBILE_VOICE.md` | Mobile voice strategy doc |
+| `docs/ENTERPRISE_INTERNAL.md` | Speculative multi-user migration plan |
+| `CLAUDE.md` (this file) | Architecture brief for new Claude sessions |
+
 ## Improvements / TODOs
 
 See [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) for the full punch list.
