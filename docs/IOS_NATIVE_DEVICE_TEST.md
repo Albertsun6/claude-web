@@ -69,13 +69,22 @@ cd /Users/yongqian/Desktop/claude-web/packages/ios-native
 
 ---
 
-## 2. 进入语音模式（M4）
+## 2. 进入语音模式 + Now Playing 卡片（**已挂起 / 平台约束**）
 
-- [ ] **2.1** 左上耳机图标点击 → 变绿 → app 状态依旧 idle
-- [ ] **2.2** 拉下控制中心 → 看到 **Claude Voice · 待命 · 按播放开始录音**（媒体卡片）
-- [ ] **2.3** 锁屏 → 锁屏出现 Now Playing 卡片，标题 "待命 · 按播放开始录音"
-- [ ] **2.4** 解锁回 app → 顶部依旧绿色耳机
-- [ ] **2.5** 再点耳机图标 → 退出语音模式 → 控制中心 / 锁屏 Now Playing 消失
+> ⚠️ **不强求 v1 通过**。实测在真机上即使 silent keepalive 在跑、audio
+> session 已激活、MPNowPlayingInfoCenter metadata 正确写入，iOS 仍可能
+> 不显示锁屏 / 控制中心的 Now Playing 卡片。这跟 Section 4 是同一类
+> 平台限制，跟 Apple Voice Memos 锁屏即停同理。
+>
+> **可用的部分仍在保留**：
+> - 后台保活（silent keepalive）让 WebSocket 不被挂起 ✅
+> - TTS 真在播放时锁屏 / 控制中心确实能看到卡片 ✅
+> - 前台语音模式 + 自动发送 ✅
+>
+> **不再投入**：
+> - 让 idle 语音模式 / 保活模式的 Now Playing 卡片稳定显示
+
+跳过到 Section 3（语音模式 + 前台行为）。
 
 ---
 
