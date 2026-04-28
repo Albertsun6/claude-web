@@ -184,11 +184,21 @@ iOS PWA 里也支持（VAD-driven，每段 ~1-2s 延迟）。
 每个指令有不同提示音（升 / 降 / 三短）。
 
 ### 整理（自动消除"嗯/啊"）
-**☑ 整理** 勾选（默认开） → 转写后用 Haiku 清理填充词、合并断句、修同音错字。
+**☑ 整理** 勾选（默认开） → 转写后用 Haiku 清理填充词、合并断句、修同音错字、把项目专有名词词表中的词从中文谐音/错字纠回正字（如"泰尔斯凯" → `Tailscale`）。
 
 短文本（≤ 12 字）或没填充词的句子**智能跳过**整理，省 token。
 
 对话模式下"发送"触发**直接绕过整理**——你已经决定了。
+
+### 识别准确度
+四道防线层层叠加：
+
+1. **浏览器 DSP**：`getUserMedia` 启用 `echoCancellation` / `noiseSuppression` / `autoGainControl`，移动 / 嘈杂场景大幅改善
+2. **ffmpeg 滤波**：`highpass=f=80` 砍低频隆隆声 + `afftdn` 自适应去噪 + `dynaudnorm` 动态归一化音量
+3. **whisper `--prompt` 词表注入**：把 `Claude / TypeScript / Tailscale / Hono / chokidar / Edge TTS / 晓晓 …` 等专有名词作为 initial_prompt 传入，让 whisper 解码时"知道"这些词，专业词错字率显著降低。可通过 `WHISPER_PROMPT_EXTRA` env 追加自定义词
+4. **模型自动选优**：[`resolveWhisperModel`](packages/backend/src/routes/voice.ts) 在 `~/.whisper-models/` 中按 `large-v3.bin` → `large-v3-turbo.bin` → `large-v3-turbo-q5_0.bin` 顺序挑最准的；下载新模型即生效，无需改配置或重启
+
+可手动用 `WHISPER_MODEL` env 强制指定模型路径。
 
 ### 音频设备选择
 VoiceBar 麦克风按钮上方有两个下拉 + 刷新 ↻：

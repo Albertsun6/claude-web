@@ -8,16 +8,52 @@
 import { Hono } from "hono";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import os from "node:os";
 
 const WHISPER_BIN = process.env.WHISPER_BIN ?? "whisper-cli";
-const WHISPER_MODEL =
-  process.env.WHISPER_MODEL ??
-  path.join(os.homedir(), ".whisper-models", "ggml-large-v3-turbo-q5_0.bin");
 const FFMPEG_BIN = process.env.FFMPEG_BIN ?? "ffmpeg";
 const DEFAULT_LANG = process.env.WHISPER_LANG ?? "zh";
+
+// Pick the best whisper model present, preferring accuracy over size.
+// Order: full → turbo → quantized turbo. Override via WHISPER_MODEL env.
+function resolveWhisperModel(): string {
+  if (process.env.WHISPER_MODEL) return process.env.WHISPER_MODEL;
+  const dir = path.join(os.homedir(), ".whisper-models");
+  const candidates = [
+    "ggml-large-v3.bin",
+    "ggml-large-v3-turbo.bin",
+    "ggml-large-v3-turbo-q5_0.bin",
+  ];
+  for (const f of candidates) {
+    const p = path.join(dir, f);
+    if (existsSync(p)) return p;
+  }
+  // fallback to the historical default even if missing — error surfaces at runtime
+  return path.join(dir, "ggml-large-v3-turbo-q5_0.bin");
+}
+
+// Project / domain vocabulary fed into whisper as initial_prompt — biases the
+// decoder toward correct spelling of frequently-mistranscribed proper nouns.
+// Whisper truncates this to ~244 tokens; keep it tight and front-load the
+// most-confused terms. Users can append via WHISPER_PROMPT_EXTRA env.
+const PROJECT_VOCAB = [
+  "Claude", "Claude Code", "Anthropic", "Sonnet", "Opus", "Haiku",
+  "TypeScript", "JavaScript", "React", "Vite", "Hono", "Zustand", "Tailwind",
+  "PWA", "WebSocket", "Tailscale", "launchd", "chokidar", "whisper", "ffmpeg",
+  "pnpm", "monorepo", "frontend", "backend", "subprocess", "stream-json",
+  "stdin", "stdout", "subscribe", "unsubscribe", "debounce", "throttle",
+  "GitHub", "commit", "diff", "branch", "merge", "pull request", "TODO",
+  "Edge TTS", "晓晓", "VAD", "STT", "OAuth", "Bearer", "localStorage",
+  "AirPods", "蓝牙", "麦克风", "扬声器",
+].join(", ");
+
+const WHISPER_PROMPT = (() => {
+  const extra = process.env.WHISPER_PROMPT_EXTRA?.trim();
+  return extra ? `${PROJECT_VOCAB}, ${extra}` : PROJECT_VOCAB;
+})();
 
 interface RunResult {
   stdout: string;
@@ -82,10 +118,15 @@ voiceRouter.post("/transcribe", async (c) => {
   try {
     await writeFile(inputPath, audioBytes);
 
-    // transcode to 16kHz mono PCM WAV (whisper's native input)
+    // transcode to 16kHz mono PCM WAV (whisper's native input).
+    // Audio filter chain:
+    //   highpass=f=80   — cut sub-80Hz rumble (HVAC, footsteps, mic handling)
+    //   afftdn=nf=-20   — adaptive denoise; -20dB noise floor is gentle, won't eat words
+    //   dynaudnorm      — equalize loudness across the clip; helps quiet talkers
     const ff = await run(FFMPEG_BIN, [
       "-y", "-loglevel", "error",
       "-i", inputPath,
+      "-af", "highpass=f=80,afftdn=nf=-20,dynaudnorm",
       "-ar", "16000", "-ac", "1",
       "-c:a", "pcm_s16le",
       wavPath,
@@ -94,12 +135,14 @@ voiceRouter.post("/transcribe", async (c) => {
       return c.json({ error: `ffmpeg failed: ${ff.stderr.slice(0, 300)}` }, 500);
     }
 
-    // whisper-cli with -nt (no timestamps), -np (no progress), -of for output prefix
+    // whisper-cli: -nt (no timestamps), -np (no progress), --prompt for vocab bias
+    const model = resolveWhisperModel();
     const outPrefix = path.join(dir, "transcript");
     const w = await run(WHISPER_BIN, [
-      "-m", WHISPER_MODEL,
+      "-m", model,
       "-l", lang,
       "-nt", "-np",
+      "--prompt", WHISPER_PROMPT,
       "-otxt",
       "-of", outPrefix,
       wavPath,
@@ -131,21 +174,25 @@ voiceRouter.post("/transcribe", async (c) => {
 
 voiceRouter.get("/info", (c) =>
   c.json({
-    model: WHISPER_MODEL,
+    model: resolveWhisperModel(),
     lang: DEFAULT_LANG,
+    promptVocabSize: WHISPER_PROMPT.length,
     available: true,
   }),
 );
 
-const CLEANUP_SYSTEM_PROMPT = `你是一个语音输入整理助手。用户通过麦克风口述了一段中文，下面是 STT 转写后的原始文字（可能有口语化、错字、重复、嗯啊等填充词）。请把它整理成一段清晰、通顺、无口语填充词的请求或描述。
+const CLEANUP_SYSTEM_PROMPT = `你是一个语音输入整理助手。用户通过麦克风口述了一段中文（可能夹英文术语），下面是 STT 转写后的原始文字（可能有口语化、错字、重复、嗯啊等填充词，以及把英文专有名词写成同音中文的情况）。请把它整理成一段清晰、通顺、无口语填充词的请求或描述。
 
 要求：
 - 保持原意，不要添加用户没说的内容
 - 去掉嗯/啊/那个/就是 等填充词
 - 修复明显的同音错字（联系上下文判断）
+- **谐音纠错**：如果听起来像下面词表里的某个词，就替换成词表里的拼写（中文转英文、错别字 → 正字）
 - 合并被语音识别打散的短句
 - 不要回答用户的请求，只整理文字
-- 直接输出整理后的文字，不要任何解释、引号或前缀`;
+- 直接输出整理后的文字，不要任何解释、引号或前缀
+
+项目专有名词词表（优先匹配）：${PROJECT_VOCAB}`;
 
 const CLAUDE_BIN = process.env.CLAUDE_CLI ?? "claude";
 

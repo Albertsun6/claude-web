@@ -528,9 +528,16 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioInputIdRef.current
-          ? { deviceId: { exact: audioInputIdRef.current } }
-          : true,
+        audio: {
+          ...(audioInputIdRef.current
+            ? { deviceId: { exact: audioInputIdRef.current } }
+            : {}),
+          // Browser-side DSP — big quality bump on mobile + noisy environments.
+          // Browsers ignore unsupported keys, so this is safe across Chrome/Safari/iOS.
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
     } catch (err) {
       console.warn("[voice] mic permission denied", err);
@@ -754,9 +761,16 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioInputIdRef.current
-          ? { deviceId: { exact: audioInputIdRef.current } }
-          : true,
+        audio: {
+          ...(audioInputIdRef.current
+            ? { deviceId: { exact: audioInputIdRef.current } }
+            : {}),
+          // Browser-side DSP — big quality bump on mobile + noisy environments.
+          // Browsers ignore unsupported keys, so this is safe across Chrome/Safari/iOS.
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
     } catch (err) {
       console.warn("[vad] mic denied", err);
