@@ -7,6 +7,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { fetchFile } from "../api/fs";
 import { authFetch } from "../auth";
+import { subscribeFsChanges } from "../ws-client";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 
@@ -44,6 +45,26 @@ export function FileViewer({ relPath }: FileViewerProps) {
   const [size, setSize] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // bump on fs_changed for the current file → forces refetch (and propagates to CodeViewer)
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (!cwd || !relPath) return;
+    let lastFiredAt = 0;
+    const unsub = subscribeFsChanges(cwd, ({ change, relPath: changed }) => {
+      if (changed !== relPath) return;
+      if (change === "unlink") {
+        setError("文件已被删除");
+        return;
+      }
+      // throttle to ~1 reload/sec for the same file
+      const now = Date.now();
+      if (now - lastFiredAt < 1000) return;
+      lastFiredAt = now;
+      setReloadKey((k) => k + 1);
+    });
+    return unsub;
+  }, [cwd, relPath]);
 
   const ext = relPath ? extOf(relPath) : "";
   const kind = useMemo<"image" | "video" | "audio" | "pdf" | "md" | "code" | "none">(() => {
@@ -97,7 +118,7 @@ export function FileViewer({ relPath }: FileViewerProps) {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relPath, cwd, kind]);
+  }, [relPath, cwd, kind, reloadKey]);
 
   if (!relPath) {
     return (
@@ -168,7 +189,7 @@ export function FileViewer({ relPath }: FileViewerProps) {
   // code path: hand off to CodeViewer (it does its own fetch + lang-pack lazy load)
   return (
     <Suspense fallback={<div className="file-viewer-empty">加载编辑器…</div>}>
-      <CodeViewer relPath={relPath} />
+      <CodeViewer relPath={relPath} reloadKey={reloadKey} />
     </Suspense>
   );
 }

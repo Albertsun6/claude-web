@@ -7,6 +7,8 @@ import { fetchFile } from "../api/fs";
 
 interface CodeViewerProps {
   relPath: string | null;
+  /** Bumped by parent when fs_changed fires for this file — forces refetch. */
+  reloadKey?: number;
 }
 
 interface FileState {
@@ -72,7 +74,7 @@ function formatSize(bytes: number | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export function CodeViewer({ relPath }: CodeViewerProps) {
+export function CodeViewer({ relPath, reloadKey = 0 }: CodeViewerProps) {
   const cwd = useStore((s) => s.activeCwd ?? "");
   const [state, setState] = useState<FileState>({ loading: false });
   const [langExt, setLangExt] = useState<Extension | null>(null);
@@ -115,7 +117,7 @@ export function CodeViewer({ relPath }: CodeViewerProps) {
     return () => {
       cancelled = true;
     };
-  }, [cwd, relPath]);
+  }, [cwd, relPath, reloadKey]);
 
   if (!relPath) {
     return (

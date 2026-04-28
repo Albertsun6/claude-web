@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { runSession } from "./cli-runner.js";
+import { subscribeFs } from "./fs-watcher.js";
 import { fsRouter } from "./routes/fs.js";
 import { gitRouter } from "./routes/git.js";
 import { voiceRouter } from "./routes/voice.js";
@@ -215,6 +216,9 @@ wss.on("connection", (ws) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
   };
 
+  // Per-connection fs watch subscriptions: cwd → unsubscribe.
+  const fsSubs = new Map<string, () => void>();
+
   ws.on("message", async (raw) => {
     let msg: ClientMessage;
     try {
@@ -244,6 +248,27 @@ wss.on("connection", (ws) => {
         runs.get(msg.runId)?.abort.abort();
       } else {
         for (const h of runs.values()) h.abort.abort();
+      }
+      return;
+    }
+
+    if (msg.type === "fs_subscribe") {
+      const cwdErr = verifyAllowedPath(msg.cwd);
+      if (cwdErr) {
+        send({ type: "error", error: cwdErr });
+        return;
+      }
+      if (fsSubs.has(msg.cwd)) return; // already subscribed
+      const unsub = subscribeFs(msg.cwd, send);
+      fsSubs.set(msg.cwd, unsub);
+      return;
+    }
+
+    if (msg.type === "fs_unsubscribe") {
+      const unsub = fsSubs.get(msg.cwd);
+      if (unsub) {
+        unsub();
+        fsSubs.delete(msg.cwd);
       }
       return;
     }
@@ -313,6 +338,8 @@ wss.on("connection", (ws) => {
       h.unregisterPermission();
     }
     runs.clear();
+    for (const unsub of fsSubs.values()) unsub();
+    fsSubs.clear();
     allConnections.delete(conn);
   });
 });

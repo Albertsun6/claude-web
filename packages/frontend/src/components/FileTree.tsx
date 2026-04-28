@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../store";
 import { fetchTree, type FsTreeEntry } from "../api/fs";
+import { subscribeFsChanges } from "../ws-client";
 
 interface FileTreeProps {
   onOpenFile: (relPath: string) => void;
@@ -17,6 +18,9 @@ export function FileTree({ onOpenFile, selectedRelPath }: FileTreeProps) {
   const cwd = useStore((s) => s.activeCwd ?? "");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [dirCache, setDirCache] = useState<Record<string, DirState>>({});
+  // ref mirror so fs-change listener can check current cache without re-subscribing
+  const dirCacheRef = useRef<Record<string, DirState>>({});
+  useEffect(() => { dirCacheRef.current = dirCache; }, [dirCache]);
 
   const loadDir = useCallback(
     async (relPath: string) => {
@@ -49,6 +53,38 @@ export function FileTree({ onOpenFile, selectedRelPath }: FileTreeProps) {
     if (cwd) {
       void loadDir("");
     }
+  }, [cwd, loadDir]);
+
+  // Subscribe to fs_changed events; reload only the affected parent dir if it
+  // is currently visible in the cache. Coalesce bursts so we don't refetch
+  // 50× when a build emits a wave of writes.
+  const reloadTimers = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!cwd) return;
+    const scheduleReload = (parentRel: string) => {
+      const cur = reloadTimers.current[parentRel];
+      if (cur) window.clearTimeout(cur);
+      reloadTimers.current[parentRel] = window.setTimeout(() => {
+        delete reloadTimers.current[parentRel];
+        void loadDir(parentRel);
+      }, 250);
+    };
+    const unsub = subscribeFsChanges(cwd, ({ relPath }) => {
+      // Find every cached dir whose listing this change might invalidate.
+      // Generally that's the parent dir of relPath. Only refetch if we have
+      // it cached (i.e., the user has expanded it).
+      const idx = relPath.lastIndexOf("/");
+      const parentRel = idx === -1 ? "" : relPath.slice(0, idx);
+      if (parentRel in dirCacheRef.current) scheduleReload(parentRel);
+    });
+    return () => {
+      unsub();
+      for (const t of Object.values(reloadTimers.current)) window.clearTimeout(t);
+      reloadTimers.current = {};
+    };
+    // dirCache deliberately excluded: closure reads the latest via setDirCache
+    // updater; including it would re-subscribe on every entry change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cwd, loadDir]);
 
   const toggleDir = useCallback(

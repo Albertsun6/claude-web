@@ -24,6 +24,45 @@ export function setVoiceSink(sink: VoiceSink | undefined): void {
 // runId → cwd mapping (one in-flight prompt per cwd; runIds are unique)
 const runToCwd = new Map<string, string>();
 
+// fs_changed pub/sub — components subscribe to a cwd's tree/file events
+type FsChangeEvent = {
+  cwd: string;
+  change: "add" | "change" | "unlink" | "addDir" | "unlinkDir";
+  relPath: string;
+};
+type FsListener = (ev: FsChangeEvent) => void;
+const fsListeners = new Map<string, Set<FsListener>>();
+// cwds we've asked the backend to watch — re-sent after each reconnect
+const fsSubscribedCwds = new Set<string>();
+
+export function subscribeFsChanges(cwd: string, listener: FsListener): () => void {
+  let set = fsListeners.get(cwd);
+  if (!set) {
+    set = new Set();
+    fsListeners.set(cwd, set);
+  }
+  set.add(listener);
+  // Ensure backend is watching.
+  if (!fsSubscribedCwds.has(cwd)) {
+    fsSubscribedCwds.add(cwd);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      send({ type: "fs_subscribe", cwd });
+    }
+  }
+  return () => {
+    const cur = fsListeners.get(cwd);
+    if (!cur) return;
+    cur.delete(listener);
+    if (cur.size === 0) {
+      fsListeners.delete(cwd);
+      fsSubscribedCwds.delete(cwd);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        send({ type: "fs_unsubscribe", cwd });
+      }
+    }
+  };
+}
+
 function genRunId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -36,6 +75,10 @@ export function connect(): void {
   ws.onopen = () => {
     console.log("[ws] connected");
     useStore.getState().setConnected(true);
+    // Re-subscribe any fs watches the UI still cares about.
+    for (const cwd of fsSubscribedCwds) {
+      send({ type: "fs_subscribe", cwd });
+    }
   };
 
   ws.onclose = () => {
@@ -137,6 +180,16 @@ function handleServerMessage(msg: ServerMessage): void {
     const cwd = msg.runId ? runToCwd.get(msg.runId) : undefined;
     if (cwd) {
       store.appendMessage(cwd, { type: "_error", error: msg.error, _runId: msg.runId });
+    }
+    return;
+  }
+
+  if (msg.type === "fs_changed") {
+    const set = fsListeners.get(msg.cwd);
+    if (set) {
+      for (const fn of set) {
+        try { fn({ cwd: msg.cwd, change: msg.change, relPath: msg.relPath }); } catch { /* ignore */ }
+      }
     }
     return;
   }

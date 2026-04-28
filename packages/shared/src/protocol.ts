@@ -35,7 +35,9 @@ export type ClientMessage =
       // Optional: if supplied, backend routes O(1) instead of scanning runs.
       runId?: string;
     }
-  | { type: "interrupt"; runId?: string };
+  | { type: "interrupt"; runId?: string }
+  | { type: "fs_subscribe"; cwd: string }
+  | { type: "fs_unsubscribe"; cwd: string };
 
 export type ServerMessage =
   | { type: "sdk_message"; runId: string; message: unknown }
@@ -57,4 +59,10 @@ export type ServerMessage =
       type: "session_ended";
       runId: string;
       reason: "completed" | "interrupted" | "error";
+    }
+  | {
+      type: "fs_changed";
+      cwd: string;
+      change: "add" | "change" | "unlink" | "addDir" | "unlinkDir";
+      relPath: string;
     };
