@@ -16,6 +16,7 @@
 		4AA49DDD76AE150CB43E459F /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BC150255A000C4B594FB34 /* Telemetry.swift */; };
 		57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA416505AC735C06A084E7EE /* ContentView.swift */; };
 		69F0714A317BB99738DC18A9 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C189285FD2BC25E599008F0 /* ChatListView.swift */; };
+		6AD512C6C3EBFF3A522035BF /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7869FC7E7224F973A25D5A07 /* ConversationModels.swift */; };
 		6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */; };
 		9C5CCC80588E51B11C14AA5D /* TranscriptParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13FDDA6FDAA0AB0FB743114 /* TranscriptParser.swift */; };
 		9DAEEFD7C4A2F91D7444BCD0 /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 283735CE8528E94F44599D41 /* TTSPlayer.swift */; };
@@ -48,6 +49,7 @@
 		5CF31E552D528619F13A5B40 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		691A5D95478C1BEA6C41D851 /* ToolCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolCards.swift; sourceTree = "<group>"; };
 		763A49693E0CE52A2C691B3C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7869FC7E7224F973A25D5A07 /* ConversationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModels.swift; sourceTree = "<group>"; };
 		7CAC5820B96A0B62BECEA82D /* ClaudeWeb.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClaudeWeb.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E1FACCED35C3A770740F004 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
 		989ACA299187F4EE9220555C /* FsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsAPI.swift; sourceTree = "<group>"; };
@@ -88,6 +90,7 @@
 		3BE25D6B07CC3925258BCA3F /* ClaudeWeb */ = {
 			isa = PBXGroup;
 			children = (
+				F2E2E57C82386E7E0BADE981 /* Models */,
 				6D9E9D6C8B524E849E6C129F /* Views */,
 				9AF5FF381485944DDD277DA6 /* Assets.xcassets */,
 				4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */,
@@ -157,6 +160,14 @@
 				3BE25D6B07CC3925258BCA3F /* ClaudeWeb */,
 				A0D0852916E74685EF8CFADB /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		F2E2E57C82386E7E0BADE981 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				7869FC7E7224F973A25D5A07 /* ConversationModels.swift */,
+			);
+			path = Models;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -239,6 +250,7 @@
 				69F0714A317BB99738DC18A9 /* ChatListView.swift in Sources */,
 				DA75273976369895263A106F /* ClaudeWebApp.swift in Sources */,
 				57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */,
+				6AD512C6C3EBFF3A522035BF /* ConversationModels.swift in Sources */,
 				A5117A31C889867986B4E998 /* DirectoryPicker.swift in Sources */,
 				F4E960AF9B256452B1E59C84 /* DrawerContent.swift in Sources */,
 				F0336354BB84D5D2A5362A95 /* FsAPI.swift in Sources */,
