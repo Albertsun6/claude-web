@@ -98,6 +98,21 @@ function AppInner() {
     return () => setVoiceSink(undefined);
   }, [voice.feedAssistantChunk, voice.flushAssistantBuffer, voice.resumeConversation]);
 
+  // Mirror live convo transcript into the active project's voiceDraft so the
+  // input box shows it in real time. Cleared when convo stops or after submit.
+  useEffect(() => {
+    if (!session) return;
+    if (!voice.conversationMode) return;
+    const live = voice.liveTranscript;
+    if (live && session.voiceDraft?.status !== "pending" && session.voiceDraft?.status !== "ready") {
+      patchProject(session.cwd, {
+        voiceDraft: { original: live, cleaned: live, status: "live" },
+      });
+    } else if (!live && session.voiceDraft?.status === "live") {
+      patchProject(session.cwd, { voiceDraft: undefined });
+    }
+  }, [voice.liveTranscript, voice.conversationMode, session?.cwd]);
+
   // visualViewport: keep input above mobile keyboard
   useEffect(() => {
     const vv = window.visualViewport;
@@ -118,6 +133,13 @@ function AppInner() {
   const handleVoiceTranscript = async (text: string) => {
     voice.cancelSpeak();
     if (!session) return;
+    // In conversation mode, "发送" is the explicit submit gesture — don't make
+    // the user click again. Bypass cleanup so the prompt fires immediately.
+    if (voice.conversationMode) {
+      patchProject(session.cwd, { voiceDraft: undefined });
+      sendPrompt(text);
+      return;
+    }
     if (!cleanupEnabled) {
       sendPrompt(text);
       return;

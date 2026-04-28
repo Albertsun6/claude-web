@@ -84,6 +84,8 @@ export interface UseVoiceReturn {
   // conversation mode: continuous listen, "发送" trigger submits, auto-restart after each turn
   conversationMode: boolean;
   setConversationMode: (b: boolean) => void;
+  /** Live transcript while in convo mode: convoBuf + interim, for showing in input. */
+  liveTranscript: string;
   /** Re-arm continuous mic after assistant turn ends (called by App on session_ended). */
   resumeConversation: () => void;
 }
@@ -190,9 +192,24 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     try { localStorage.setItem(SPEAK_STYLE_KEY, s); } catch { /* ignore */ }
     setSpeakStyleState(s);
   }, []);
+  // declared early; assigned inside the closure further below so we can call
+  // start()/stop() safely without circular hoisting headaches
+  const startRef = useRef<() => void>(() => {});
+  const stopRef = useRef<() => void>(() => {});
+
   const setConversationMode = useCallback((b: boolean) => {
     try { localStorage.setItem(CONVO_KEY, b ? "1" : "0"); } catch { /* ignore */ }
+    conversationModeRef.current = b;
     setConversationModeState(b);
+    // Auto start/stop the mic so user doesn't have to tap.
+    if (b) {
+      // small delay so the new mode flag propagates into ensureRecognition.continuous
+      setTimeout(() => startRef.current(), 0);
+    } else {
+      convoBufRef.current = "";
+      setLiveTranscript("");
+      stopRef.current();
+    }
   }, []);
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
@@ -255,6 +272,8 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   // when user just submitted via trigger, suppress auto-restart in onend until
   // session_ended fires and resumeAfterTurn() is called
   const conversationPausedRef = useRef<boolean>(false);
+  // live = buffer + current interim, exposed for the input box during convo mode
+  const [liveTranscript, setLiveTranscript] = useState("");
 
   // construct recognition lazily
   const ensureRecognition = useCallback((): ISpeechRecognition | null => {
@@ -274,7 +293,9 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     rec.onstart = () => {
       setIsRecording(true);
       setInterimTranscript("");
-      convoBufRef.current = "";
+      // keep convoBuf across silences within the same convo session — only reset on submit
+      if (!conversationModeRef.current) convoBufRef.current = "";
+      if (conversationModeRef.current) setLiveTranscript(convoBufRef.current);
     };
     rec.onend = () => {
       setIsRecording(false);
@@ -305,17 +326,23 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
         else interim += alt.transcript;
       }
       if (interim) setInterimTranscript(interim);
+      // live = buffer + current interim, for displaying in the input
+      if (conversationModeRef.current) {
+        setLiveTranscript((convoBufRef.current + " " + interim).trim());
+      }
       if (finalText) {
         setFinalTranscript(finalText);
         setInterimTranscript("");
 
         if (conversationModeRef.current) {
           convoBufRef.current = (convoBufRef.current + " " + finalText).trim();
+          setLiveTranscript(convoBufRef.current);
           // submit if the cumulative buffer ends with a trigger word
           const m = TRIGGER_RE.exec(convoBufRef.current);
           if (m) {
             const stripped = convoBufRef.current.slice(0, m.index).trim();
             convoBufRef.current = "";
+            setLiveTranscript("");
             if (stripped) finalCbRef.current?.(stripped);
             // pause mic until next turn ends; restart will be triggered by flushAssistantBuffer
             try { rec.stop(); } catch { /* ignore */ }
@@ -418,7 +445,10 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       // In convo mode keep listening across silences.
       rec.continuous = !!conversationModeRef.current;
       conversationPausedRef.current = false;
-      convoBufRef.current = "";
+      if (!conversationModeRef.current) {
+        convoBufRef.current = "";
+        setLiveTranscript("");
+      }
       try {
         rec.start();
       } catch (err) {
@@ -428,6 +458,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       void startRemote();
     }
   }, [mode, ensureRecognition, startRemote]);
+  useEffect(() => { startRef.current = start; }, [start]);
 
   const stop = useCallback(() => {
     if (mode === "web-speech") {
@@ -442,6 +473,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       stopRemote();
     }
   }, [mode, stopRemote]);
+  useEffect(() => { stopRef.current = stop; }, [stop]);
 
   const onFinal = useCallback((cb: (text: string) => void) => {
     finalCbRef.current = cb;
@@ -645,6 +677,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     setSpeakStyle,
     conversationMode,
     setConversationMode,
+    liveTranscript,
     resumeConversation,
   };
 }

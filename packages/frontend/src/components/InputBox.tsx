@@ -381,7 +381,7 @@ export function InputBox() {
           ))}
         </div>
       )}
-      {voiceDraft && (
+      {voiceDraft && voiceDraft.status !== "live" && (
         <div className={`voice-draft-bar voice-draft-${voiceDraft.status}`}>
           <div className="voice-draft-tag">
             {voiceDraft.status === "pending" && "整理中…"}
@@ -394,6 +394,13 @@ export function InputBox() {
           <button type="button" className="secondary voice-draft-discard" onClick={discard} title="丢弃">
             ✕
           </button>
+        </div>
+      )}
+      {voiceDraft?.status === "live" && (
+        <div className="voice-draft-bar voice-draft-live">
+          <div className="voice-draft-tag">
+            <span className="recording-dot" /> 录音中 · 说"发送"提交
+          </div>
         </div>
       )}
       {showAt && filteredFiles.length > 0 && (

@@ -350,6 +350,20 @@ button.danger { background: var(--danger); color: white; }
 .voice-draft-pending { border-left: 3px solid var(--accent); }
 .voice-draft-ready { border-left: 3px solid var(--success); }
 .voice-draft-failed { border-left: 3px solid var(--danger); }
+.voice-draft-live { border-left: 3px solid var(--danger); background: rgba(248, 113, 113, 0.05); }
+.recording-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  margin-right: 6px;
+  vertical-align: middle;
+  animation: rec-pulse 1.1s ease-in-out infinite;
+}
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
 .voice-draft-tag { color: var(--text); font-weight: 600; white-space: nowrap; }
 .voice-draft-original {
   flex: 1;

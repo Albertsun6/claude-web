@@ -21,7 +21,7 @@ export interface Project {
 export interface VoiceDraft {
   original: string;
   cleaned: string;
-  status: "pending" | "ready" | "failed";
+  status: "live" | "pending" | "ready" | "failed";
 }
 
 export interface UsageStats {
