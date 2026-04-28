@@ -82,6 +82,10 @@ function AppInner() {
   const rightbarWidth = useStore((s) => s.rightbarWidth);
   const setSidebarWidth = useStore((s) => s.setSidebarWidth);
   const setRightbarWidth = useStore((s) => s.setRightbarWidth);
+  const sidebarHidden = useStore((s) => s.sidebarHidden);
+  const rightbarHidden = useStore((s) => s.rightbarHidden);
+  const setSidebarHidden = useStore((s) => s.setSidebarHidden);
+  const setRightbarHidden = useStore((s) => s.setRightbarHidden);
   const rightTab = useStore((s) => s.rightTab);
   const setRightTab = useStore((s) => s.setRightTab);
   const [drawer, setDrawer] = useState<DrawerSide>(null);
@@ -253,9 +257,15 @@ function AppInner() {
     </div>
   );
 
+  const appClass = [
+    "app",
+    sidebarHidden ? "app-sidebar-hidden" : "",
+    rightbarHidden ? "app-rightbar-hidden" : "",
+  ].filter(Boolean).join(" ");
+
   return (
     <div
-      className="app"
+      className={appClass}
       style={{
         ["--sidebar-w" as any]: `${sidebarWidth}px`,
         ["--rightbar-w" as any]: `${rightbarWidth}px`,
@@ -271,7 +281,18 @@ function AppInner() {
         </button>
       </div>
 
-      <aside className="sidebar">{sidebar}</aside>
+      <aside className="sidebar">
+        <button
+          type="button"
+          className="panel-collapse-btn panel-collapse-left"
+          onClick={() => setSidebarHidden(true)}
+          aria-label="隐藏左侧栏"
+          title="隐藏左侧栏"
+        >
+          ◀
+        </button>
+        {sidebar}
+      </aside>
       <Resizer side="left" initial={sidebarWidth} min={220} max={520} onChange={setSidebarWidth} />
 
       <main className="main">
@@ -284,7 +305,41 @@ function AppInner() {
       </main>
 
       <Resizer side="right" initial={rightbarWidth} min={240} max={720} onChange={setRightbarWidth} />
-      <aside className="rightbar">{rightPanel}</aside>
+      <aside className="rightbar">
+        <button
+          type="button"
+          className="panel-collapse-btn panel-collapse-right"
+          onClick={() => setRightbarHidden(true)}
+          aria-label="隐藏右侧栏"
+          title="隐藏右侧栏"
+        >
+          ▶
+        </button>
+        {rightPanel}
+      </aside>
+
+      {sidebarHidden && (
+        <button
+          type="button"
+          className="panel-reveal panel-reveal-left"
+          onClick={() => setSidebarHidden(false)}
+          aria-label="显示左侧栏"
+          title="显示左侧栏"
+        >
+          ▶
+        </button>
+      )}
+      {rightbarHidden && (
+        <button
+          type="button"
+          className="panel-reveal panel-reveal-right"
+          onClick={() => setRightbarHidden(false)}
+          aria-label="显示右侧栏"
+          title="显示右侧栏"
+        >
+          ◀
+        </button>
+      )}
 
       {drawer && (
         <div className="drawer-backdrop" onClick={() => setDrawer(null)}>

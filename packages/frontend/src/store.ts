@@ -120,6 +120,11 @@ interface AppState {
   rightbarWidth: number;
   setSidebarWidth: (w: number) => void;
   setRightbarWidth: (w: number) => void;
+  // collapse / hide panels — persisted in same layout blob
+  sidebarHidden: boolean;
+  rightbarHidden: boolean;
+  setSidebarHidden: (b: boolean) => void;
+  setRightbarHidden: (b: boolean) => void;
 
   // which right-panel tab (files / git)
   rightTab: "files" | "git";
@@ -163,7 +168,12 @@ const persistedOpen: string[] = (() => {
 const persistedAllowedTools: Record<string, string[]> = (() => {
   try { return JSON.parse(localStorage.getItem(LS_TOOLS_BY_CWD) ?? "{}"); } catch { return {}; }
 })();
-const persistedLayout: { sidebarWidth?: number; rightbarWidth?: number } = (() => {
+const persistedLayout: {
+  sidebarWidth?: number;
+  rightbarWidth?: number;
+  sidebarHidden?: boolean;
+  rightbarHidden?: boolean;
+} = (() => {
   try { return JSON.parse(localStorage.getItem(LS_LAYOUT) ?? "{}"); } catch { return {}; }
 })();
 const persistedRightTab: "files" | "git" = (() => {
@@ -412,11 +422,16 @@ export const useStore = create<AppState>((set, get) => ({
 
   sidebarWidth: persistedLayout.sidebarWidth ?? 280,
   rightbarWidth: persistedLayout.rightbarWidth ?? 320,
+  sidebarHidden: persistedLayout.sidebarHidden ?? false,
+  rightbarHidden: persistedLayout.rightbarHidden ?? false,
   setSidebarWidth: (sidebarWidth) => {
     const cur = get();
     try {
       localStorage.setItem(LS_LAYOUT, JSON.stringify({
-        sidebarWidth, rightbarWidth: cur.rightbarWidth,
+        sidebarWidth,
+        rightbarWidth: cur.rightbarWidth,
+        sidebarHidden: cur.sidebarHidden,
+        rightbarHidden: cur.rightbarHidden,
       }));
     } catch { /* ignore */ }
     set({ sidebarWidth });
@@ -425,10 +440,37 @@ export const useStore = create<AppState>((set, get) => ({
     const cur = get();
     try {
       localStorage.setItem(LS_LAYOUT, JSON.stringify({
-        sidebarWidth: cur.sidebarWidth, rightbarWidth,
+        sidebarWidth: cur.sidebarWidth,
+        rightbarWidth,
+        sidebarHidden: cur.sidebarHidden,
+        rightbarHidden: cur.rightbarHidden,
       }));
     } catch { /* ignore */ }
     set({ rightbarWidth });
+  },
+  setSidebarHidden: (sidebarHidden) => {
+    const cur = get();
+    try {
+      localStorage.setItem(LS_LAYOUT, JSON.stringify({
+        sidebarWidth: cur.sidebarWidth,
+        rightbarWidth: cur.rightbarWidth,
+        sidebarHidden,
+        rightbarHidden: cur.rightbarHidden,
+      }));
+    } catch { /* ignore */ }
+    set({ sidebarHidden });
+  },
+  setRightbarHidden: (rightbarHidden) => {
+    const cur = get();
+    try {
+      localStorage.setItem(LS_LAYOUT, JSON.stringify({
+        sidebarWidth: cur.sidebarWidth,
+        rightbarWidth: cur.rightbarWidth,
+        sidebarHidden: cur.sidebarHidden,
+        rightbarHidden,
+      }));
+    } catch { /* ignore */ }
+    set({ rightbarHidden });
   },
 
   rightTab: persistedRightTab,
