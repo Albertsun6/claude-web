@@ -350,7 +350,16 @@ button.danger { background: var(--danger); color: white; }
 .voice-draft-pending { border-left: 3px solid var(--accent); }
 .voice-draft-ready { border-left: 3px solid var(--success); }
 .voice-draft-failed { border-left: 3px solid var(--danger); }
-.voice-draft-live { border-left: 3px solid var(--danger); background: rgba(248, 113, 113, 0.05); }
+.voice-draft-live { border-left: 3px solid var(--danger); background: rgba(248, 113, 113, 0.05); display: flex; align-items: center; }
+.voice-draft-live.paused { border-left-color: var(--text-dim); background: rgba(152, 160, 179, 0.08); }
+.voice-draft-live.paused .recording-dot { background: var(--text-dim); animation: none; }
+.voice-draft-live .voice-draft-tag { flex: 1; }
+.voice-draft-actions { display: flex; gap: 4px; margin-left: auto; }
+.voice-draft-actions button {
+  font-size: 12px;
+  padding: 2px 8px;
+  min-height: 26px;
+}
 /* Call mode — full-screen hands-free voice */
 .callmode {
   position: fixed;

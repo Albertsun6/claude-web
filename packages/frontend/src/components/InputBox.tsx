@@ -3,6 +3,39 @@ import type { ImageAttachment } from "@claude-web/shared";
 import { useStore, useActiveSession } from "../store";
 import { sendPrompt, interrupt } from "../ws-client";
 import { fetchTree } from "../api/fs";
+import { useVoiceCtx } from "../hooks/VoiceContext";
+
+function ConvoLiveBar() {
+  const voice = useVoiceCtx();
+  return (
+    <div className={`voice-draft-bar voice-draft-live${voice.userPaused ? " paused" : ""}`}>
+      <div className="voice-draft-tag">
+        <span className="recording-dot" />{" "}
+        {voice.userPaused
+          ? "已暂停 · 说「继续」恢复"
+          : "录音中 · 说「发送/暂停/清除」"}
+      </div>
+      <div className="voice-draft-actions">
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => voice.setUserPaused(!voice.userPaused)}
+          title={voice.userPaused ? "继续" : "暂停"}
+        >
+          {voice.userPaused ? "▶" : "⏸"}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => voice.clearConvoBuffer()}
+          title="清除"
+        >
+          ✗
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface PendingImage {
   id: string;
@@ -444,13 +477,7 @@ export function InputBox() {
           </button>
         </div>
       )}
-      {voiceDraft?.status === "live" && (
-        <div className="voice-draft-bar voice-draft-live">
-          <div className="voice-draft-tag">
-            <span className="recording-dot" /> 录音中 · 说"发送"提交
-          </div>
-        </div>
-      )}
+      {voiceDraft?.status === "live" && <ConvoLiveBar />}
       {showAt && filteredFiles.length > 0 && (
         <div className="slash-menu">
           {filteredFiles.map((f, i) => (

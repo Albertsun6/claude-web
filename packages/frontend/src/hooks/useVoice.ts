@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authFetch } from "../auth";
-import { cueListening, cueSubmit, cueStop, cueError } from "../audio/cues";
+import { cueListening, cueSubmit, cueStop, cueError, cuePause, cueResume, cueClear } from "../audio/cues";
 
 // Minimal local typings for the Web Speech API (not in lib.dom by default).
 interface SpeechRecognitionAlternative {
@@ -92,6 +92,12 @@ export interface UseVoiceReturn {
   /** Slower TTS for walking / headphones. */
   slowTts: boolean;
   setSlowTts: (b: boolean) => void;
+  /** Whether convo mode is currently paused by the user (via "暂停"). */
+  userPaused: boolean;
+  /** Manually flip pause state (UI button mirrors voice command). */
+  setUserPaused: (b: boolean) => void;
+  /** Wipe convoBuf — same as the "清除" voice command. */
+  clearConvoBuffer: () => void;
 }
 
 /**
@@ -147,12 +153,36 @@ const SLOW_TTS_KEY = "claude-web:slow-tts";
 
 export type SpeakStyle = "summary" | "verbatim";
 
-// Triggers that submit the current utterance. Match at the end of the final transcript.
-const SUBMIT_TRIGGERS = ["发送", "发出去", "发出", "提交", "send"];
-const TRIGGER_RE = new RegExp(
-  `[\\s,，。.！!？?]*(${SUBMIT_TRIGGERS.join("|")})[\\s,，。.！!？?]*$`,
-  "i",
-);
+// Voice commands recognized at the end of a final-transcript segment.
+// Order matters: longer / more specific phrases first so e.g. "继续录音"
+// doesn't get caught by "录" alone in some dialect form.
+type ConvoCommand = "submit" | "pause" | "resume" | "clear";
+const COMMAND_PATTERNS: Array<{ cmd: ConvoCommand; re: RegExp }> = [
+  { cmd: "submit", re: /(发送|发出去|发出|提交|send)$/i },
+  { cmd: "resume", re: /(继续录音|继续监听|恢复录音|继续|恢复)$/i },
+  { cmd: "pause",  re: /(暂停录音|暂停监听|暂停)$/i },
+  { cmd: "clear",  re: /(清除|清空|重来|重新说|擦掉)$/i },
+];
+
+interface ParsedCommand {
+  cmd: ConvoCommand | null;
+  /** Text before the command word; should be appended to convoBuf. */
+  prefix: string;
+}
+
+export function parseConvoCommand(text: string): ParsedCommand {
+  // strip trailing punctuation/whitespace before matching the trigger
+  const trimmed = text.trim().replace(/[\s,，。.！!？?]+$/u, "");
+  for (const { cmd, re } of COMMAND_PATTERNS) {
+    const m = re.exec(trimmed);
+    if (m) {
+      // m.index is where the command word starts within `trimmed`
+      const prefix = trimmed.slice(0, m.index).replace(/[\s,，。.！!？?]+$/u, "").trim();
+      return { cmd, prefix };
+    }
+  }
+  return { cmd: null, prefix: trimmed };
+}
 const SENTENCE_SPLIT = /([.!?。！？\n]+)/;
 
 function hasMediaRecorder(): boolean {
@@ -261,6 +291,8 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     } else {
       convoBufRef.current = "";
       setLiveTranscript("");
+      userPausedRef.current = false;
+      setUserPaused(false);
       stopRef.current();
       cueStop();
     }
@@ -347,11 +379,23 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     }
   }, [muted]);
 
+  /**
+   * Process a final-transcript segment in convo mode. Recognizes the four
+   * voice commands (submit / pause / resume / clear) and otherwise just
+   * appends to the running buffer. `onSubmit` is invoked when a submit
+   * action fires so the caller can stop its specific recognition stream.
+   */
+  const handleConvoSegmentRef = useRef<(text: string, onSubmit?: () => void) => void>(() => {});
+
   // accumulator for continuous mode — buffers final segments until trigger
   const convoBufRef = useRef<string>("");
   // when user just submitted via trigger, suppress auto-restart in onend until
   // session_ended fires and resumeAfterTurn() is called
   const conversationPausedRef = useRef<boolean>(false);
+  // user-initiated pause via "暂停" — different from conversationPausedRef.
+  // While true, mic is still listening but content is dropped (only "继续"/"清除" act).
+  const userPausedRef = useRef<boolean>(false);
+  const [userPaused, setUserPaused] = useState(false);
   // live = buffer + current interim, exposed for the input box during convo mode
   const [liveTranscript, setLiveTranscript] = useState("");
 
@@ -408,32 +452,21 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       if (interim) setInterimTranscript(interim);
       // live = buffer + current interim, for displaying in the input
       if (conversationModeRef.current) {
-        setLiveTranscript((convoBufRef.current + " " + interim).trim());
+        const live = userPausedRef.current
+          ? convoBufRef.current
+          : (convoBufRef.current + " " + interim).trim();
+        setLiveTranscript(live);
       }
       if (finalText) {
         setFinalTranscript(finalText);
         setInterimTranscript("");
 
         if (conversationModeRef.current) {
-          convoBufRef.current = (convoBufRef.current + " " + finalText).trim();
-          setLiveTranscript(convoBufRef.current);
-          // submit if the cumulative buffer ends with a trigger word
-          const m = TRIGGER_RE.exec(convoBufRef.current);
-          if (m) {
-            const stripped = convoBufRef.current.slice(0, m.index).trim();
-            convoBufRef.current = "";
-            setLiveTranscript("");
-            if (stripped) {
-              cueSubmit();
-              finalCbRef.current?.(stripped);
-            } else {
-              cueError(); // user said only the trigger word with nothing before
-            }
-            // pause mic until next turn ends; restart will be triggered by flushAssistantBuffer
+          handleConvoSegmentRef.current(finalText, () => {
+            // when "submit" was the action, also stop the recognition so onend's
+            // auto-restart respects conversationPausedRef
             try { rec.stop(); } catch { /* ignore */ }
-            // mark intent so onend doesn't auto-restart immediately
-            conversationPausedRef.current = true;
-          }
+          });
           return;
         }
 
@@ -523,6 +556,59 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     }
   }, []);
 
+  // Shared command processor for both Web Speech and VAD remote-stt paths.
+  const handleConvoSegment = useCallback((text: string, onSubmit?: () => void) => {
+    const { cmd, prefix } = parseConvoCommand(text);
+
+    // Paused: only resume / clear act, everything else is dropped.
+    if (userPausedRef.current) {
+      if (cmd === "resume") {
+        userPausedRef.current = false;
+        setUserPaused(false);
+        cueResume();
+      } else if (cmd === "clear") {
+        convoBufRef.current = "";
+        setLiveTranscript("");
+        cueClear();
+      }
+      // any other command (submit/pause/none) silently ignored while paused
+      return;
+    }
+
+    // Append the prefix (text before the command word, if any) to the buffer.
+    if (prefix) {
+      convoBufRef.current = (convoBufRef.current + " " + prefix).trim();
+      setLiveTranscript(convoBufRef.current);
+    }
+
+    if (cmd === "submit") {
+      const payload = convoBufRef.current;
+      convoBufRef.current = "";
+      setLiveTranscript("");
+      conversationPausedRef.current = true;
+      if (payload) {
+        cueSubmit();
+        finalCbRef.current?.(payload);
+      } else {
+        cueError(); // said only the trigger with nothing before
+      }
+      onSubmit?.();
+    } else if (cmd === "pause") {
+      userPausedRef.current = true;
+      setUserPaused(true);
+      cuePause();
+    } else if (cmd === "resume") {
+      // already not paused — small acknowledge
+      cueResume();
+    } else if (cmd === "clear") {
+      convoBufRef.current = "";
+      setLiveTranscript("");
+      cueClear();
+    }
+  }, []);
+
+  useEffect(() => { handleConvoSegmentRef.current = handleConvoSegment; }, [handleConvoSegment]);
+
   // ----- VAD-driven remote-stt convo mode -----
   // Constants tuned for typical phone-mic, indoor speech.
   const VAD_TICK_MS = 50;
@@ -543,22 +629,8 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       const body: { text?: string } = await res.json();
       const text = (body.text ?? "").trim();
       if (!text) return;
-
-      convoBufRef.current = (convoBufRef.current + " " + text).trim();
-      setLiveTranscript(convoBufRef.current);
-      const m = TRIGGER_RE.exec(convoBufRef.current);
-      if (m) {
-        const stripped = convoBufRef.current.slice(0, m.index).trim();
-        convoBufRef.current = "";
-        setLiveTranscript("");
-        conversationPausedRef.current = true;
-        if (stripped) {
-          cueSubmit();
-          finalCbRef.current?.(stripped);
-        } else {
-          cueError();
-        }
-      }
+      // VAD doesn't have its own recognition stream to stop, so onSubmit is a no-op.
+      handleConvoSegmentRef.current(text);
     } catch (err) {
       console.warn("[vad] transcribe failed", err);
     }
@@ -965,5 +1037,16 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     resumeConversation,
     slowTts,
     setSlowTts,
+    userPaused,
+    setUserPaused: (b: boolean) => {
+      userPausedRef.current = b;
+      setUserPaused(b);
+      if (b) cuePause(); else cueResume();
+    },
+    clearConvoBuffer: () => {
+      convoBufRef.current = "";
+      setLiveTranscript("");
+      cueClear();
+    },
   };
 }

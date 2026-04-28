@@ -40,9 +40,13 @@ export function CallMode({ active, onClose }: CallModeProps) {
         ✕
       </button>
       <div className="callmode-status">
-        {voice.conversationMode
-          ? voice.isRecording ? "正在听…说『发送』提交" : "已暂停"
-          : "对话模式未开"}
+        {!voice.conversationMode
+          ? "对话模式未开"
+          : voice.userPaused
+            ? "已暂停 · 说「继续」恢复"
+            : voice.isRecording
+              ? "正在听 · 说「发送」提交 · 「暂停」「清除」可用"
+              : "等待 Claude…"}
       </div>
       <div className="callmode-transcript">
         {voice.liveTranscript || (voice.interimTranscript || (voice.isSpeaking ? "Claude 正在说话…" : "你说话…"))}
@@ -65,9 +69,25 @@ export function CallMode({ active, onClose }: CallModeProps) {
           <button onClick={() => voice.setConversationMode(true)}>开启对话</button>
         )}
         {voice.conversationMode && (
-          <button className="secondary" onClick={() => voice.setConversationMode(false)}>
-            停止对话
-          </button>
+          <>
+            <button
+              className="secondary"
+              onClick={() => voice.setUserPaused(!voice.userPaused)}
+              title={voice.userPaused ? "恢复（说『继续』也行）" : "暂停（说『暂停』也行）"}
+            >
+              {voice.userPaused ? "▶ 继续" : "⏸ 暂停"}
+            </button>
+            <button
+              className="secondary"
+              onClick={() => voice.clearConvoBuffer()}
+              title="清空已录制的内容（说『清除』也行）"
+            >
+              ✗ 清除
+            </button>
+            <button className="secondary" onClick={() => voice.setConversationMode(false)}>
+              停止对话
+            </button>
+          </>
         )}
         <button
           className="secondary"

@@ -58,3 +58,22 @@ export const cueStop = (): void => play([
 export const cueError = (): void => play([
   { freq: 220, ms: 180 },
 ]);
+
+/** Paused — slow descend. */
+export const cuePause = (): void => play([
+  { freq: 660, ms: 90, gap: 30 },
+  { freq: 440, ms: 110 },
+]);
+
+/** Resumed — slow ascend. */
+export const cueResume = (): void => play([
+  { freq: 440, ms: 90, gap: 30 },
+  { freq: 660, ms: 110 },
+]);
+
+/** Cleared — three quick taps. */
+export const cueClear = (): void => play([
+  { freq: 660, ms: 50, gap: 50 },
+  { freq: 660, ms: 50, gap: 50 },
+  { freq: 660, ms: 50 },
+]);
