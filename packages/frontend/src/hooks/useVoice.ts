@@ -382,6 +382,39 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const pcmSegmentStartTotalRef = useRef(0);
   const pcmLastTranscriptRef = useRef<string>(""); // for whisper context across segments
 
+  // iOS Safari / PWA standalone autoplay unlock.
+  // On these browsers, audio.play() triggered by an async event (WebSocket
+  // message, fetch resolution) is silently rejected. The fix: prime a single
+  // long-lived <audio> element by playing a tiny silent clip during the
+  // user's FIRST gesture. After that the same element can play TTS clips
+  // via src-swapping without further unlocks.
+  useEffect(() => {
+    if (playingAudioRef.current) return; // already exists
+    const audio = new Audio();
+    audio.preload = "auto";
+    audio.crossOrigin = "anonymous";
+    // Stash on the same ref drainAudioQueue uses; it'll src-swap below.
+    playingAudioRef.current = audio;
+
+    const unlock = () => {
+      // 0.05s of silence — base64 mp3 silence is portable across iOS/Safari.
+      audio.src =
+        "data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//MUZAAAAAGkAAAAAAAAA0gAAAAATEFN";
+      audio.muted = true;
+      audio.play()
+        .then(() => { audio.pause(); audio.muted = false; })
+        .catch(() => { /* will be unlocked on next gesture */ });
+    };
+    document.addEventListener("touchstart", unlock, { once: true, passive: true });
+    document.addEventListener("click", unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      document.removeEventListener("touchstart", unlock);
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
   // init
   useEffect(() => {
     const avail = detectAvailable();
@@ -421,8 +454,8 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       // immediately silence anything playing or queued
       generationRef.current++;
       const a = playingAudioRef.current;
+      // Keep the element alive (preserves iOS unlock); just stop playback.
       if (a) { try { a.pause(); a.currentTime = 0; } catch { /* ignore */ } }
-      playingAudioRef.current = null;
       audioQueueRef.current = [];
       playRunningRef.current = false;
       setIsSpeaking(false);
@@ -1027,6 +1060,10 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const drainAudioQueue = useCallback(async () => {
     if (playRunningRef.current) return;
     playRunningRef.current = true;
+    // Reuse the (possibly user-gesture-unlocked) single audio element rather
+    // than creating a new one per clip. iOS PWA otherwise re-locks per element.
+    const audio = playingAudioRef.current ?? new Audio();
+    if (!playingAudioRef.current) playingAudioRef.current = audio;
     while (true) {
       if (mutedRef.current) {
         audioQueueRef.current = [];
@@ -1038,16 +1075,16 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       if (!url) continue;
       if (mutedRef.current) { URL.revokeObjectURL(url); continue; }
       await new Promise<void>((resolve) => {
-        const audio = new Audio(url);
-        playingAudioRef.current = audio;
         setIsSpeaking(true);
         const cleanup = () => {
           URL.revokeObjectURL(url);
-          if (playingAudioRef.current === audio) playingAudioRef.current = null;
+          audio.removeEventListener("ended", cleanup);
+          audio.removeEventListener("error", cleanup);
           resolve();
         };
-        audio.addEventListener("ended", cleanup);
-        audio.addEventListener("error", cleanup);
+        audio.addEventListener("ended", cleanup, { once: true });
+        audio.addEventListener("error", cleanup, { once: true });
+        audio.src = url;
         const startPlay = () => {
           audio.play().catch((err) => { console.warn("[voice] play failed", err); cleanup(); });
         };
@@ -1064,7 +1101,7 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       });
     }
     playRunningRef.current = false;
-    if (audioQueueRef.current.length === 0 && !playingAudioRef.current) {
+    if (audioQueueRef.current.length === 0) {
       setIsSpeaking(false);
     }
   }, []);
@@ -1086,8 +1123,9 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     generationRef.current++;
     audioQueueRef.current = [];
     const a = playingAudioRef.current;
+    // Keep the long-lived element alive — nulling it would force a fresh
+    // (still-locked) Audio() on the next iOS PWA playback.
     if (a) { try { a.pause(); a.currentTime = 0; } catch { /* ignore */ } }
-    playingAudioRef.current = null;
     playRunningRef.current = false;
     setIsSpeaking(false);
   }, []);
