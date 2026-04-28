@@ -14,6 +14,8 @@ import { fsRouter } from "./routes/fs.js";
 import { gitRouter } from "./routes/git.js";
 import { voiceRouter } from "./routes/voice.js";
 import { sessionsRouter } from "./routes/sessions.js";
+import { projectsRouter } from "./routes/projects.js";
+import { telemetryRouter } from "./routes/telemetry.js";
 import {
   permissionRouter,
   registerPermissionChannel,
@@ -67,6 +69,8 @@ app.route("/api/fs", fsRouter);
 app.route("/api/git", gitRouter);
 app.route("/api/voice", voiceRouter);
 app.route("/api/sessions", sessionsRouter);
+app.route("/api/projects", projectsRouter);
+app.route("/api/telemetry", telemetryRouter);
 app.route("/api/permission", permissionRouter);
 
 // Track active runs across all WS clients so /health can report.
