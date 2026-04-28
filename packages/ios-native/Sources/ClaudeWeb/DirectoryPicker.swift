@@ -61,6 +61,15 @@ struct DirectoryPicker: View {
         .task(id: path) {
             await load()
         }
+        .onAppear {
+            // Force reset to initialPath every time the picker is shown.
+            // Defends against SwiftUI retaining @State across NavigationStack
+            // pop+push (observed on iOS 17/18 in some scenarios) which would
+            // otherwise reopen the picker at the previously navigated path.
+            if path != initialPath {
+                path = initialPath
+            }
+        }
         .alert("新建文件夹", isPresented: $showMkdir) {
             TextField("文件夹名称", text: $newFolderName)
                 .textInputAutocapitalization(.never)

@@ -133,6 +133,20 @@ final class AppSettings {
         return URL(string: "https://mymac.tailcf3ccf.ts.net")!
         #endif
     }
+
+    /// Wipe all persisted UserDefaults keys this app owns, restoring init
+    /// defaults. Backend / cwd / conversation focus all reset.
+    /// The Cache layer's on-disk JSON files need a separate clear (Cache.eraseAll).
+    static func eraseAllUserDefaults() {
+        let keys = [
+            backendKey, cwdKey, permissionModeKey, ttsEnabledKey,
+            speakStyleKey, slowTtsKey, authTokenKey, modelKey,
+            silentKeepaliveKey, currentConversationIdKey, fontSizeKey,
+        ]
+        for k in keys {
+            UserDefaults.standard.removeObject(forKey: k)
+        }
+    }
 }
 
 import SwiftUI

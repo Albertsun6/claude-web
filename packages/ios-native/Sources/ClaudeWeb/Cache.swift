@@ -16,8 +16,10 @@
 // to "empty cache" — UI shows a fresh state and bootstrap re-fetches.
 
 import Foundation
+import Observation
 
 @MainActor
+@Observable
 final class Cache {
     private let root: URL
     private let projectsPath: URL
@@ -80,6 +82,18 @@ final class Cache {
 
     func dropSession(_ conversationId: String) {
         try? FileManager.default.removeItem(at: sessionPath(conversationId))
+    }
+
+    /// Wipe everything on disk — projects.json, conversations.json, all
+    /// session files. After this the next bootstrap behaves like a clean
+    /// install (cache empty → server reconcile re-populates).
+    func eraseAll() {
+        try? FileManager.default.removeItem(at: projectsPath)
+        try? FileManager.default.removeItem(at: conversationsPath)
+        if let entries = try? FileManager.default.contentsOfDirectory(at: sessionsDir, includingPropertiesForKeys: nil) {
+            for url in entries { try? FileManager.default.removeItem(at: url) }
+        }
+        telemetry?.warn("cache.erase_all")
     }
 
     // MARK: - LRU

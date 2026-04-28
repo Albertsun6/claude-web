@@ -4,6 +4,7 @@
 # Modes:
 #   ./deploy.sh         → physical device DEVICE_ID
 #   ./deploy.sh --sim   → currently booted iOS Simulator
+#   ./deploy.sh --all   → both (sim first, then device)
 #
 # Note vs the Capacitor deploy script: there's no web build step, no xattr
 # dance (no .storyboardc — pure SwiftUI), and the sim path can use the host
@@ -23,6 +24,16 @@ cd "$PROJECT_DIR"
 
 # Regenerate Xcode project from yml in case sources / settings changed.
 xcodegen generate > /dev/null
+
+# --all: sim first, then device. Sim is faster + tells us if there's a
+# build / runtime issue before we wait for the device install.
+if [[ "$MODE" == "--all" || "$MODE" == "all" ]]; then
+  echo ">>> deploying to simulator <<<"
+  "$0" --sim || exit 1
+  echo
+  echo ">>> deploying to device <<<"
+  exec "$0"
+fi
 
 if [[ "$MODE" == "--sim" || "$MODE" == "sim" ]]; then
   SIM_ID=$(xcrun simctl list devices booted 2>/dev/null | grep -oE '[A-F0-9-]{36}' | head -1)

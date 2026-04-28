@@ -57,6 +57,7 @@ struct ClaudeWebApp: App {
                 .environment(voice)
                 .environment(registry)
                 .environment(telemetry)
+                .environment(cache)
                 .onAppear {
                     bootstrap()
                 }
