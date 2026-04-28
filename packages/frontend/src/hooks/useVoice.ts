@@ -90,6 +90,51 @@ export interface UseVoiceReturn {
   resumeConversation: () => void;
 }
 
+/**
+ * Strip markdown / code / table syntax so TTS doesn't read "**" as 星号星号 etc.
+ * Idempotent. Applied at the speak() boundary so EVERY path (summary, summary
+ * fallback, verbatim, replay) is covered.
+ */
+export function stripForSpeech(s: string): string {
+  return s
+    // fenced code blocks → just say "代码块"
+    .replace(/```[\s\S]*?```/g, " 代码块。 ")
+    // inline `code` → keep content
+    .replace(/`([^`\n]+)`/g, "$1")
+    // images ![alt](url) → "图：alt" (keep alt text)
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, (_, alt) => (alt ? `图：${alt}` : "图"))
+    // links [text](url) → text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    // bold/italic markers
+    .replace(/\*\*\*([^*\n]+)\*\*\*/g, "$1")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1")
+    .replace(/(?<![A-Za-z0-9_])\*([^*\n]+)\*(?![A-Za-z0-9_])/g, "$1")
+    .replace(/(?<![A-Za-z0-9_])_([^_\n]+)_(?![A-Za-z0-9_])/g, "$1")
+    // strikethrough
+    .replace(/~~([^~\n]+)~~/g, "$1")
+    // headings: drop leading # marks
+    .replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
+    // list bullets and numbered list markers
+    .replace(/^[ \t]*[-*+][ \t]+/gm, "")
+    .replace(/^[ \t]*\d+\.[ \t]+/gm, "")
+    // blockquote
+    .replace(/^[ \t]*>+[ \t]?/gm, "")
+    // table separator rows (e.g. |---|---|)
+    .replace(/^[ \t]*\|?[ \t]*[:\-]+[ \t]*(\|[ \t]*[:\-]+[ \t]*)+\|?[ \t]*$/gm, "")
+    // remaining table pipes — drop the bars but keep cell contents joined
+    .replace(/^[ \t]*\|(.+)\|[ \t]*$/gm, (_, row: string) =>
+      row.split("|").map((c) => c.trim()).filter(Boolean).join("，"),
+    )
+    // any leftover horizontal rule
+    .replace(/^[ \t]*[-*_]{3,}[ \t]*$/gm, "")
+    // any HTML-ish tags (Claude rarely emits but defense)
+    .replace(/<[^>]+>/g, "")
+    // collapse runs of whitespace / blank lines into a single space
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const MUTED_KEY = "claude-web:voice-muted";
 const PREFERRED_MODE_KEY = "claude-web:voice-mode";
 const SPEAK_STYLE_KEY = "claude-web:voice-speak-style";
@@ -531,12 +576,15 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   }, []);
 
   const speak = useCallback((text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
+    // Defense-in-depth: strip every markdown/code/table token from anything
+    // headed for TTS. This is the *only* path to the audio queue, so summary,
+    // summary-fallback, verbatim, replay, and short-skip all benefit.
+    const cleaned = stripForSpeech(text);
+    if (!cleaned) return;
     if (mutedRef.current) return;
-    turnSentencesRef.current.push(trimmed);
+    turnSentencesRef.current.push(cleaned);
     const gen = generationRef.current;
-    audioQueueRef.current.push({ sentence: trimmed, promise: fetchTtsBlobUrl(trimmed, gen) });
+    audioQueueRef.current.push({ sentence: cleaned, promise: fetchTtsBlobUrl(cleaned, gen) });
     void drainAudioQueue();
   }, [fetchTtsBlobUrl, drainAudioQueue]);
 
