@@ -22,6 +22,10 @@ final class BackendClient {
     /// When non-nil, UI shows a sheet asking allow/deny.
     var pendingPermission: PermissionRequest?
 
+    /// Invoked once per turn after `session_ended` arrives. App wires this to
+    /// the TTS player so the assistant's reply gets read aloud.
+    var onTurnComplete: (() -> Void)?
+
     /// User-tweakable backend URL (settings page writes here, persisted in UserDefaults).
     var backendBase: URL {
         didSet { reconnect() }
@@ -122,9 +126,14 @@ final class BackendClient {
             case .result:
                 break
             }
-        case .sessionEnded:
+        case .sessionEnded(_, let reason):
             busy = false
             currentRunId = nil
+            // Auto-speak only on a clean completion. interrupted / error paths
+            // shouldn't surprise-talk.
+            if reason == "completed" {
+                onTurnComplete?()
+            }
         case .error(_, let message):
             messages.append(ChatLine(role: .error, text: message))
             busy = false

@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(BackendClient.self) private var client
     @Environment(VoiceRecorder.self) private var recorder
+    @Environment(TTSPlayer.self) private var tts
     @State private var draft: String = ""
     @State private var showSettings = false
 
@@ -58,6 +59,7 @@ struct ContentView: View {
             Circle().fill(chipColor).frame(width: 8, height: 8)
             Text(chipLabel).font(.caption).foregroundStyle(.secondary)
             Spacer()
+            ttsControls
             Text(settings.cwd.split(separator: "/").last.map(String.init) ?? settings.cwd)
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
@@ -66,6 +68,36 @@ struct ContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.bar)
+    }
+
+    @ViewBuilder
+    private var ttsControls: some View {
+        switch tts.state {
+        case .fetching:
+            ProgressView().scaleEffect(0.7)
+        case .playing:
+            Button { tts.pause() } label: {
+                Image(systemName: "pause.fill")
+            }
+            Button { tts.cancel() } label: {
+                Image(systemName: "stop.fill")
+            }
+        case .paused:
+            Button { tts.resume() } label: {
+                Image(systemName: "play.fill")
+            }
+            Button { tts.cancel() } label: {
+                Image(systemName: "stop.fill")
+            }
+        case .idle:
+            if tts.hasReplay {
+                Button { Task { await tts.replay() } } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+            }
+        case .error:
+            EmptyView()
+        }
     }
 
     private var chipColor: Color {
@@ -317,6 +349,18 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
+                }
+                Section("语音播报") {
+                    Toggle("自动播报回答", isOn: $s.ttsEnabled)
+                    Picker("风格", selection: $s.speakStyle) {
+                        Text("概要（Haiku 改写为 1-4 句）").tag("summary")
+                        Text("逐句（原文）").tag("verbatim")
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    .disabled(!s.ttsEnabled)
+                    Toggle("慢速朗读（-15%）", isOn: $s.slowTts)
+                        .disabled(!s.ttsEnabled)
                 }
             }
             .navigationTitle("设置")
