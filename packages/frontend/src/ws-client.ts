@@ -13,6 +13,8 @@ let reconnectTimer: number | undefined;
 type VoiceSink = {
   feedAssistantChunk: (text: string) => void;
   flushAssistantBuffer: () => void;
+  /** Optional: re-arm continuous mic after a turn ends (conversation mode). */
+  resumeConversation?: () => void;
 };
 let voiceSink: VoiceSink | undefined;
 export function setVoiceSink(sink: VoiceSink | undefined): void {
@@ -145,7 +147,13 @@ function handleServerMessage(msg: ServerMessage): void {
       if (sess && sess.currentRunId === msg.runId) {
         store.patchProject(cwd, { busy: false, currentRunId: undefined });
       }
-      if (cwd === store.activeCwd) voiceSink?.flushAssistantBuffer();
+      if (cwd === store.activeCwd) {
+        voiceSink?.flushAssistantBuffer();
+        // give summary fetch+playback a head start, then re-arm conversation mic
+        if (voiceSink?.resumeConversation) {
+          setTimeout(() => voiceSink?.resumeConversation?.(), 1500);
+        }
+      }
     }
     return;
   }

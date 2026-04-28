@@ -93,9 +93,10 @@ function AppInner() {
     setVoiceSink({
       feedAssistantChunk: voice.feedAssistantChunk,
       flushAssistantBuffer: voice.flushAssistantBuffer,
+      resumeConversation: voice.resumeConversation,
     });
     return () => setVoiceSink(undefined);
-  }, [voice.feedAssistantChunk, voice.flushAssistantBuffer]);
+  }, [voice.feedAssistantChunk, voice.flushAssistantBuffer, voice.resumeConversation]);
 
   // visualViewport: keep input above mobile keyboard
   useEffect(() => {

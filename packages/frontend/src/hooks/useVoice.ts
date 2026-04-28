@@ -81,13 +81,26 @@ export interface UseVoiceReturn {
   // speaking style: short Haiku summary (default) vs verbatim per-sentence
   speakStyle: SpeakStyle;
   setSpeakStyle: (s: SpeakStyle) => void;
+  // conversation mode: continuous listen, "发送" trigger submits, auto-restart after each turn
+  conversationMode: boolean;
+  setConversationMode: (b: boolean) => void;
+  /** Re-arm continuous mic after assistant turn ends (called by App on session_ended). */
+  resumeConversation: () => void;
 }
 
 const MUTED_KEY = "claude-web:voice-muted";
 const PREFERRED_MODE_KEY = "claude-web:voice-mode";
 const SPEAK_STYLE_KEY = "claude-web:voice-speak-style";
+const CONVO_KEY = "claude-web:conversation-mode";
 
 export type SpeakStyle = "summary" | "verbatim";
+
+// Triggers that submit the current utterance. Match at the end of the final transcript.
+const SUBMIT_TRIGGERS = ["发送", "发出去", "发出", "提交", "send"];
+const TRIGGER_RE = new RegExp(
+  `[\\s,，。.！!？?]*(${SUBMIT_TRIGGERS.join("|")})[\\s,，。.！!？?]*$`,
+  "i",
+);
 const SENTENCE_SPLIT = /([.!?。！？\n]+)/;
 
 function hasMediaRecorder(): boolean {
@@ -165,6 +178,9 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const [finalTranscript, setFinalTranscript] = useState("");
   const [muted, setMutedState] = useState<boolean>(false);
   const [speakStyle, setSpeakStyleState] = useState<SpeakStyle>("summary");
+  const [conversationMode, setConversationModeState] = useState<boolean>(false);
+  const conversationModeRef = useRef(false);
+  useEffect(() => { conversationModeRef.current = conversationMode; }, [conversationMode]);
 
   const setMode = useCallback((m: VoiceMode) => {
     try { localStorage.setItem(PREFERRED_MODE_KEY, m); } catch { /* ignore */ }
@@ -173,6 +189,10 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
   const setSpeakStyle = useCallback((s: SpeakStyle) => {
     try { localStorage.setItem(SPEAK_STYLE_KEY, s); } catch { /* ignore */ }
     setSpeakStyleState(s);
+  }, []);
+  const setConversationMode = useCallback((b: boolean) => {
+    try { localStorage.setItem(CONVO_KEY, b ? "1" : "0"); } catch { /* ignore */ }
+    setConversationModeState(b);
   }, []);
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
@@ -207,6 +227,13 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       const v = localStorage.getItem(SPEAK_STYLE_KEY);
       if (v === "verbatim" || v === "summary") setSpeakStyleState(v);
     } catch { /* ignore */ }
+    try {
+      const v = localStorage.getItem(CONVO_KEY);
+      if (v === "1") {
+        setConversationModeState(true);
+        conversationModeRef.current = true;
+      }
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
@@ -222,6 +249,12 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       setIsSpeaking(false);
     }
   }, [muted]);
+
+  // accumulator for continuous mode — buffers final segments until trigger
+  const convoBufRef = useRef<string>("");
+  // when user just submitted via trigger, suppress auto-restart in onend until
+  // session_ended fires and resumeAfterTurn() is called
+  const conversationPausedRef = useRef<boolean>(false);
 
   // construct recognition lazily
   const ensureRecognition = useCallback((): ISpeechRecognition | null => {
@@ -241,10 +274,20 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     rec.onstart = () => {
       setIsRecording(true);
       setInterimTranscript("");
+      convoBufRef.current = "";
     };
     rec.onend = () => {
       setIsRecording(false);
       setInterimTranscript("");
+      // After silence, browsers stop recognition even with continuous=true.
+      // In convo mode, auto-restart unless we paused for assistant turn or user muted.
+      if (
+        conversationModeRef.current &&
+        !mutedRef.current &&
+        !conversationPausedRef.current
+      ) {
+        try { rec.start(); } catch { /* already starting */ }
+      }
     };
     rec.onerror = (ev) => {
       console.warn("[voice] recognition error", ev.error);
@@ -265,6 +308,23 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
       if (finalText) {
         setFinalTranscript(finalText);
         setInterimTranscript("");
+
+        if (conversationModeRef.current) {
+          convoBufRef.current = (convoBufRef.current + " " + finalText).trim();
+          // submit if the cumulative buffer ends with a trigger word
+          const m = TRIGGER_RE.exec(convoBufRef.current);
+          if (m) {
+            const stripped = convoBufRef.current.slice(0, m.index).trim();
+            convoBufRef.current = "";
+            if (stripped) finalCbRef.current?.(stripped);
+            // pause mic until next turn ends; restart will be triggered by flushAssistantBuffer
+            try { rec.stop(); } catch { /* ignore */ }
+            // mark intent so onend doesn't auto-restart immediately
+            conversationPausedRef.current = true;
+          }
+          return;
+        }
+
         finalCbRef.current?.(finalText);
       }
     };
@@ -355,6 +415,10 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     if (mode === "web-speech") {
       const rec = ensureRecognition();
       if (!rec) return;
+      // In convo mode keep listening across silences.
+      rec.continuous = !!conversationModeRef.current;
+      conversationPausedRef.current = false;
+      convoBufRef.current = "";
       try {
         rec.start();
       } catch (err) {
@@ -367,6 +431,8 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
 
   const stop = useCallback(() => {
     if (mode === "web-speech") {
+      // signal "user actually wants this off" so onend doesn't restart
+      conversationPausedRef.current = true;
       try {
         recognitionRef.current?.stop();
       } catch {
@@ -512,6 +578,26 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     })();
   }, [speak]);
 
+  // Resume continuous listening after the assistant turn (and TTS) finishes.
+  // App.tsx hooks this to session_ended via the voiceSink.
+  const resumeConversation = useCallback(() => {
+    if (!conversationModeRef.current || mutedRef.current) return;
+    if (mode !== "web-speech") return; // remote-stt convo mode is not yet supported
+    // wait for any pending speak/audio to drain before re-arming the mic
+    const wait = setInterval(() => {
+      if (audioQueueRef.current.length === 0 && !playingAudioRef.current) {
+        clearInterval(wait);
+        const rec = ensureRecognition();
+        if (!rec) return;
+        rec.continuous = true;
+        conversationPausedRef.current = false;
+        convoBufRef.current = "";
+        try { rec.start(); } catch { /* already running */ }
+      }
+    }, 250);
+    setTimeout(() => clearInterval(wait), 30_000);
+  }, [mode, ensureRecognition]);
+
   const replayLastTurn = useCallback(() => {
     if (!lastTurnText) return;
     cancelSpeak();
@@ -557,5 +643,8 @@ export function useVoice(lang: string = "zh-CN"): UseVoiceReturn {
     replayLastTurn,
     speakStyle,
     setSpeakStyle,
+    conversationMode,
+    setConversationMode,
+    resumeConversation,
   };
 }

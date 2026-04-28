@@ -53,6 +53,18 @@ export function VoiceBar({ onTranscript }: VoiceBarProps) {
           />
           <span>概要</span>
         </label>
+        <label
+          className="voice-cleanup-toggle"
+          title="开 = 持续监听；说『发送』提交；每轮 Claude 回完自动续录"
+        >
+          <input
+            type="checkbox"
+            checked={voice.conversationMode}
+            onChange={(e) => voice.setConversationMode(e.target.checked)}
+            disabled={voice.mode !== "web-speech"}
+          />
+          <span>对话</span>
+        </label>
 
         {voice.isSpeaking && (
           <button
