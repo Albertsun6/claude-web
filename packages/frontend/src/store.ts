@@ -19,6 +19,9 @@ export interface Project {
 }
 
 export interface VoiceDraft {
+  /** Per-utterance id. Used by InputBox to detect "same draft, user edited it"
+   *  vs "newer draft replaced it" — prevents stale cleanup races + lost edits. */
+  id: string;
   original: string;
   cleaned: string;
   status: "live" | "pending" | "ready" | "failed";
@@ -101,6 +104,12 @@ interface AppState {
   voiceCleanupEnabled: boolean;
   setVoiceCleanupEnabled: (b: boolean) => void;
 
+  // voice auto-send pref — independent of cleanup. Default OFF: transcript lands
+  // in the textarea for the user to review. ON: send immediately (cleanup-OFF)
+  // or after successful cleanup (cleanup-ON). On cleanup failure, never auto-send.
+  voiceAutoSendEnabled: boolean;
+  setVoiceAutoSendEnabled: (b: boolean) => void;
+
   // explicit audio device selection ("" = system default)
   audioInputId: string;
   audioOutputId: string;
@@ -149,6 +158,7 @@ const LS_LAYOUT = "claude-web:layout";
 const LS_RIGHT_TAB = "claude-web:right-tab";
 const LS_OPEN = "claude-web:open-cwds";
 const LS_VOICE_CLEANUP = "claude-web:voice-cleanup";
+const LS_VOICE_AUTOSEND = "claude-web:voice-autosend";
 const LS_SESSION_LIST_OPEN = "claude-web:session-list-open";
 const LS_AUDIO_INPUT = "claude-web:audio-input-id";
 const LS_AUDIO_OUTPUT = "claude-web:audio-output-id";
@@ -389,6 +399,14 @@ export const useStore = create<AppState>((set, get) => ({
   setVoiceCleanupEnabled: (b) => {
     try { localStorage.setItem(LS_VOICE_CLEANUP, b ? "1" : "0"); } catch { /* ignore */ }
     set({ voiceCleanupEnabled: b });
+  },
+
+  voiceAutoSendEnabled: (() => {
+    try { return localStorage.getItem(LS_VOICE_AUTOSEND) === "1"; } catch { return false; }
+  })(),
+  setVoiceAutoSendEnabled: (b) => {
+    try { localStorage.setItem(LS_VOICE_AUTOSEND, b ? "1" : "0"); } catch { /* ignore */ }
+    set({ voiceAutoSendEnabled: b });
   },
 
   audioInputId: (() => {

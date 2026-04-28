@@ -188,9 +188,25 @@ iOS PWA 里也支持（VAD-driven，每段 ~1-2s 延迟）。
 ### 整理（自动消除"嗯/啊"）
 **☑ 整理** 勾选（默认开） → 转写后用 Haiku 清理填充词、合并断句、修同音错字、把项目专有名词词表中的词从中文谐音/错字纠回正字（如"泰尔斯凯" → `Tailscale`）。
 
-短文本（≤ 12 字）或没填充词的句子**智能跳过**整理，省 token。
+短文本（≤ 12 字）或没填充词的句子**智能跳过 Haiku**，省 token。**注意：smart-skip 只跳过整理，不跳过审核** —— 文字仍进输入框等你点发送（除非开了"自动发送"）。
 
 对话模式下"发送"触发**直接绕过整理**——你已经决定了。
+
+### 自动发送 vs 手动审核
+**☑ 自动发送**（默认关）独立于"整理"开关，组合矩阵：
+
+| 整理 | 自动发送 | 行为 |
+|---|---|---|
+| OFF | OFF | 转写 → 输入框 → 你点发送 |
+| ON | OFF | 原文立即显示 → 整理完成后**未编辑则替换为 cleaned** → 你点发送 |
+| OFF | ON | 转写 → 输入框 → 立即发送 |
+| ON | ON | 原文立即显示 → 整理完成后发送 cleaned |
+
+**安全保障**：
+- **整理失败永远不自动发送** — 失败时保留原文，提示"整理失败 · 已保留原文，未自动发送"
+- **用户编辑后不被覆盖** — 整理 pending 期间你打字了，cleanup 完成后不会冲掉你的编辑。靠每个 voice draft 一个 `id` + InputBox 跟踪 `userEdited` flag 实现，并发 draft 也不互踩
+
+对话模式说"发送"始终直送，不走这些规则。
 
 ### 识别准确度
 六道防线层层叠加：
@@ -339,6 +355,7 @@ VoiceBar 麦克风按钮上方有两个下拉 + 刷新 ↻：
 | 语音 mode（web-speech/remote-stt） | `claude-web:voice-mode` |
 | 语音静音 | `claude-web:voice-muted` |
 | 整理开关 | `claude-web:voice-cleanup` |
+| 自动发送开关 | `claude-web:voice-autosend` |
 | 概要 / 原话 | `claude-web:voice-speak-style` |
 | 对话模式 | `claude-web:conversation-mode` |
 | 慢读 | `claude-web:slow-tts` |

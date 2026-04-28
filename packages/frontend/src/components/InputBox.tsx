@@ -134,12 +134,36 @@ export function InputBox({ onVoiceTranscript }: InputBoxProps = {}) {
     return out.slice(0, 5);
   }, [session?.messages]);
 
-  // when voice cleanup completes for the active project, populate textarea
+  // Voice draft → textarea sync, with edit protection.
+  //
+  // Tracks the last draft id we populated from + whether the user has typed
+  // since. Behavior:
+  //   - new draft (different id) → populate fresh, reset edited flag
+  //   - same draft, status moved to "ready"/"failed" + user has NOT edited
+  //     → replace with cleaned (cleanup-success path)
+  //   - same draft, user HAS edited → leave their text alone
+  //   - status "failed" → never overwrite (keep whatever user has, or original)
+  //   - voiceDraft cleared → reset tracking
+  const draftSyncRef = useRef<{ id: string; userEdited: boolean } | null>(null);
+
   useEffect(() => {
-    if (!voiceDraft) return;
-    if (voiceDraft.status === "pending") {
+    if (!voiceDraft) {
+      draftSyncRef.current = null;
+      return;
+    }
+    // "live" path is owned by ConvoLiveBar — don't fight it for textarea content.
+    if (voiceDraft.status === "live") return;
+
+    const sync = draftSyncRef.current;
+    if (!sync || sync.id !== voiceDraft.id) {
+      // First time we see this draft — show original now.
+      draftSyncRef.current = { id: voiceDraft.id, userEdited: false };
       setText(voiceDraft.original);
-    } else {
+      return;
+    }
+    // Same draft transitioning pending → ready: replace ONLY if user hasn't
+    // typed over the original. On "failed", never overwrite.
+    if (voiceDraft.status === "ready" && !sync.userEdited) {
       setText(voiceDraft.cleaned);
     }
   }, [voiceDraft]);
@@ -471,9 +495,9 @@ export function InputBox({ onVoiceTranscript }: InputBoxProps = {}) {
       {voiceDraft && voiceDraft.status !== "live" && (
         <div className={`voice-draft-bar voice-draft-${voiceDraft.status}`}>
           <div className="voice-draft-tag">
-            {voiceDraft.status === "pending" && "整理中…"}
-            {voiceDraft.status === "ready" && "已整理 (可编辑后发送)"}
-            {voiceDraft.status === "failed" && "整理失败，使用原始转写"}
+            {voiceDraft.status === "pending" && "整理中…可继续编辑"}
+            {voiceDraft.status === "ready" && "已整理 · 可编辑后发送"}
+            {voiceDraft.status === "failed" && "整理失败 · 已保留原文，未自动发送"}
           </div>
           <div className="voice-draft-original" title={voiceDraft.original}>
             原始: {voiceDraft.original}
@@ -525,6 +549,8 @@ export function InputBox({ onVoiceTranscript }: InputBoxProps = {}) {
           onChange={(e) => {
             setText(e.target.value);
             if (historyIdx !== null) setHistoryIdx(null);
+            // Mark voice draft as user-edited so cleanup-ready won't clobber it.
+            if (draftSyncRef.current) draftSyncRef.current.userEdited = true;
           }}
           placeholder={
             !session ? "请先打开一个项目"

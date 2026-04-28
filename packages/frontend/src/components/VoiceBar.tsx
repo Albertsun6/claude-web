@@ -18,6 +18,8 @@ export function VoiceBar() {
   const voice = useVoiceCtx();
   const cleanupEnabled = useStore((s) => s.voiceCleanupEnabled);
   const setCleanupEnabled = useStore((s) => s.setVoiceCleanupEnabled);
+  const autoSendEnabled = useStore((s) => s.voiceAutoSendEnabled);
+  const setAutoSendEnabled = useStore((s) => s.setVoiceAutoSendEnabled);
   const audioInputId = useStore((s) => s.audioInputId);
   const audioOutputId = useStore((s) => s.audioOutputId);
   const setAudioInputId = useStore((s) => s.setAudioInputId);
@@ -49,6 +51,17 @@ export function VoiceBar() {
             onChange={(e) => setCleanupEnabled(e.target.checked)}
           />
           <span>整理</span>
+        </label>
+        <label
+          className="voice-cleanup-toggle"
+          title="开 = 录完直接发送（整理 ON 时等整理完成）；关 = 转写进输入框等你点发送。整理失败时永远不自动发送"
+        >
+          <input
+            type="checkbox"
+            checked={autoSendEnabled}
+            onChange={(e) => setAutoSendEnabled(e.target.checked)}
+          />
+          <span>自动发送</span>
         </label>
         <label className="voice-cleanup-toggle" title="开 = 用 Haiku 概括成口语版再播；关 = 逐句完整朗读">
           <input

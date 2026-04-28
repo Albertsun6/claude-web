@@ -78,6 +78,7 @@ function AppInner() {
   const resetSession = useStore((s) => s.resetSession);
   const patchProject = useStore((s) => s.patchProject);
   const cleanupEnabled = useStore((s) => s.voiceCleanupEnabled);
+  const autoSendEnabled = useStore((s) => s.voiceAutoSendEnabled);
   const sidebarWidth = useStore((s) => s.sidebarWidth);
   const rightbarWidth = useStore((s) => s.rightbarWidth);
   const setSidebarWidth = useStore((s) => s.setSidebarWidth);
@@ -115,7 +116,12 @@ function AppInner() {
     const live = voice.liveTranscript;
     if (live && session.voiceDraft?.status !== "pending" && session.voiceDraft?.status !== "ready") {
       patchProject(session.cwd, {
-        voiceDraft: { original: live, cleaned: live, status: "live" },
+        voiceDraft: {
+          id: session.voiceDraft?.id ?? "convo-live",
+          original: live,
+          cleaned: live,
+          status: "live",
+        },
       });
     } else if (!live && session.voiceDraft?.status === "live") {
       patchProject(session.cwd, { voiceDraft: undefined });
@@ -142,26 +148,45 @@ function AppInner() {
   const handleVoiceTranscript = async (text: string) => {
     voice.cancelSpeak();
     if (!session) return;
-    // In conversation mode, "发送" is the explicit submit gesture — don't make
-    // the user click again. Bypass cleanup so the prompt fires immediately.
+    const cwd = session.cwd;
+
+    // Conversation mode: "发送" is the explicit submit gesture — fire immediately.
     if (voice.conversationMode) {
-      patchProject(session.cwd, { voiceDraft: undefined });
+      patchProject(cwd, { voiceDraft: undefined });
       sendPrompt(text);
       return;
     }
-    if (!cleanupEnabled) {
-      sendPrompt(text);
-      return;
-    }
-    // Smart-skip: short or visually-clean transcripts don't need a Haiku roundtrip.
-    // Heuristic: ≤ 12 chars OR no obvious filler words.
+
+    // Every other path: transcript LANDS IN THE TEXTAREA via voiceDraft (visible
+    // to the user). Auto-send only when explicitly enabled, never on cleanup
+    // failure (safer to let the user confirm the original than send something
+    // wrong silently).
+    const draftId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `vd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // Smart-skip: short or visually-clean transcripts don't need a Haiku
+    // roundtrip. We still show them in the textarea for review (or auto-send if
+    // user opted in) — only the cleanup pass is skipped to save tokens.
     const FILLER = /嗯+|啊+|那个那个|就是就是|就是说|呢这个|呃+|额+|那么那么/;
-    if (text.length <= 12 || !FILLER.test(text)) {
-      sendPrompt(text);
+    const skipCleanup = !cleanupEnabled || text.length <= 12 || !FILLER.test(text);
+
+    if (skipCleanup) {
+      patchProject(cwd, {
+        voiceDraft: { id: draftId, original: text, cleaned: text, status: "ready" },
+      });
+      if (autoSendEnabled) {
+        sendPrompt(text);
+        patchProject(cwd, { voiceDraft: undefined });
+      }
       return;
     }
-    patchProject(session.cwd, {
-      voiceDraft: { original: text, cleaned: text, status: "pending" },
+
+    // Cleanup path: show original immediately, replace with cleaned only if the
+    // user hasn't edited the textarea (InputBox enforces that via draft id).
+    patchProject(cwd, {
+      voiceDraft: { id: draftId, original: text, cleaned: text, status: "pending" },
     });
     try {
       const apiBase = (import.meta as any).env?.VITE_API_URL ?? "";
@@ -173,17 +198,20 @@ function AppInner() {
       });
       const body: { original?: string; cleaned?: string; fallback?: boolean } = await res.json();
       const cleaned = body.cleaned?.trim() || text;
-      patchProject(session.cwd, {
-        voiceDraft: {
-          original: text,
-          cleaned,
-          status: body.fallback ? "failed" : "ready",
-        },
+      const ok = !body.fallback;
+      patchProject(cwd, {
+        voiceDraft: { id: draftId, original: text, cleaned, status: ok ? "ready" : "failed" },
       });
+      // Auto-send only on success. On failure keep original visible, let user
+      // review; ConvoLiveBar / voice-draft-bar shows the failure state.
+      if (ok && autoSendEnabled) {
+        sendPrompt(cleaned);
+        patchProject(cwd, { voiceDraft: undefined });
+      }
     } catch (err) {
       console.warn("[voice] cleanup failed", err);
-      patchProject(session.cwd, {
-        voiceDraft: { original: text, cleaned: text, status: "failed" },
+      patchProject(cwd, {
+        voiceDraft: { id: draftId, original: text, cleaned: text, status: "failed" },
       });
     }
   };
