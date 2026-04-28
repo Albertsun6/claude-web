@@ -53,5 +53,12 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<!-- Allow http://localhost for simulator dev builds. Device builds use
+	     https://*.ts.net which is already permitted under default ATS. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

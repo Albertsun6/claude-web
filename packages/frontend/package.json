@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "build:ios": "VITE_API_URL=https://mymac.tailcf3ccf.ts.net VITE_WS_URL=wss://mymac.tailcf3ccf.ts.net/ws tsc -b && VITE_API_URL=https://mymac.tailcf3ccf.ts.net VITE_WS_URL=wss://mymac.tailcf3ccf.ts.net/ws vite build",
+    "build:ios-sim": "VITE_API_URL=http://localhost:3030 VITE_WS_URL=ws://localhost:3030/ws tsc -b && VITE_API_URL=http://localhost:3030 VITE_WS_URL=ws://localhost:3030/ws vite build",
     "ios:sync": "pnpm build:ios && cap sync ios",
     "ios:open": "cap open ios"
   },

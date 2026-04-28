@@ -14,8 +14,11 @@ const config: CapacitorConfig = {
     allowNavigation: [
       "mymac.tailcf3ccf.ts.net",
       "*.tailcf3ccf.ts.net",
+      "localhost", // simulator dev only — fetch/WS to http://localhost:3030
     ],
-    cleartext: false, // HTTPS only — Tailscale serve gives us a real cert
+    // localhost http allowed via Info.plist NSAllowsLocalNetworking; remote
+    // URLs still go over HTTPS via Tailscale.
+    cleartext: true,
   },
   ios: {
     contentInset: "always",
