@@ -195,6 +195,109 @@ iOS 后台持续 mic 监听技术上可行（Web Audio + 简单能量检测 / TF
 
 ---
 
+## iOS App v2 候选功能（F 待选）
+
+> v1 (M1-M4.5) 完成后的下一批工作。**A = web 已有但 iOS 还没有的功能**（移植
+> 价值高，桌面用过的肌肉记忆能直接搬过来）；**B = 全新功能**（提过没做）。
+> 选哪几个做、什么顺序由用户拍。每个估时是粗估，只看代码量不算调试。
+
+### A — 从 web 移植到 iOS 原生
+
+#### A1. 历史会话浏览（jsonl 解析）⭐⭐⭐
+看昨天 / 上周聊过啥，**点进去恢复继续**。后端已有 [`/api/sessions`](packages/backend/src/routes/sessions.ts) 接口，iOS 调一下渲染即可。
+- iOS 列表页：按 cwd 分组 → 最近 N 条 session preview
+- 点击 → setResumeSessionId → 跟 Claude 接着聊
+- **工时**: 1 天
+
+#### A2. 项目列表 + 快速切换 ⭐⭐⭐
+当前 iOS 设置里手动改 cwd。改成：
+- 主屏顶部下拉 / sheet 切项目
+- 持久化最近 5 个项目
+- 不做完整管理（添加 / 删除走设置）
+- **工时**: 半天
+
+#### A3. @file 自动补全 ⭐⭐
+输入 `@` 弹文件选择 sheet（fuzzy 搜索当前 cwd）。手机在输入文件路径时极痛苦，这个救命。
+- 后端 [`/api/fs/tree`](packages/backend/src/routes/fs.ts) 现成
+- **工时**: 1 天
+
+#### A4. / 命令面板（动态 slash） ⭐⭐
+从 system:init.slash_commands 拉 CLI 实际可用命令（包括 skills），输入 `/` 弹列表。**跟 web 行为一致**。
+- **工时**: 半天
+
+#### A5. ↑ 历史 prompt 回溯 ⭐⭐
+重发上一句 / 上 5 句。手机 textfield 有这个比再录一次更快。
+- **工时**: 半天
+
+#### A6. 工具卡片渲染（TodoWrite / Edit diff / Bash / Read）⭐⭐⭐
+现在 iOS 只显示 `🔧 Bash` 占位文字。改成：
+- TodoWrite → 复选框列表
+- Edit → 红绿 diff 视图
+- Bash → 等宽命令 + 输出折叠
+- Read → 路径 + 行数
+
+桌面已有这套（[MessageItem.tsx](packages/frontend/src/components/MessageItem.tsx)），SwiftUI 重写就行。
+- **工时**: 1-2 天
+
+#### A7. Markdown 完整渲染 ⭐⭐
+现在 iOS 用 `Text` 直接显示 markdown 源码（看到 `**`、`#` 等字符）。
+- 标题 / 列表 / 链接 / 表格 / 代码块 + 复制按钮
+- 用 [`swift-markdown-ui`](https://github.com/gonzalezreal/swift-markdown-ui) 或自己实现
+- **工时**: 1 天
+
+#### A8. /clear 和 /usage 本地短路 ⭐
+- /clear = 清当前 view（不发给 Claude）
+- /usage = 弹本会话 token / cost 数据
+- **工时**: 半天
+
+#### A9. 图片粘贴 / 拖拽进 prompt ⭐⭐
+iOS 自带 PhotoPicker，手机端实际可用度比想象的高（截屏发给 Claude 看）。
+- attachments 走现成的 `ImageAttachment` 协议
+- **工时**: 1 天
+
+#### A10. 多项目并行 run ⭐
+手机上同时跑两个项目 = UX 复杂度激增（要 tab 系统）。我建议**不做**。
+
+#### A11. 工具结果智能折叠 ⭐
+长 stdout 默认折叠，长按展开。
+- **工时**: 半天
+
+#### A12. 状态栏（model + cwd + tokens + cost）⭐
+现在 iOS 顶部只有连接圆点 + cwd。补上 model / 累积用量 / 费用。
+- **工时**: 半天
+
+---
+
+### B — 全新功能
+
+#### B1. APNs 推送通知 ⭐⭐⭐
+Claude tool 完成 / 收到回答时手机震一下。需要：
+- Apple Developer 账号 + APNs cert
+- 后端发 push（node-apns）
+- iOS 注册 device token
+- **工时**: 1-2 天 + Apple 配置半天
+
+#### B2. 同步多端信息展示 ⭐⭐
+桌面 + 手机看同一 session 实时同步。本质 = WS 多客户端 broadcast。已经在 IDEAS 第 11 项。
+- **工时**: 2-3 天
+
+#### B3. Cursor CLI 评审 MCP ⭐
+让 Claude 写完代码主动调 cursor-agent 二审。已经在 IDEAS 第 12 项。
+- **工时**: 1-2 天
+
+#### B4. 声纹识别（只响应主人声音）⭐
+公共场合用 PTT 时过滤掉别人的声音。已经在 IDEAS 第 9 项 (老条目)。
+- **工时**: 6 小时
+
+#### B5. Live Activities / 灵动岛 ⭐⭐
+Claude 思考状态 / TTS 播报显示在锁屏 / 灵动岛。**真正能做到锁屏稳定显示** 的唯一正路（避开 Now Playing 那条 dead end）。
+- **工时**: 2-3 天 + iOS 16+ 适配
+
+#### B6. AirPods Pro 长按柄 PTT
+评审已确认 Apple 不开放给私人 app，**不做**。
+
+---
+
 ## 已完成（参考）
 
 详见 git log，主要里程碑：
