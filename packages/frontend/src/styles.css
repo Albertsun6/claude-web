@@ -26,6 +26,15 @@ body { overscroll-behavior: none; }
   grid-template-rows: 100vh;
   height: 100vh;
 }
+/* Pin each grid child to its column explicitly. Without this, hiding the
+   sidebar (display:none) causes auto-placement to slide main/right items
+   into the leftmost columns — main lands in the 0px track, rightbar steals
+   the 1fr → main gets squeezed to ~150px wide. */
+.app > .sidebar { grid-column: 1; }
+.app > .resizer-left { grid-column: 2; }
+.app > .main { grid-column: 3; }
+.app > .resizer-right { grid-column: 4; }
+.app > .rightbar { grid-column: 5; }
 .resizer {
   background: transparent;
   cursor: col-resize;
@@ -1072,13 +1081,12 @@ button.danger { background: var(--danger); color: white; }
 }
 .app-rightbar-hidden .panel-toggle-right { right: 0; }
 
-/* Tablet: hide right panel */
+/* Tablet: hide right panel. Track widths for cols 4 & 5 are left intact
+   (rightbar / resizer-right are display:none, so they take no space) but
+   the 1fr stays in col 3 so main gets the full remaining width. */
 @media (max-width: 1100px) {
-  .app { grid-template-columns: var(--sidebar-w, 280px) 4px 1fr; }
-  /* Override the desktop 5-column collapse rule — at tablet width the
-     rightbar columns aren't rendered, so leaving them in the template would
-     reserve ~324px of dead space that shrinks main when sidebar collapses. */
-  .app.app-sidebar-hidden { grid-template-columns: 0 0 1fr; }
+  .app { grid-template-columns: var(--sidebar-w, 280px) 4px 1fr 0 0; }
+  .app.app-sidebar-hidden { grid-template-columns: 0 0 1fr 0 0; }
   .rightbar, .resizer-right { display: none; }
   .panel-toggle-right { display: none; }
 }
@@ -1089,6 +1097,9 @@ button.danger { background: var(--danger); color: white; }
     grid-template-columns: 1fr;
     grid-template-rows: var(--topbar-h) 1fr;
   }
+  /* Reset desktop's explicit grid-column pinning — mobile is single-col. */
+  .app > .topbar { grid-column: 1; grid-row: 1; }
+  .app > .main { grid-column: 1; grid-row: 2; }
   .sidebar { display: none; }
   .rightbar { display: none; }
   .resizer { display: none; }
