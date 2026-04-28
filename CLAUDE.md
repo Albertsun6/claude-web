@@ -55,7 +55,7 @@ pnpm dev:frontend     # http://localhost:5173, proxies /api + /ws to :3030
 pnpm --filter @claude-web/frontend build
 ```
 
-Tailscale serve already wired to expose :3030 on https://albert---macbook... or its renamed hostname:
+Tailscale serve already wired to expose :3030 on `https://<your-mac-hostname>.<tailnet>.ts.net`:
 
 ```bash
 tailscale serve --bg --https=443 http://localhost:3030
