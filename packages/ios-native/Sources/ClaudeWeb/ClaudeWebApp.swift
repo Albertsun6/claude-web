@@ -36,6 +36,11 @@ struct ClaudeWebApp: App {
                 .environment(voice)
                 .onAppear {
                     client.connect()
+                    // Honor background-keepalive setting at launch (independent
+                    // of voice mode). If user has it on, silent audio loop
+                    // starts immediately so iOS doesn't suspend the app when
+                    // they switch to another app.
+                    voice.applySilentKeepaliveChange()
                     // Hook session_ended → speak last assistant turn. Done here
                     // (not in init) because closures capturing tts can't escape
                     // through a mutating self in App.init.

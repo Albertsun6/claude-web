@@ -431,11 +431,11 @@ struct SettingsView: View {
                         .disabled(!s.ttsEnabled)
                 }
                 Section {
-                    Toggle("锁屏保活（实验性）", isOn: $s.silentKeepalive)
+                    Toggle("后台保活（实验性）", isOn: $s.silentKeepalive)
                 } header: {
                     Text("实验功能")
                 } footer: {
-                    Text("开启后语音模式会播放 0 音量循环音频，让 Now Playing 卡片在锁屏长时间保持。Apple 视为对后台音频的滥用，**不要在 App Store 版本启用**。仅供 sideload 个人用。")
+                    Text("开启后会一直播放 0 音量循环音频，让 iOS 不挂起 app —— 切换到其他 app 后再回来 WebSocket 不会断，锁屏时 Now Playing 卡片也持续显示。Apple 视为对后台音频的滥用，**不要在 App Store 版本启用**。仅供 sideload 个人用，电池影响很小。")
                 }
             }
             .navigationTitle("设置")

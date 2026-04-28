@@ -130,32 +130,69 @@ final class VoiceSession {
             break
         }
         unregisterRemoteCommands()
-        stopSilentLoop()
         clearNowPlaying()
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         active = false
+        // If user wants background keepalive, switch session back to .playback
+        // (no mic) and KEEP the silent loop running. Otherwise tear down.
+        if settings?.silentKeepalive == true {
+            do {
+                let s = AVAudioSession.sharedInstance()
+                try s.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .mixWithOthers])
+                try s.setActive(true)
+            } catch {
+                lastError = "切回保活会话失败: \(error.localizedDescription)"
+            }
+        } else {
+            stopSilentLoop()
+            try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        }
     }
 
     // MARK: - Silent loop (Now Playing keep-alive)
 
-    /// Public so App can call when settings.silentKeepalive flips while
-    /// voice mode is already active — toggle takes effect immediately
-    /// instead of waiting until next enter().
+    /// App calls this on launch and whenever settings.silentKeepalive flips,
+    /// regardless of voice mode. Silent loop runs INDEPENDENTLY of voice
+    /// mode — that's the whole point: keeps the WebSocket / app alive when
+    /// user switches to other apps. Without this, iOS suspends us in 30s
+    /// and the WS drops.
     func applySilentKeepaliveChange() {
-        guard active else { return }
         if settings?.silentKeepalive == true {
-            startSilentLoop()
+            ensureAudioSessionForKeepalive()
+            startSilentLoop(force: true)
+        } else if !active {
+            // Only tear down session if voice mode also off (it owns it
+            // when active).
+            stopSilentLoop()
+            try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         } else {
+            // Voice mode keeps session alive; just stop the loop.
             stopSilentLoop()
         }
         refresh()
     }
 
-    private func startSilentLoop() {
-        // Opt-in only — see AppSettings.silentKeepalive doc for the App Store
-        // rejection caveat. Default OFF, user toggles in Settings if they
-        // want to test long-idle lock-screen behavior.
-        guard settings?.silentKeepalive == true else { return }
+    /// Lightweight session category for keep-alive when voice mode is OFF —
+    /// doesn't need mic, so .playback is sufficient and avoids prompting
+    /// for mic permission unnecessarily.
+    private func ensureAudioSessionForKeepalive() {
+        // Voice mode (.playAndRecord) wins if it's already active.
+        if active { return }
+        let s = AVAudioSession.sharedInstance()
+        do {
+            try s.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .mixWithOthers])
+            try s.setActive(true)
+        } catch {
+            lastError = "保活会话激活失败: \(error.localizedDescription)"
+        }
+    }
+
+    /// `force=true` skips the silentKeepalive flag check (used when caller
+    /// already verified). voice mode entry calls without force so it
+    /// respects the user's keepalive setting.
+    private func startSilentLoop(force: Bool = false) {
+        if !force {
+            guard settings?.silentKeepalive == true else { return }
+        }
         guard silentLoop == nil else { return }
         do {
             let p = try AVAudioPlayer(data: Self.silentWAV)
