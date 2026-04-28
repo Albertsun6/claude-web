@@ -7,30 +7,60 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		038BDDC936F51C44239636F0 /* ToolCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691A5D95478C1BEA6C41D851 /* ToolCards.swift */; };
+		0B8AF6C30528B0786D38498F /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = D85A973013D2FE59ECC182F4 /* MarkdownUI */; };
 		14FF58C0ACCD40C590C4E172 /* VoiceSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03EB85EB534A11AFEBB9A548 /* VoiceSession.swift */; };
 		2EFE065198E9ECF3647CA798 /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */; };
+		332F0397A49A158E100D98B5 /* ProjectRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 592C33B52949B8FC89528D76 /* ProjectRegistry.swift */; };
+		4AA49DDD76AE150CB43E459F /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BC150255A000C4B594FB34 /* Telemetry.swift */; };
 		57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA416505AC735C06A084E7EE /* ContentView.swift */; };
 		6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */; };
+		9C5CCC80588E51B11C14AA5D /* TranscriptParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13FDDA6FDAA0AB0FB743114 /* TranscriptParser.swift */; };
 		9DAEEFD7C4A2F91D7444BCD0 /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 283735CE8528E94F44599D41 /* TTSPlayer.swift */; };
+		A5117A31C889867986B4E998 /* DirectoryPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4588360C6A81FAB43597D8E /* DirectoryPicker.swift */; };
 		A86805111F9BBB87D5F766B8 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF31E552D528619F13A5B40 /* Settings.swift */; };
 		D0731F6CAC254AB33956E0FB /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90163FEB077BB408157C916 /* Protocol.swift */; };
+		D9EA35CC1324C85BAFB52082 /* ProjectsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C686BBF22FF0FA13BF0020D7 /* ProjectsAPI.swift */; };
+		DA152D4966DF3D049BCA41C2 /* SessionsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02CBF7C84A20380B2383AD1 /* SessionsAPI.swift */; };
 		DA75273976369895263A106F /* ClaudeWebApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E431C062B9438869B8D6E399 /* ClaudeWebApp.swift */; };
+		E09093E9B0F2E9C3F716B609 /* Cache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8B9B0AC6F920A2B9E8A240 /* Cache.swift */; };
+		F0336354BB84D5D2A5362A95 /* FsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989ACA299187F4EE9220555C /* FsAPI.swift */; };
 		F772B81502ED4246E6B7968E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9AF5FF381485944DDD277DA6 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		03EB85EB534A11AFEBB9A548 /* VoiceSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSession.swift; sourceTree = "<group>"; };
+		1F8B9B0AC6F920A2B9E8A240 /* Cache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cache.swift; sourceTree = "<group>"; };
 		214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
 		283735CE8528E94F44599D41 /* TTSPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSPlayer.swift; sourceTree = "<group>"; };
+		45BC150255A000C4B594FB34 /* Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Telemetry.swift; sourceTree = "<group>"; };
 		4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendClient.swift; sourceTree = "<group>"; };
+		592C33B52949B8FC89528D76 /* ProjectRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRegistry.swift; sourceTree = "<group>"; };
 		5CF31E552D528619F13A5B40 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
+		691A5D95478C1BEA6C41D851 /* ToolCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolCards.swift; sourceTree = "<group>"; };
 		763A49693E0CE52A2C691B3C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7CAC5820B96A0B62BECEA82D /* ClaudeWeb.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClaudeWeb.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		989ACA299187F4EE9220555C /* FsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsAPI.swift; sourceTree = "<group>"; };
 		9AF5FF381485944DDD277DA6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B4588360C6A81FAB43597D8E /* DirectoryPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryPicker.swift; sourceTree = "<group>"; };
+		C686BBF22FF0FA13BF0020D7 /* ProjectsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsAPI.swift; sourceTree = "<group>"; };
 		CA416505AC735C06A084E7EE /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E02CBF7C84A20380B2383AD1 /* SessionsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsAPI.swift; sourceTree = "<group>"; };
 		E431C062B9438869B8D6E399 /* ClaudeWebApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeWebApp.swift; sourceTree = "<group>"; };
 		E90163FEB077BB408157C916 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocol.swift; sourceTree = "<group>"; };
+		F13FDDA6FDAA0AB0FB743114 /* TranscriptParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptParser.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8F914BCB3C3011BC4D70DAC5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0B8AF6C30528B0786D38498F /* MarkdownUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		3BE25D6B07CC3925258BCA3F /* ClaudeWeb */ = {
@@ -38,11 +68,20 @@
 			children = (
 				9AF5FF381485944DDD277DA6 /* Assets.xcassets */,
 				4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */,
+				1F8B9B0AC6F920A2B9E8A240 /* Cache.swift */,
 				E431C062B9438869B8D6E399 /* ClaudeWebApp.swift */,
 				CA416505AC735C06A084E7EE /* ContentView.swift */,
+				B4588360C6A81FAB43597D8E /* DirectoryPicker.swift */,
+				989ACA299187F4EE9220555C /* FsAPI.swift */,
 				763A49693E0CE52A2C691B3C /* Info.plist */,
+				592C33B52949B8FC89528D76 /* ProjectRegistry.swift */,
+				C686BBF22FF0FA13BF0020D7 /* ProjectsAPI.swift */,
 				E90163FEB077BB408157C916 /* Protocol.swift */,
+				E02CBF7C84A20380B2383AD1 /* SessionsAPI.swift */,
 				5CF31E552D528619F13A5B40 /* Settings.swift */,
+				45BC150255A000C4B594FB34 /* Telemetry.swift */,
+				691A5D95478C1BEA6C41D851 /* ToolCards.swift */,
+				F13FDDA6FDAA0AB0FB743114 /* TranscriptParser.swift */,
 				283735CE8528E94F44599D41 /* TTSPlayer.swift */,
 				214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */,
 				03EB85EB534A11AFEBB9A548 /* VoiceSession.swift */,
@@ -76,6 +115,7 @@
 			buildPhases = (
 				4A8EEA77BEF4BA830F0000B7 /* Sources */,
 				32C5AF7310C4BE9CE4357E67 /* Resources */,
+				8F914BCB3C3011BC4D70DAC5 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -83,6 +123,7 @@
 			);
 			name = ClaudeWeb;
 			packageProductDependencies = (
+				D85A973013D2FE59ECC182F4 /* MarkdownUI */,
 			);
 			productName = ClaudeWeb;
 			productReference = 7CAC5820B96A0B62BECEA82D /* ClaudeWeb.app */;
@@ -111,6 +152,9 @@
 			);
 			mainGroup = D381DC55AE0EB827C087F12A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1FE20B079C84B75007F14289 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A0D0852916E74685EF8CFADB /* Products */;
 			projectDirPath = "";
@@ -138,11 +182,20 @@
 			buildActionMask = 2147483647;
 			files = (
 				2EFE065198E9ECF3647CA798 /* BackendClient.swift in Sources */,
+				E09093E9B0F2E9C3F716B609 /* Cache.swift in Sources */,
 				DA75273976369895263A106F /* ClaudeWebApp.swift in Sources */,
 				57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */,
+				A5117A31C889867986B4E998 /* DirectoryPicker.swift in Sources */,
+				F0336354BB84D5D2A5362A95 /* FsAPI.swift in Sources */,
+				332F0397A49A158E100D98B5 /* ProjectRegistry.swift in Sources */,
+				D9EA35CC1324C85BAFB52082 /* ProjectsAPI.swift in Sources */,
 				D0731F6CAC254AB33956E0FB /* Protocol.swift in Sources */,
+				DA152D4966DF3D049BCA41C2 /* SessionsAPI.swift in Sources */,
 				A86805111F9BBB87D5F766B8 /* Settings.swift in Sources */,
 				9DAEEFD7C4A2F91D7444BCD0 /* TTSPlayer.swift in Sources */,
+				4AA49DDD76AE150CB43E459F /* Telemetry.swift in Sources */,
+				038BDDC936F51C44239636F0 /* ToolCards.swift in Sources */,
+				9C5CCC80588E51B11C14AA5D /* TranscriptParser.swift in Sources */,
 				6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */,
 				14FF58C0ACCD40C590C4E172 /* VoiceSession.swift in Sources */,
 			);
@@ -336,6 +389,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1FE20B079C84B75007F14289 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D85A973013D2FE59ECC182F4 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1FE20B079C84B75007F14289 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 717DA13FF387E84EC9EB94E8 /* Project object */;
 }

@@ -16,18 +16,27 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: "NO"
     SWIFT_STRICT_CONCURRENCY: minimal
 
+# MarkdownUI gives full markdown support (headings/lists/tables/code blocks
+# with language-aware styling). MIT licensed, ~1k stars, ~3MB binary.
+packages:
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: 2.4.0
+
 targets:
   ClaudeWeb:
     type: application
     platform: iOS
     sources:
       - Sources/ClaudeWeb
+    dependencies:
+      - package: MarkdownUI
     info:
       path: Sources/ClaudeWeb/Info.plist
       properties:
-        # Renamed from "Claude" to avoid confusion with Anthropic's official
-        # Claude app on Apple platforms.
-        CFBundleDisplayName: Claude Voice
+        # Branded "Seaidea" — distinct from Anthropic's Claude trademark.
+        # The app uses Claude (the AI) as its model backend but is not affiliated.
+        CFBundleDisplayName: Seaidea
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:
@@ -39,11 +48,11 @@ targets:
         # Future-proof: declare these now so M3/M4 don't need re-generate.
         UIBackgroundModes:
           - audio
-        NSMicrophoneUsageDescription: Claude Voice needs your microphone for voice input.
+        NSMicrophoneUsageDescription: Seaidea needs your microphone for voice input.
         # Required when reaching the Mac mini over a LAN IP (vs Tailscale's
         # public-routable hostname). Without this, iOS 14+ silently blocks the
         # local-network connection until the user grants permission.
-        NSLocalNetworkUsageDescription: Claude Voice connects to your Mac running the claude-web backend on the local network.
+        NSLocalNetworkUsageDescription: Seaidea connects to your Mac running the backend on the local network.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Claude Voice</string>
+	<string>Seaidea</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,9 +26,9 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Claude Voice connects to your Mac running the claude-web backend on the local network.</string>
+	<string>Seaidea connects to your Mac running the backend on the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Claude Voice needs your microphone for voice input.</string>
+	<string>Seaidea needs your microphone for voice input.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

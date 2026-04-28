@@ -54,7 +54,7 @@ final class VoiceSession {
         case .fetching: return .thinking // Haiku → tts call counts as thinking-ish
         default: break
         }
-        if client?.busy == true { return .thinking }
+        if client?.currentBusy == true { return .thinking }
         return .idle
     }
 
@@ -418,8 +418,8 @@ final class VoiceSession {
 
     private func updateNowPlaying() {
         var info: [String: Any] = [:]
-        info[MPMediaItemPropertyTitle] = "Claude Voice · " + title()
-        info[MPMediaItemPropertyArtist] = "claude-web"
+        info[MPMediaItemPropertyTitle] = "Seaidea · " + title()
+        info[MPMediaItemPropertyArtist] = "Seaidea"
         // playbackRate truth-table (be honest with iOS):
         //   playingTTS                              → 1.0  (real audio)
         //   pausedTTS                               → 0.0  (real but paused)
@@ -449,10 +449,10 @@ final class VoiceSession {
             // In voice mode, play button starts recording. Keepalive-only
             // mode has no remote commands registered — say "运行中" instead
             // so user isn't misled into thinking play will record.
-            return active ? "待命 · 按播放开始录音" : "Claude · 后台运行"
+            return active ? "待命 · 按播放开始录音" : "Seaidea · 后台运行"
         case .recording: return "录音中… · 再按一次结束"
         case .transcribing: return "识别中…"
-        case .thinking: return "Claude 在想…"
+        case .thinking: return "正在思考…"
         case .playingTTS: return "正在播报 · " + (settings?.cwd.split(separator: "/").last.map(String.init) ?? "")
         case .pausedTTS: return "已暂停"
         case .error(let m): return "出错: \(m)"
