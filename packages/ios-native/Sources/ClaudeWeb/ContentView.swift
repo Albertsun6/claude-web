@@ -8,6 +8,7 @@ struct ContentView: View {
     @Environment(BackendClient.self) private var client
     @Environment(VoiceRecorder.self) private var recorder
     @Environment(TTSPlayer.self) private var tts
+    @Environment(VoiceSession.self) private var voice
     @State private var draft: String = ""
     @State private var showSettings = false
 
@@ -24,15 +25,32 @@ struct ContentView: View {
                     onSend: send,
                     onStop: client.interrupt,
                     onTranscript: { text in
-                        // Voice transcript fills the textarea — user reviews + sends.
-                        // (M1.5 spec: REVIEWING step explicit, no auto-send for now.)
-                        draft = text
+                        if voice.active {
+                            // Voice mode is hands-free — auto-send.
+                            client.sendPrompt(text, cwd: settings.cwd, permissionMode: settings.permissionMode)
+                        } else {
+                            // Foreground review: fill the field, user taps send.
+                            draft = text
+                        }
                     }
                 )
             }
             .navigationTitle("Claude")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        if voice.active { voice.exit() } else { voice.enter() }
+                    } label: {
+                        Label(
+                            voice.active ? "退出语音模式" : "进入语音模式",
+                            systemImage: voice.active ? "headphones.circle.fill" : "headphones"
+                        )
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(voice.active ? .green : .accentColor)
+                    }
+                    .accessibilityLabel(voice.active ? "退出语音模式" : "进入语音模式")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape")
