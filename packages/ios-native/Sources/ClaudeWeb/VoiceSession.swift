@@ -138,6 +138,19 @@ final class VoiceSession {
 
     // MARK: - Silent loop (Now Playing keep-alive)
 
+    /// Public so App can call when settings.silentKeepalive flips while
+    /// voice mode is already active — toggle takes effect immediately
+    /// instead of waiting until next enter().
+    func applySilentKeepaliveChange() {
+        guard active else { return }
+        if settings?.silentKeepalive == true {
+            startSilentLoop()
+        } else {
+            stopSilentLoop()
+        }
+        refresh()
+    }
+
     private func startSilentLoop() {
         // Opt-in only — see AppSettings.silentKeepalive doc for the App Store
         // rejection caveat. Default OFF, user toggles in Settings if they
@@ -341,14 +354,23 @@ final class VoiceSession {
 
     private func updateNowPlaying() {
         var info: [String: Any] = [:]
-        // Title format matches IOS_NATIVE_DEVICE_TEST.md verification text.
         info[MPMediaItemPropertyTitle] = "Claude Voice · " + title()
         info[MPMediaItemPropertyArtist] = "claude-web"
-        // playbackRate=1.0 even in non-playing states is intentional: lock-
-        // screen card requires it to display the play button as "current"
-        // when nothing is actively playing. Combined with the silent keep-
-        // alive loop, this stabilizes the Now Playing UI.
-        info[MPNowPlayingInfoPropertyPlaybackRate] = state == .pausedTTS ? 0.0 : 1.0
+        // playbackRate truth-table (be honest with iOS):
+        //   playingTTS                              → 1.0  (real audio)
+        //   pausedTTS                               → 0.0  (real but paused)
+        //   silentKeepalive ON  + any other state   → 1.0  (silent loop is playing)
+        //   silentKeepalive OFF + any other state   → 0.0  (nothing playing)
+        // Lying with 1.0 when nothing plays makes Control Center display the
+        // wrong UI (and it doesn't actually keep the card alive — only real
+        // audio does that).
+        let rate: Double
+        switch state {
+        case .playingTTS: rate = 1.0
+        case .pausedTTS: rate = 0.0
+        default: rate = (settings?.silentKeepalive == true && silentLoop != nil) ? 1.0 : 0.0
+        }
+        info[MPNowPlayingInfoPropertyPlaybackRate] = rate
         info[MPNowPlayingInfoPropertyIsLiveStream] = true
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }

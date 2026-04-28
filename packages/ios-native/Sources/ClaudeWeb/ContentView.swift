@@ -435,11 +435,11 @@ struct SettingsView: View {
             }
             .navigationTitle("设置")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
-                }
+                // Single "完成" button. Pickers / Toggles bind directly to
+                // $s.xxx so they commit inline; only the textfield drafts
+                // (URL / cwd) and permission mode need explicit save here.
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("保存") {
+                    Button("完成") {
                         if let u = URL(string: draftURL) { s.backendURL = u }
                         s.cwd = draftCwd
                         s.permissionMode = draftMode

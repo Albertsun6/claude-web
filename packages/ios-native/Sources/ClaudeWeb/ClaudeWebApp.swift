@@ -74,6 +74,11 @@ struct ClaudeWebApp: App {
                 .onChange(of: recorder.state) { _, _ in voice.refresh() }
                 .onChange(of: tts.state) { _, _ in voice.refresh() }
                 .onChange(of: client.busy) { _, _ in voice.refresh() }
+                // silentKeepalive toggle takes effect immediately — start
+                // or stop the silent loop without exiting voice mode.
+                .onChange(of: settings.silentKeepalive) { _, _ in
+                    voice.applySilentKeepaliveChange()
+                }
         }
     }
 }
