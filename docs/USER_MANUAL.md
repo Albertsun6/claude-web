@@ -447,6 +447,133 @@ Safari 分享 → 添加到主屏幕 → 全屏 standalone。
 
 ---
 
+## iOS 原生 app（Claude Voice）
+
+**这是 v1 推荐的手机端方案**。SwiftUI 重写，绕开 PWA 在 iOS 上的诸多约束（autoplay、物理静音键、后台 mic）。Capacitor 路径已标 deprecated。
+
+### 安装
+
+源码：[`packages/ios-native/`](packages/ios-native/)。本地 build + 装机：
+
+```bash
+cd packages/ios-native
+
+# 模拟器（UI 调试）
+./scripts/deploy.sh --sim
+
+# 真机（要 iPhone USB 线 / 已配对）
+./scripts/deploy.sh
+```
+
+第一次装机要在 iPhone 上**信任开发者证书**：设置 → 通用 → VPN与设备管理 → 你的 Apple ID → 信任。
+
+免费 Apple ID 7 天重签一次（重跑 deploy.sh 即可）。如要走 TestFlight 永久签名，需 $99/年开发者账号（M5 才订）。
+
+### 首次配置（设置 ⚙️）
+
+| 项 | 默认 | 说明 |
+|---|---|---|
+| Backend | `https://mymac.tailcf3ccf.ts.net`（真机）/ `http://localhost:3030`（模拟器）| Tailscale URL 或 LAN IP |
+| 工作目录 | `/Users/yongqian/Desktop` | Claude 跑命令的 cwd |
+| 模型 | Haiku 4.5 | 可切 Sonnet 4.6 / Opus 4.7 |
+| 权限模式 | **Plan**（最安全）| Plan / Default / Accept Edits / **Bypass** |
+| Token | 空 | backend 设了 `CLAUDE_WEB_TOKEN` 才填 |
+| 自动播报 | ON | TTS 自动念回答 |
+| 风格 | 概要 | Haiku 改写为 1-4 句 vs 逐句原文 |
+| 慢速朗读 | OFF | -15% 速率 |
+| 后台保活（实验性）| OFF | 见下文 |
+
+### 权限模式
+
+| 模式 | 行为 |
+|---|---|
+| **Plan** | Claude 只规划不执行任何工具。最安全，永远不弹权限请求 |
+| **Default** | Claude 想用 Bash/Edit/Write 时弹半屏 sheet 让你 Allow / Deny |
+| **Accept Edits** | 自动允许 Edit/Write，Bash 仍弹 |
+| **Bypass** ⚠️ | **自动允许所有工具**。Claude 可直接 `rm -rf` 你的项目。开了主屏顶部会有红色常驻警示条 |
+
+### 前台 PTT（推按说话）
+
+输入框右下圆形 mic 按钮：
+- **按住** ≥ 250ms 说话，松手停录 → 上传 whisper 转写 → 文本进**输入框**等你审 → 点纸飞机发送
+- **单击切换** < 250ms 点按 → 录音开关
+- 第一次用会弹麦克风权限
+
+转写走 Mac 后端 `/api/voice/transcribe`（whisper-cli + 项目词表 + Haiku cleanup）。识别率比 SFSpeechRecognizer 高，但要后端在线。
+
+### 语音模式（左上耳机图标）
+
+进入语音模式后：
+- PTT **不再进输入框，自动发送**（hands-free 优化）
+- AVAudioSession 升级到 `.playAndRecord` + `.spokenAudio` + `.duckOthers`
+- AirPods 路由到 mic + 扬声器，非 Claude 的音频被压低
+
+退出回前台 review 模式。
+
+### 后台保活（实验性）
+
+设置里"实验功能"区块的开关。**默认关**。
+
+**作用**：开了之后 app 一直播 0 音量循环音频 → iOS 不挂起 → **切其它 app 5 分钟回来 WebSocket 仍连着**。
+
+**限制 / 注意：**
+- Apple 视为对 background audio 的滥用 → **不要在 App Store 版本启用**（M5 上 TestFlight 时也别开），仅供 sideload 个人用
+- iOS 仍可能在内存压力 / 网络切换 / 用户滑掉 app 时挂起，**不保证 100% 不断**
+- 电池影响很小（0 音量信号处理）
+
+**典型场景**：你在 Claude Voice 里发了一个 prompt，等回答的过程中切到 Safari 看个文档 → 1 分钟后切回来 → 答案已经回完，TTS 在等你重听。
+
+### TTS 控制
+
+顶部状态栏右侧（cwd 旁边）：
+- **⏸ 暂停** / **▶ 继续** / **⏹ 停止**：在 TTS 播放期间显示
+- **↻ 重听**：上一段播完后显示，**用缓存 mp3 直接重播**，不重调 Haiku
+
+### 可用 / 不可用一览
+
+| 场景 | 可用 |
+|---|---|
+| 前台文字聊天 | ✅ |
+| 前台 PTT 录音 → 上传 → 编辑 → 发送 | ✅ |
+| Claude 回答自动播报 TTS（晓晓声） | ✅ |
+| 模型切换 Haiku / Sonnet / Opus | ✅ |
+| 权限模式四档（含 Bypass） | ✅ |
+| TTS 播放期间锁屏 / 控制中心看到 Now Playing 卡片 | ✅ |
+| TTS 播放期间锁屏 play/pause 按钮控制 | ✅ |
+| 语音模式自动发送（hands-free） | ✅ |
+| 后台保活 → 切 app WS 不断 | ⚠️ 实验性，大多数情况可用 |
+| **闲置语音模式 → 锁屏 → 用 play 按键启动新录音** | ❌ **iOS 平台限制** |
+| **AirPods 长按柄触发 PTT** | ❌ Apple 不开放给 app |
+| **后台麦克风长时间录音** | ❌ Apple 只发给 VOIP entitlement |
+
+### 已知限制（不打算修）
+
+1. **Now Playing 卡片只在 TTS 真在播时稳定显示**。idle 语音模式 + silent keepalive 也写了 metadata，但 iOS 不一定显示。这是平台行为（参考 [WWDC22 PushToTalk](https://developer.apple.com/videos/play/wwdc2022/10117/)），不投入修
+2. **首次进入语音模式不自动开 keepalive**，要手动到设置开。设计如此（保活独立于语音模式）
+3. **App 名"Claude Voice"** 跟 Anthropic 官方"Claude" app 区分；图标暂用 Capacitor 占位
+
+### 故障排查
+
+| 现象 | 排查 |
+|---|---|
+| 装上去打不开 | 设置 → VPN与设备管理 → 信任你的 Apple ID |
+| 7 天后打不开 | 免费 cert 过期；插 USB 重跑 `./scripts/deploy.sh` |
+| 顶部小圆点黄/红 | iPhone Tailscale 没开 / Mac backend 死 / 网络切换中 |
+| 切其它 app 回来连接断 | 设置开"后台保活"；或接受偶尔重连 |
+| TTS 没响 | 检查 iPhone 物理静音键、AirPods 路由 |
+| 录音转写空 | 麦权限被拒 → 设置 → Claude Voice → 麦克风 |
+| Bypass 误开 | 主屏顶部红条提示；设置改回 Plan |
+| 锁屏 play 按钮没反应 | 平台限制，不是 bug |
+
+### 后续工作（M5）
+
+- TestFlight 配置 + Apple Developer $99 订阅
+- 真机长时间使用稳定性验证
+- Mac mini 迁移（见 [docs/MAC_MINI_MIGRATION.md](docs/MAC_MINI_MIGRATION.md)）
+- 新功能（项目列表 / 历史会话浏览 / Claude Code skills 调用 / ...）按需
+
+---
+
 ## 故障排查
 
 ### 黑屏 / 白屏

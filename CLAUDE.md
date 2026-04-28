@@ -11,13 +11,20 @@ CLI inherits the user's OAuth credentials at `~/.claude/.credentials.json`.
 
 ```
 packages/
-  backend/    Hono + ws on :3030. Spawns claude CLI per WS prompt. Serves the dist/.
-  frontend/   React 18 + Vite + Zustand. Built dist served by backend.
-  shared/     Protocol types (ClientMessage, ServerMessage).
+  backend/      Hono + ws on :3030. Spawns claude CLI per WS prompt. Serves the dist/.
+  frontend/    React 18 + Vite + Zustand. Built dist served by backend.
+                packages/frontend/ios/  ⚠️ Capacitor wrapper — DEPRECATED. Don't add features here.
+  shared/      Protocol types (ClientMessage, ServerMessage).
+  ios-native/  ✅ NEW: SwiftUI native iOS app (Claude Voice). Canonical iOS path from v1 onward.
+                xcodegen-driven, talks to backend over WS + HTTP — protocol unchanged.
 ```
 
 Single-port deploy: backend serves `dist/` + `/api/*` + `/ws` from one origin.
 Vite dev (`pnpm dev:frontend`) proxies to backend at 3030.
+
+**iOS path policy**: any new mobile feature / fix goes into `packages/ios-native/`.
+The Capacitor wrapper at `packages/frontend/ios/` is preserved as fallback but
+unmaintained (see `packages/frontend/ios/DEPRECATED.md`).
 
 ## Backend
 
@@ -109,6 +116,9 @@ When in doubt: ask the user "要更新手册吗？" rather than assume.
 | `docs/IMPROVEMENTS.md` | Historic audit (mostly closed) |
 | `docs/MOBILE_VOICE.md` | Mobile voice strategy doc |
 | `docs/ENTERPRISE_INTERNAL.md` | Speculative multi-user migration plan |
+| `docs/IOS_NATIVE_REVIEW.md` / `_2.md` / `_3.md` | iOS native code-review threads (M1-M4.5) |
+| `docs/IOS_NATIVE_DEVICE_TEST.md` | Real-device acceptance checklist for the SwiftUI app |
+| `docs/MAC_MINI_MIGRATION.md` | When the dedicated Mac mini arrives, follow this |
 | `CLAUDE.md` (this file) | Architecture brief for new Claude sessions |
 
 ## Improvements / TODOs
