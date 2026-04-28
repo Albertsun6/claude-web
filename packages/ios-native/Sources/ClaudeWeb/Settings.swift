@@ -9,6 +9,7 @@ import Observation
 final class AppSettings {
     private static let backendKey = "com.albertsun6.claudeweb-native.backendURL"
     private static let cwdKey = "com.albertsun6.claudeweb-native.cwd"
+    private static let permissionModeKey = "com.albertsun6.claudeweb-native.permissionMode"
 
     var backendURL: URL {
         didSet {
@@ -20,6 +21,13 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(cwd, forKey: Self.cwdKey) }
     }
 
+    /// "plan" (read-only, no tool execution — safe default for mobile),
+    /// "default" (asks per tool — uses the permission_request modal),
+    /// "acceptEdits" (auto-allow file edits, still asks for Bash).
+    var permissionMode: String {
+        didSet { UserDefaults.standard.set(permissionMode, forKey: Self.permissionModeKey) }
+    }
+
     init() {
         // Default: simulator → http://localhost:3030; device → Tailscale URL.
         // We'll prompt the user to pick at first launch in the settings page.
@@ -28,6 +36,8 @@ final class AppSettings {
         self.backendURL = (saved.flatMap(URL.init(string:))) ?? defaultURL
         self.cwd = UserDefaults.standard.string(forKey: Self.cwdKey)
             ?? "/Users/yongqian/Desktop"
+        self.permissionMode = UserDefaults.standard.string(forKey: Self.permissionModeKey)
+            ?? "plan"
     }
 
     private static func detectDefaultBackend() -> URL {

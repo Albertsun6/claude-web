@@ -19,6 +19,8 @@ final class BackendClient {
     var sessionId: String?
     var busy: Bool = false
     var currentRunId: String?
+    /// When non-nil, UI shows a sheet asking allow/deny.
+    var pendingPermission: PermissionRequest?
 
     /// User-tweakable backend URL (settings page writes here, persisted in UserDefaults).
     var backendBase: URL {
@@ -128,8 +130,27 @@ final class BackendClient {
             busy = false
         case .clearRunMessages(let runId):
             messages.removeAll { $0.runId == runId }
+        case .permissionRequest(let runId, let requestId, let toolName, let input):
+            // Show modal — Claude is blocked until we reply. Auto-deny if a
+            // newer request arrives (shouldn't happen but defensive).
+            pendingPermission = PermissionRequest(
+                runId: runId, requestId: requestId, toolName: toolName, input: input
+            )
         case .unknown:
             break
+        }
+    }
+
+    func replyPermission(_ request: PermissionRequest, decision: PermissionDecision) {
+        Task { [weak self] in
+            await self?.send(.permissionReply(
+                requestId: request.requestId,
+                decision: decision.rawValue,
+                runId: request.runId
+            ))
+        }
+        if pendingPermission?.requestId == request.requestId {
+            pendingPermission = nil
         }
     }
 
@@ -150,7 +171,12 @@ final class BackendClient {
 
     // MARK: - Send
 
-    func sendPrompt(_ prompt: String, cwd: String, model: String = "claude-haiku-4-5") {
+    func sendPrompt(
+        _ prompt: String,
+        cwd: String,
+        model: String = "claude-haiku-4-5",
+        permissionMode: String = "plan"
+    ) {
         let runId = UUID().uuidString
         currentRunId = runId
         busy = true
@@ -161,7 +187,7 @@ final class BackendClient {
             prompt: prompt,
             cwd: cwd,
             model: model,
-            permissionMode: "default",
+            permissionMode: permissionMode,
             resumeSessionId: sessionId
         )
         Task { [weak self] in await self?.send(msg) }
@@ -197,3 +223,37 @@ struct ChatLine: Identifiable, Equatable {
         self.runId = runId
     }
 }
+
+struct PermissionRequest: Identifiable, Equatable {
+    var id: String { requestId }
+    let runId: String
+    let requestId: String
+    let toolName: String
+    let input: [String: Any]
+
+    /// One-line preview rendered into the modal so the user can see what
+    /// they're approving (file path for Edit, command for Bash, etc).
+    var preview: String {
+        switch toolName {
+        case "Bash":
+            return (input["command"] as? String) ?? ""
+        case "Edit", "Write":
+            return (input["file_path"] as? String) ?? (input["path"] as? String) ?? ""
+        case "Read":
+            return (input["file_path"] as? String) ?? ""
+        default:
+            // Fallback: pretty-print whole input
+            if let data = try? JSONSerialization.data(withJSONObject: input, options: [.prettyPrinted]),
+               let s = String(data: data, encoding: .utf8) {
+                return s
+            }
+            return ""
+        }
+    }
+
+    static func == (lhs: PermissionRequest, rhs: PermissionRequest) -> Bool {
+        lhs.requestId == rhs.requestId
+    }
+}
+
+enum PermissionDecision: String { case allow, deny }

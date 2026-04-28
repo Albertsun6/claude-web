@@ -12,9 +12,10 @@ import Foundation
 enum ClientMessage: Encodable {
     case userPrompt(runId: String, prompt: String, cwd: String, model: String, permissionMode: String, resumeSessionId: String?)
     case interrupt(runId: String?)
+    case permissionReply(requestId: String, decision: String, runId: String?)
 
     enum CodingKeys: String, CodingKey {
-        case type, runId, prompt, cwd, model, permissionMode, resumeSessionId
+        case type, runId, prompt, cwd, model, permissionMode, resumeSessionId, requestId, decision
     }
 
     func encode(to encoder: Encoder) throws {
@@ -31,6 +32,11 @@ enum ClientMessage: Encodable {
         case .interrupt(let runId):
             try c.encode("interrupt", forKey: .type)
             try c.encodeIfPresent(runId, forKey: .runId)
+        case .permissionReply(let requestId, let decision, let runId):
+            try c.encode("permission_reply", forKey: .type)
+            try c.encode(requestId, forKey: .requestId)
+            try c.encode(decision, forKey: .decision)
+            try c.encodeIfPresent(runId, forKey: .runId)
         }
     }
 }
@@ -42,6 +48,7 @@ enum ServerMessage {
     case sessionEnded(runId: String, reason: String)
     case error(runId: String?, message: String)
     case clearRunMessages(runId: String)
+    case permissionRequest(runId: String, requestId: String, toolName: String, input: [String: Any])
     case unknown(type: String)
 
     static func decode(_ data: Data) throws -> ServerMessage {
@@ -62,6 +69,13 @@ enum ServerMessage {
             return .error(runId: json["runId"] as? String, message: (json["error"] as? String) ?? "unknown")
         case "clear_run_messages":
             return .clearRunMessages(runId: (json["runId"] as? String) ?? "")
+        case "permission_request":
+            return .permissionRequest(
+                runId: (json["runId"] as? String) ?? "",
+                requestId: (json["requestId"] as? String) ?? "",
+                toolName: (json["toolName"] as? String) ?? "?",
+                input: (json["input"] as? [String: Any]) ?? [:]
+            )
         default:
             return .unknown(type: type)
         }

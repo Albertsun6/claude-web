@@ -6,6 +6,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(BackendClient.self) private var client
+    @Environment(VoiceRecorder.self) private var recorder
     @State private var draft: String = ""
     @State private var showSettings = false
 
@@ -16,7 +17,17 @@ struct ContentView: View {
                 ChatListView(messages: client.messages)
                     .frame(maxHeight: .infinity)
                 Divider()
-                InputBar(draft: $draft, busy: client.busy, onSend: send, onStop: client.interrupt)
+                InputBar(
+                    draft: $draft,
+                    busy: client.busy,
+                    onSend: send,
+                    onStop: client.interrupt,
+                    onTranscript: { text in
+                        // Voice transcript fills the textarea — user reviews + sends.
+                        // (M1.5 spec: REVIEWING step explicit, no auto-send for now.)
+                        draft = text
+                    }
+                )
             }
             .navigationTitle("Claude")
             .navigationBarTitleDisplayMode(.inline)
@@ -29,6 +40,15 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .sheet(item: Binding(
+                get: { client.pendingPermission },
+                set: { _ in /* dismissed by replyPermission */ }
+            )) { req in
+                PermissionSheet(request: req) { decision in
+                    client.replyPermission(req, decision: decision)
+                }
+                .presentationDetents([.medium])
             }
         }
     }
@@ -69,7 +89,7 @@ struct ContentView: View {
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        client.sendPrompt(text, cwd: settings.cwd)
+        client.sendPrompt(text, cwd: settings.cwd, permissionMode: settings.permissionMode)
         draft = ""
     }
 }
@@ -137,30 +157,127 @@ private struct InputBar: View {
     let busy: Bool
     let onSend: () -> Void
     let onStop: () -> Void
+    let onTranscript: (String) -> Void
+
+    @Environment(VoiceRecorder.self) private var recorder
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField("输入指令…", text: $draft, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(1...4)
-                .submitLabel(.send)
-                .onSubmit(onSend)
-            if busy {
-                Button(role: .destructive, action: onStop) {
-                    Image(systemName: "stop.fill")
-                        .frame(width: 44, height: 44)
+        VStack(spacing: 6) {
+            // Recorder status hint above the bar
+            if recorder.state != .idle {
+                HStack(spacing: 6) {
+                    Circle().fill(statusColor).frame(width: 8, height: 8)
+                    Text(statusLabel).font(.caption).foregroundStyle(.secondary)
                 }
-            } else {
-                Button(action: onSend) {
-                    Image(systemName: "paperplane.fill")
-                        .frame(width: 44, height: 44)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("输入指令，或按住麦克风说话…", text: $draft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1...4)
+                    .submitLabel(.send)
+                    .onSubmit(onSend)
+                pttButton
+                if busy {
+                    Button(role: .destructive, action: onStop) {
+                        Image(systemName: "stop.fill")
+                            .frame(width: 44, height: 44)
+                    }
+                } else {
+                    Button(action: onSend) {
+                        Image(systemName: "paperplane.fill")
+                            .frame(width: 44, height: 44)
+                    }
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
+    }
+
+    /// Hold-to-talk: press starts, release stops + transcribes.
+    /// We use a long-press gesture with min 0 sec so it engages immediately.
+    private var pttButton: some View {
+        Button {
+            // Tap-to-toggle for accessibility — tap once starts, tap again stops.
+            Task { await togglePTT() }
+        } label: {
+            Image(systemName: recordingIcon)
+                .frame(width: 44, height: 44)
+                .foregroundStyle(recordingFG)
+                .background(recordingBG, in: .circle)
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            // Hold-to-talk: starts on press, transcribes on release.
+            // minimumDistance > 0 prevents the tap recognizer from firing for holds.
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if recorder.state == .idle {
+                        Task { await recorder.start() }
+                    }
+                }
+                .onEnded { _ in
+                    if recorder.state == .recording {
+                        Task {
+                            if let text = await recorder.stopAndTranscribe(), !text.isEmpty {
+                                onTranscript(text)
+                            }
+                        }
+                    }
+                }
+        )
+        .disabled(busy)
+    }
+
+    private func togglePTT() async {
+        switch recorder.state {
+        case .idle:
+            await recorder.start()
+        case .recording:
+            if let text = await recorder.stopAndTranscribe(), !text.isEmpty {
+                onTranscript(text)
+            }
+        default:
+            break
+        }
+    }
+
+    private var recordingIcon: String {
+        switch recorder.state {
+        case .recording: return "mic.fill"
+        case .uploading: return "waveform"
+        default: return "mic"
+        }
+    }
+    private var recordingFG: Color {
+        recorder.state == .idle ? .accentColor : .white
+    }
+    private var recordingBG: Color {
+        switch recorder.state {
+        case .recording: return .red
+        case .uploading: return .blue
+        default: return Color.accentColor.opacity(0.15)
+        }
+    }
+    private var statusColor: Color {
+        switch recorder.state {
+        case .recording: return .red
+        case .uploading: return .blue
+        case .error: return .orange
+        default: return .gray
+        }
+    }
+    private var statusLabel: String {
+        switch recorder.state {
+        case .recording: return "录音中…松开发送"
+        case .uploading: return "上传识别中…"
+        case .error(let msg): return msg
+        default: return ""
+        }
     }
 }
 
@@ -169,6 +286,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draftURL: String = ""
     @State private var draftCwd: String = ""
+    @State private var draftMode: String = "plan"
 
     var body: some View {
         @Bindable var s = settings
@@ -191,6 +309,15 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
+                Section("权限模式") {
+                    Picker("权限模式", selection: $draftMode) {
+                        Text("Plan（只读规划，最安全）").tag("plan")
+                        Text("Default（每次工具问允许 / 拒绝）").tag("default")
+                        Text("Accept Edits（自动允许编辑，Bash 仍问）").tag("acceptEdits")
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
             }
             .navigationTitle("设置")
             .toolbar {
@@ -201,6 +328,7 @@ struct SettingsView: View {
                     Button("保存") {
                         if let u = URL(string: draftURL) { s.backendURL = u }
                         s.cwd = draftCwd
+                        s.permissionMode = draftMode
                         dismiss()
                     }
                     .fontWeight(.bold)
@@ -209,7 +337,49 @@ struct SettingsView: View {
             .onAppear {
                 draftURL = settings.backendURL.absoluteString
                 draftCwd = settings.cwd
+                draftMode = settings.permissionMode
             }
+        }
+    }
+}
+
+struct PermissionSheet: View {
+    let request: PermissionRequest
+    let onDecision: (PermissionDecision) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("工具") {
+                    Text(request.toolName).font(.title3.bold())
+                }
+                Section("内容") {
+                    Text(request.preview)
+                        .font(.body.monospaced())
+                        .textSelection(.enabled)
+                        .lineLimit(10)
+                }
+                Section {
+                    Button(role: .destructive) {
+                        onDecision(.deny)
+                        dismiss()
+                    } label: {
+                        Label("拒绝", systemImage: "xmark.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    Button {
+                        onDecision(.allow)
+                        dismiss()
+                    } label: {
+                        Label("允许", systemImage: "checkmark.circle.fill")
+                            .frame(maxWidth: .infinity)
+                            .fontWeight(.semibold)
+                    }
+                }
+            }
+            .navigationTitle("权限请求")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

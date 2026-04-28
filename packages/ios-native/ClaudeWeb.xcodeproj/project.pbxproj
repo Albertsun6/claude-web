@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		2EFE065198E9ECF3647CA798 /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */; };
 		57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA416505AC735C06A084E7EE /* ContentView.swift */; };
+		6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */; };
 		A86805111F9BBB87D5F766B8 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF31E552D528619F13A5B40 /* Settings.swift */; };
 		D0731F6CAC254AB33956E0FB /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90163FEB077BB408157C916 /* Protocol.swift */; };
 		DA75273976369895263A106F /* ClaudeWebApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E431C062B9438869B8D6E399 /* ClaudeWebApp.swift */; };
@@ -16,6 +17,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
 		4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendClient.swift; sourceTree = "<group>"; };
 		5CF31E552D528619F13A5B40 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		763A49693E0CE52A2C691B3C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -37,6 +39,7 @@
 				763A49693E0CE52A2C691B3C /* Info.plist */,
 				E90163FEB077BB408157C916 /* Protocol.swift */,
 				5CF31E552D528619F13A5B40 /* Settings.swift */,
+				214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */,
 			);
 			name = ClaudeWeb;
 			path = Sources/ClaudeWeb;
@@ -133,6 +136,7 @@
 				57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */,
 				D0731F6CAC254AB33956E0FB /* Protocol.swift in Sources */,
 				A86805111F9BBB87D5F766B8 /* Settings.swift in Sources */,
+				6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
