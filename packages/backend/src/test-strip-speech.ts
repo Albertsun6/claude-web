@@ -1,5 +1,6 @@
-// Quick verification of stripForSpeech. Run with: pnpm --filter @claude-web/frontend exec tsx src/hooks/useVoice.test.ts
-import { stripForSpeech } from "./useVoice";
+// Quick verification of the TTS markdown stripper. Run: pnpm --filter @claude-web/backend exec tsx src/test-strip-speech.ts
+// Imports from the frontend hook (the function is pure, no React).
+import { stripForSpeech } from "../../frontend/src/hooks/useVoice";
 
 const cases: Array<[string, string]> = [
   ["**重点**完成", "重点完成"],

@@ -8,7 +8,8 @@
     "test:cli": "tsx src/test-cli.ts",
     "test:permission": "tsx src/test-permission.ts",
     "test:e2e": "tsx src/test-e2e.ts",
-    "test:auth": "tsx src/test-auth.ts"
+    "test:auth": "tsx src/test-auth.ts",
+    "test:strip": "tsx src/test-strip-speech.ts"
   },
   "dependencies": {
     "@claude-web/shared": "workspace:*",
