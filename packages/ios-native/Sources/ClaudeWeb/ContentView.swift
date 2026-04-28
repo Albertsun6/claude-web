@@ -16,6 +16,23 @@ struct ContentView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 connectionChip
+                if settings.permissionMode == "bypassPermissions" {
+                    // Persistent danger reminder. User asked for Bypass to
+                    // skip per-tool prompts, but the reviewer flagged that
+                    // having this silently persistent across restarts is
+                    // risky on a voice-input device — easy to forget.
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.white)
+                        Text("Bypass 已开启 · Claude 可执行任何工具")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.red)
+                }
                 if let err = voice.lastError {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -435,7 +452,7 @@ struct SettingsView: View {
                 } header: {
                     Text("实验功能")
                 } footer: {
-                    Text("开启后会一直播放 0 音量循环音频，让 iOS 不挂起 app —— 切换到其他 app 后再回来 WebSocket 不会断，锁屏时 Now Playing 卡片也持续显示。Apple 视为对后台音频的滥用，**不要在 App Store 版本启用**。仅供 sideload 个人用，电池影响很小。")
+                    Text("开启后会一直播放 0 音量循环音频，**显著提高**切应用 / 锁屏后 WebSocket 保持连接的概率，但**不保证 100% 不断**（iOS 在内存压力 / 网络切换 / 用户滑掉 app 等情况下仍可能挂起）。Apple 视为对后台音频的滥用，**不要在 App Store 版本启用**。仅供 sideload 个人用，电池影响很小。")
                 }
             }
             .navigationTitle("设置")

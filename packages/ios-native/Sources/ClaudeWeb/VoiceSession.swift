@@ -130,20 +130,29 @@ final class VoiceSession {
             break
         }
         unregisterRemoteCommands()
-        clearNowPlaying()
         active = false
-        // If user wants background keepalive, switch session back to .playback
-        // (no mic) and KEEP the silent loop running. Otherwise tear down.
         if settings?.silentKeepalive == true {
+            // KEEP loop running. Switch session to lighter .playback (no mic)
+            // and only mixWithOthers (NOT duckOthers — Spotify shouldn't
+            // dim while we silently exist).
             do {
                 let s = AVAudioSession.sharedInstance()
-                try s.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .mixWithOthers])
+                try s.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
                 try s.setActive(true)
             } catch {
                 lastError = "切回保活会话失败: \(error.localizedDescription)"
             }
+            // Defensive: category switch can occasionally interrupt the
+            // looping player. Ensure it's still going.
+            if silentLoop?.isPlaying != true {
+                stopSilentLoop()
+                startSilentLoop(force: true)
+            }
+            // Don't clearNowPlaying — keep the card showing keepalive state.
+            refresh()
         } else {
             stopSilentLoop()
+            clearNowPlaying()
             try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         }
     }
@@ -173,13 +182,17 @@ final class VoiceSession {
 
     /// Lightweight session category for keep-alive when voice mode is OFF —
     /// doesn't need mic, so .playback is sufficient and avoids prompting
-    /// for mic permission unnecessarily.
+    /// for mic permission unnecessarily. Only .mixWithOthers (no
+    /// .duckOthers) so user's Spotify / podcast / YouTube isn't lowered
+    /// just because we're silently running. Bluetooth route stays on
+    /// whatever the user picked (no .allowBluetoothHFP — HFP is for
+    /// recording).
     private func ensureAudioSessionForKeepalive() {
         // Voice mode (.playAndRecord) wins if it's already active.
         if active { return }
         let s = AVAudioSession.sharedInstance()
         do {
-            try s.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .mixWithOthers])
+            try s.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
             try s.setActive(true)
         } catch {
             lastError = "保活会话激活失败: \(error.localizedDescription)"
@@ -251,10 +264,14 @@ final class VoiceSession {
     }
 
     /// Called from anywhere subcomponent state changes — keeps Now Playing
-    /// in sync on lock screen.
+    /// in sync on lock screen. Updates if voice mode active OR silent loop
+    /// is keeping us alive (else nothing to show).
     func refresh() {
-        guard active else { return }
-        updateNowPlaying()
+        if active || silentLoop != nil {
+            updateNowPlaying()
+        } else {
+            clearNowPlaying()
+        }
     }
 
     // MARK: - Remote command handlers
@@ -418,7 +435,11 @@ final class VoiceSession {
 
     private func title() -> String {
         switch state {
-        case .idle: return "待命 · 按播放开始录音"
+        case .idle:
+            // In voice mode, play button starts recording. Keepalive-only
+            // mode has no remote commands registered — say "运行中" instead
+            // so user isn't misled into thinking play will record.
+            return active ? "待命 · 按播放开始录音" : "Claude · 后台运行"
         case .recording: return "录音中… · 再按一次结束"
         case .transcribing: return "识别中…"
         case .thinking: return "Claude 在想…"

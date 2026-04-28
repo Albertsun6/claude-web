@@ -36,14 +36,11 @@ struct ClaudeWebApp: App {
                 .environment(voice)
                 .onAppear {
                     client.connect()
-                    // Honor background-keepalive setting at launch (independent
-                    // of voice mode). If user has it on, silent audio loop
-                    // starts immediately so iOS doesn't suspend the app when
-                    // they switch to another app.
-                    voice.applySilentKeepaliveChange()
-                    // Hook session_ended → speak last assistant turn. Done here
-                    // (not in init) because closures capturing tts can't escape
-                    // through a mutating self in App.init.
+                    // CRITICAL ORDER: bind() must run BEFORE keepalive apply,
+                    // because applySilentKeepaliveChange reads settings via
+                    // the weak ref bind() injects. Calling apply first would
+                    // see settings == nil and silently no-op the saved
+                    // "after-restart auto-keepalive" expectation.
                     let ttsRef = tts
                     let clientRef = client
                     let voiceRef = voice
@@ -56,8 +53,6 @@ struct ClaudeWebApp: App {
                             voiceRef?.refresh()
                         }
                     }
-                    // Wire VoiceSession dependencies. sendPrompt closure goes
-                    // from voice-mode PTT → backend without touching the textfield.
                     voice.bind(
                         recorder: recorder,
                         tts: tts,
@@ -67,6 +62,9 @@ struct ClaudeWebApp: App {
                             clientRef?.sendPrompt(text, cwd: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
                         }
                     )
+                    // Now safe — settings is bound, applySilentKeepaliveChange
+                    // can see the persisted flag.
+                    voice.applySilentKeepaliveChange()
                 }
                 .onChange(of: settings.backendURL) { _, newURL in
                     client.backendBase = newURL
