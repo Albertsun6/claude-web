@@ -157,6 +157,7 @@ struct DrawerContent: View {
                                     }
                                 }
                         }
+                        CwdHistorySection(project: group.project) { closeDrawer() }
                     } header: {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 4) {
@@ -231,10 +232,18 @@ struct DrawerContent: View {
         missingProjects = []
     }
 
-    /// Same logic as the F1c3 ConversationDebugSheet — group conversations
-    /// by cwd, label with project name from registry when available.
+    /// Group conversations by cwd, merged with registry.projects so that
+    /// projects without current conversations still show (e.g., to browse history).
+    /// Label with project name from registry when available.
     private var groupedByCwd: [CwdGroup] {
-        let dict = Dictionary(grouping: client.sortedConversations(), by: \.cwd)
+        var dict: [String: [Conversation]] = Dictionary(
+            grouping: client.sortedConversations(),
+            by: { ($0.cwd as NSString).standardizingPath }
+        )
+        for proj in registry.projects {
+            let norm = (proj.cwd as NSString).standardizingPath
+            if dict[norm] == nil { dict[norm] = [] }
+        }
         return dict
             .map { (cwd, convs) -> CwdGroup in
                 let project = registry.project(forCwd: cwd)
@@ -242,7 +251,10 @@ struct DrawerContent: View {
                     ?? ((cwd as NSString).lastPathComponent.isEmpty
                         ? cwd
                         : (cwd as NSString).lastPathComponent)
-                return CwdGroup(cwd: cwd, label: label, registered: project != nil, convs: convs)
+                return CwdGroup(
+                    cwd: cwd, label: label, registered: project != nil,
+                    project: project, convs: convs
+                )
             }
             .sorted { lhs, rhs in
                 let lhsLatest = lhs.convs.first?.lastUsed ?? .distantPast
@@ -255,6 +267,7 @@ struct DrawerContent: View {
         let cwd: String
         let label: String
         let registered: Bool
+        let project: ProjectDTO?
         let convs: [Conversation]
     }
 }
