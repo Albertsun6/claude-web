@@ -7,24 +7,34 @@
 
 import Foundation
 
+// MARK: - Shared types
+
+/// Mirrors ImageAttachment in packages/shared/src/protocol.ts.
+struct ImageAttachment: Encodable {
+    /// MIME type, e.g. "image/png", "image/jpeg"
+    let mediaType: String
+    /// Raw base64 data — no "data:" prefix
+    let dataBase64: String
+}
+
 // MARK: - Client → Server
 
 enum ClientMessage: Encodable {
-    case userPrompt(runId: String, prompt: String, cwd: String, model: String, permissionMode: String, resumeSessionId: String?)
+    case userPrompt(runId: String, prompt: String, cwd: String, model: String, permissionMode: String, resumeSessionId: String?, attachments: [ImageAttachment]?)
     case interrupt(runId: String?)
     case permissionReply(requestId: String, decision: String, runId: String?, toolName: String?)
     case sessionSubscribe(cwd: String, sessionId: String, fromByteOffset: Int?)
     case sessionUnsubscribe(cwd: String, sessionId: String)
 
     enum CodingKeys: String, CodingKey {
-        case type, runId, prompt, cwd, model, permissionMode, resumeSessionId,
+        case type, runId, prompt, cwd, model, permissionMode, resumeSessionId, attachments,
              requestId, decision, toolName, sessionId, fromByteOffset
     }
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .userPrompt(let runId, let prompt, let cwd, let model, let permissionMode, let resumeSessionId):
+        case .userPrompt(let runId, let prompt, let cwd, let model, let permissionMode, let resumeSessionId, let attachments):
             try c.encode("user_prompt", forKey: .type)
             try c.encode(runId, forKey: .runId)
             try c.encode(prompt, forKey: .prompt)
@@ -32,6 +42,7 @@ enum ClientMessage: Encodable {
             try c.encode(model, forKey: .model)
             try c.encode(permissionMode, forKey: .permissionMode)
             try c.encodeIfPresent(resumeSessionId, forKey: .resumeSessionId)
+            try c.encodeIfPresent(attachments, forKey: .attachments)
         case .interrupt(let runId):
             try c.encode("interrupt", forKey: .type)
             try c.encodeIfPresent(runId, forKey: .runId)

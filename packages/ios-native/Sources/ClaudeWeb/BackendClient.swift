@@ -214,7 +214,8 @@ final class BackendClient {
         _ prompt: String,
         conversationId: String,
         model: String = "claude-haiku-4-5",
-        permissionMode: String = "plan"
+        permissionMode: String = "plan",
+        attachments: [ImageAttachment]? = nil
     ) {
         // Fail fast if WS isn't open — otherwise sendPrompt sets busy=true,
         // the send silently fails, and the UI gets stuck in "thinking" forever.
@@ -253,7 +254,8 @@ final class BackendClient {
             cwd: started.cwd,
             model: model,
             permissionMode: permissionMode,
-            resumeSessionId: started.resumeSessionId
+            resumeSessionId: started.resumeSessionId,
+            attachments: attachments
         )
         telemetry?.log(
             "prompt.send",
@@ -284,7 +286,8 @@ final class BackendClient {
         _ prompt: String,
         defaultCwdForNew: String,
         model: String = "claude-haiku-4-5",
-        permissionMode: String = "plan"
+        permissionMode: String = "plan",
+        attachments: [ImageAttachment]? = nil
     ) {
         let id: String
         if let existing = store.currentConversationId, store.conversations[existing] != nil {
@@ -293,7 +296,7 @@ final class BackendClient {
             id = store.createConversation(cwd: defaultCwdForNew).id
             store.currentConversationId = id
         }
-        sendPrompt(prompt, conversationId: id, model: model, permissionMode: permissionMode)
+        sendPrompt(prompt, conversationId: id, model: model, permissionMode: permissionMode, attachments: attachments)
     }
 
     /// Interrupt the run in the currently-focused conversation. Other

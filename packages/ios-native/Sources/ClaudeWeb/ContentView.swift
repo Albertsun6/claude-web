@@ -133,7 +133,7 @@ struct ContentView: View {
                 InputBar(
                     draft: $draft,
                     busy: client.currentBusy,
-                    onSend: send,
+                    onSend: { attachments in send(attachments) },
                     onStop: client.interrupt,
                     onTranscript: { text in
                         if voice.active {
@@ -352,10 +352,17 @@ private var chipColor: Color {
         }
     }
 
-    private func send() {
+    private func send(_ attachments: [ImageAttachment] = []) {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        client.sendPromptCurrent(text, defaultCwdForNew: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
+        let atts: [ImageAttachment]? = attachments.isEmpty ? nil : attachments
+        guard !text.isEmpty || atts != nil else { return }
+        client.sendPromptCurrent(
+            text.isEmpty ? "(图片)" : text,
+            defaultCwdForNew: settings.cwd,
+            model: settings.model,
+            permissionMode: settings.permissionMode,
+            attachments: atts
+        )
         draft = ""
     }
 }
