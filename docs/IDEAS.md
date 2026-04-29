@@ -324,11 +324,9 @@ iOS 后台持续 mic 监听技术上可行（Web Audio + 简单能量检测 / TF
 
 ### A — 从 web 移植到 iOS 原生
 
-#### A1. 历史会话浏览（jsonl 解析）⭐⭐⭐ 🔧 部分完成 (F1c3)
-**底层就绪，UI 待补**。F1c3 已实现：[SessionsAPI](packages/ios-native/Sources/ClaudeWeb/SessionsAPI.swift) (list / transcript) + [TranscriptParser](packages/ios-native/Sources/ClaudeWeb/TranscriptParser.swift) + [`ProjectRegistry.openHistoricalSession()`](packages/ios-native/Sources/ClaudeWeb/ProjectRegistry.swift) 的 dedup 加载逻辑。还差：
-- 切换器项目分组下展开"历史会话"列表（拉 sessionsAPI.list）
-- 点击 → 弹"覆盖当前对话？"确认 → 加载 transcript 进 BackendClient
-- **剩余工时**: 半天（F1c5）
+#### A1. 历史会话浏览（jsonl 解析）⭐⭐⭐ ✅ 完成
+F1c3 已实现：[SessionsAPI](packages/ios-native/Sources/ClaudeWeb/SessionsAPI.swift) (list / transcript) + [TranscriptParser](packages/ios-native/Sources/ClaudeWeb/TranscriptParser.swift) + [`ProjectRegistry.openHistoricalSession()`](packages/ios-native/Sources/ClaudeWeb/ProjectRegistry.swift) 的 dedup 加载逻辑。
+UI 部分：[DrawerContent.swift](packages/ios-native/Sources/ClaudeWeb/Views/Drawer/DrawerContent.swift) 项目展开时懒加载历史会话；[HistorySessionRow.swift](packages/ios-native/Sources/ClaudeWeb/Views/Drawer/HistorySessionRow.swift) 处理加载和切换。已于 commit dad7297 实现。
 
 #### A2. 项目列表 + 快速切换 ⭐⭐⭐ ✅ 完成 (F1c2 + F1c3)
 做法跟初稿不同：升级到**项目-对话两级**模型，不只是切 cwd。
@@ -337,10 +335,8 @@ iOS 后台持续 mic 监听技术上可行（Web Audio + 简单能量检测 / TF
 - 顶部 chip 点击进切换器；按 cwd 分组（F1c4 升级成抽屉 UX）
 - 多对话并行不打断；每对话独立 sessionId / TTS cache
 
-#### A3. @file 自动补全 ⭐⭐
-输入 `@` 弹文件选择 sheet（fuzzy 搜索当前 cwd）。手机在输入文件路径时极痛苦，这个救命。
-- 后端 [`/api/fs/tree`](packages/backend/src/routes/fs.ts) 现成
-- **工时**: 1 天
+#### A3. @file 自动补全 ⭐⭐ ✅ 完成
+输入 `@` 弹文件选择 sheet（fuzzy 搜索当前 cwd）。实现：[InputBar.swift](packages/ios-native/Sources/ClaudeWeb/Views/Chat/InputBar.swift) 检测 `@`；[AtFilePicker.swift](packages/ios-native/Sources/ClaudeWeb/Views/Chat/AtFilePicker.swift) 目录浏览 + 模糊过滤。已于 commit d0f1a1f 实现。
 
 #### A4. / 命令面板（动态 slash） ⭐⭐
 从 system:init.slash_commands 拉 CLI 实际可用命令（包括 skills），输入 `/` 弹列表。**跟 web 行为一致**。
@@ -350,21 +346,21 @@ iOS 后台持续 mic 监听技术上可行（Web Audio + 简单能量检测 / TF
 重发上一句 / 上 5 句。手机 textfield 有这个比再录一次更快。
 - **工时**: 半天
 
-#### A6. 工具卡片渲染（TodoWrite / Edit diff / Bash / Read）⭐⭐⭐
-现在 iOS 只显示 `🔧 Bash` 占位文字。改成：
-- TodoWrite → 复选框列表
-- Edit → 红绿 diff 视图
-- Bash → 等宽命令 + 输出折叠
-- Read → 路径 + 行数
+#### A6. 工具卡片渲染（TodoWrite / Edit diff / Bash / Read）⭐⭐⭐ ✅ 完成
+所有工具卡片已实现于 [ToolCards.swift](packages/ios-native/Sources/ClaudeWeb/ToolCards.swift)：
+- BashCard：命令等宽显示 + description
+- EditCard：红/绿 diff block（old_string / new_string）
+- WriteCard：内容预览 + 字符数统计
+- ReadCard：文件路径 + offset/limit 范围
+- TodoWriteCard：复选框列表 + 状态图标（✓/⏳/○）
+- GrepCard, GlobCard, GenericToolCard（JSON 回退）
 
-桌面已有这套（[MessageItem.tsx](packages/frontend/src/components/MessageItem.tsx)），SwiftUI 重写就行。
-- **工时**: 1-2 天
+所有卡片使用 CardShell（可折叠）设计，tap header 展开/收起。
 
-#### A7. Markdown 完整渲染 ⭐⭐
-现在 iOS 用 `Text` 直接显示 markdown 源码（看到 `**`、`#` 等字符）。
-- 标题 / 列表 / 链接 / 表格 / 代码块 + 复制按钮
-- 用 [`swift-markdown-ui`](https://github.com/gonzalezreal/swift-markdown-ui) 或自己实现
-- **工时**: 1 天
+#### A7. Markdown 完整渲染 ⭐⭐ ✅ 完成
+`.assistant` 消息使用 `Markdown(line.text).markdownTheme(.gitHub)` 渲染（[ChatListView.swift](packages/ios-native/Sources/ClaudeWeb/Views/Chat/ChatListView.swift) line 61）。依赖 [swift-markdown-ui 2.4.1](https://github.com/gonzalezreal/swift-markdown-ui)，支持：
+- 标题、列表、链接、表格、代码块
+- 文本选择已启用（.textSelection(.enabled)）
 
 #### A8. /clear 和 /usage 本地短路 ⭐
 - /clear = 清当前 view（不发给 Claude）
