@@ -15,11 +15,14 @@ struct DrawerContent: View {
     @Environment(ProjectRegistry.self) private var registry
     @Environment(Telemetry.self) private var telemetry
 
-    @State private var showNewSheet = false
     @State private var showQuickPicker = false
     @State private var missingProjects: [ProjectDTO] = []
     @State private var showCleanupConfirm = false
     @State private var cleanupRunning = false
+
+    @State private var expandedCwds: Set<String> = []
+    @State private var expandedAllCwds: Set<String> = []
+    @State private var loadingCwd: String? = nil
 
     var body: some View {
         NavigationStack {
@@ -33,24 +36,30 @@ struct DrawerContent: View {
             }
             .navigationDestination(isPresented: $showQuickPicker) {
                 DirectoryPicker(initialPath: settings.cwd) { picked in
-                    let conv = client.createConversation(cwd: picked)
-                    client.currentConversationId = conv.id
-                    Task {
-                        try? await registry.openByPath(cwd: picked)
+                    showQuickPicker = false
+                    Task { @MainActor in
+                        loadingCwd = picked
+                        defer { loadingCwd = nil }
+
+                        let project = try? await registry.openByPath(cwd: picked)
+
+                        var targetId: String? = nil
+                        if let proj = project,
+                           let sessions = try? await registry.loadHistorySessions(forProject: proj),
+                           let latest = sessions.first {
+                            targetId = try? await registry.openHistoricalSession(latest, in: proj)
+                        }
+
+                        if let targetId {
+                            client.currentConversationId = targetId
+                        } else {
+                            let conv = client.createConversation(cwd: picked)
+                            client.currentConversationId = conv.id
+                        }
+                        expandedCwds.insert((picked as NSString).standardizingPath)
+                        closeDrawer()
                     }
-                    closeDrawer()
                 }
-            }
-        }
-        .sheet(isPresented: $showNewSheet) {
-            NewConversationSheet(pickerStartPath: settings.cwd) { name, cwd in
-                let conv = client.createConversation(cwd: cwd, title: name)
-                client.currentConversationId = conv.id
-                Task {
-                    try? await registry.openByPath(cwd: cwd)
-                }
-                showNewSheet = false
-                closeDrawer()
             }
         }
         .alert("清理失效项目", isPresented: $showCleanupConfirm) {
@@ -83,6 +92,9 @@ struct DrawerContent: View {
                     .background(.orange, in: .capsule)
             }
             Spacer()
+            if loadingCwd != nil {
+                ProgressView().scaleEffect(0.7)
+            }
             Button {
                 closeDrawer()
             } label: {
@@ -99,9 +111,6 @@ struct DrawerContent: View {
 
     private var actionList: some View {
         VStack(spacing: 0) {
-            DrawerRow(icon: "plus.circle.fill", label: "新建对话", tint: .accentColor) {
-                showNewSheet = true
-            }
             DrawerRow(icon: "folder.badge.plus", label: "打开文件夹", tint: .accentColor) {
                 showQuickPicker = true
             }
@@ -114,8 +123,6 @@ struct DrawerContent: View {
             }
             DrawerRow(icon: "gearshape", label: "设置", tint: .secondary) {
                 closeDrawer()
-                // Tiny delay so the drawer's slide-out animation finishes
-                // before the settings sheet pops in — otherwise they fight.
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     showSettings = true
@@ -127,57 +134,52 @@ struct DrawerContent: View {
     // MARK: - Conversation list
 
     private var conversationList: some View {
-        List {
-            if client.conversations.isEmpty {
-                Text("还没有对话。点上面 + 新建一条。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .listRowBackground(Color.clear)
+        Group {
+            if client.conversations.isEmpty && groupedByCwd.isEmpty {
+                AnyView(conversationListEmpty)
             } else {
-                ForEach(groupedByCwd, id: \.cwd) { group in
-                    Section {
-                        ForEach(group.convs) { conv in
-                            DrawerConversationRow(conv: conv)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    client.currentConversationId = conv.id
-                                    closeDrawer()
-                                }
-                                .swipeActions {
-                                    Button(role: .destructive) {
-                                        let nextFocus = client.sortedConversations()
-                                            .first { $0.id != conv.id }?.id
-                                        client.closeConversation(conv.id)
-                                        tts.clearCache(for: conv.id)
-                                        if client.currentConversationId == conv.id {
-                                            client.currentConversationId = nextFocus
-                                        }
-                                    } label: {
-                                        Label("关闭", systemImage: "xmark")
-                                    }
-                                }
+                AnyView(conversationListContent)
+            }
+        }
+    }
+
+    private var conversationListEmpty: some View {
+        List {
+            Text("还没有对话。点上面打开文件夹注册工作目录，或长按目录名新建。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .listRowBackground(Color.clear)
+        }
+        .listStyle(.plain)
+    }
+
+    private var conversationListContent: some View {
+        List {
+            ForEach(groupedByCwd, id: \.cwd) { group in
+                Section {
+                    if loadingCwd == group.cwd {
+                        HStack {
+                            ProgressView().scaleEffect(0.8)
+                            Text("加载中…").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .listRowBackground(Color.clear)
+                    } else if expandedCwds.contains(group.cwd) {
+                        let displayed = expandedAllCwds.contains(group.cwd) ? group.convs : Array(group.convs.prefix(3))
+                        ForEach(displayed) { conv in
+                            conversationRowView(conv)
+                        }
+                        if !expandedAllCwds.contains(group.cwd) && group.convs.count > 3 {
+                            Button("显示全部 \(group.convs.count) 条") {
+                                expandedAllCwds.insert(group.cwd)
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .listRowBackground(Color.clear)
                         }
                         CwdHistorySection(project: group.project) { closeDrawer() }
-                    } header: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 4) {
-                                Text(group.label)
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.primary)
-                                    .textCase(nil)
-                                if !group.registered {
-                                    Text("·未注册")
-                                        .font(.caption2)
-                                        .foregroundStyle(.orange)
-                                        .textCase(nil)
-                                }
-                            }
-                            Text(group.cwd)
-                                .font(.caption2.monospaced())
-                                .foregroundStyle(.secondary)
-                                .textCase(nil)
-                        }
                     }
+                } header: {
+                    cwdSectionHeader(group)
                 }
             }
         }
@@ -214,7 +216,6 @@ struct DrawerContent: View {
             showCleanupConfirm = true
         } catch {
             telemetry.error("project.cleanup.failed", error: error)
-            // Still show alert with empty list so user knows something happened.
             missingProjects = []
             showCleanupConfirm = true
         }
@@ -232,9 +233,105 @@ struct DrawerContent: View {
         missingProjects = []
     }
 
-    /// Group conversations by cwd, merged with registry.projects so that
-    /// projects without current conversations still show (e.g., to browse history).
-    /// Label with project name from registry when available.
+    @ViewBuilder
+    private func conversationRowView(_ conv: Conversation) -> some View {
+        DrawerConversationRow(conv: conv)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                client.currentConversationId = conv.id
+                closeDrawer()
+            }
+            .swipeActions {
+                Button(role: .destructive) {
+                    closeConversation(conv)
+                } label: {
+                    Label("关闭", systemImage: "xmark")
+                }
+            }
+    }
+
+    private func closeConversation(_ conv: Conversation) {
+        let nextFocus = client.sortedConversations()
+            .first { $0.id != conv.id }?.id
+        client.closeConversation(conv.id)
+        tts.clearCache(for: conv.id)
+        if client.currentConversationId == conv.id {
+            client.currentConversationId = nextFocus
+        }
+    }
+
+    @ViewBuilder
+    private func cwdSectionHeader(_ group: CwdGroup) -> some View {
+        HStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if expandedCwds.contains(group.cwd) {
+                        expandedCwds.remove(group.cwd)
+                    } else {
+                        expandedCwds.insert(group.cwd)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Text(group.label)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.primary)
+                                .textCase(nil)
+                            if !group.registered {
+                                Text("·未注册")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                                    .textCase(nil)
+                            }
+                        }
+                        Text(group.cwd)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                    }
+                    Spacer()
+                    if group.convs.count > 0 {
+                        Text("\(group.convs.count)")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Image(systemName: expandedCwds.contains(group.cwd) ? "chevron.up" : "chevron.down")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .padding(.leading, 4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                if let project = group.project {
+                    Button(role: .destructive) {
+                        Task { try? await registry.forgetProject(project.id) }
+                    } label: {
+                        Label("关闭文件夹", systemImage: "folder.badge.minus")
+                    }
+                }
+            }
+
+            Button {
+                let conv = client.createConversation(cwd: group.cwd)
+                client.currentConversationId = conv.id
+                expandedCwds.insert(group.cwd)
+                if group.project == nil {
+                    Task { try? await registry.openByPath(cwd: group.cwd) }
+                }
+                closeDrawer()
+            } label: {
+                Image(systemName: "plus.circle")
+                    .font(.subheadline)
+                    .foregroundColor(.accentColor)
+            }
+            .buttonStyle(.plain)
+            .frame(width: 32)
+        }
+        .padding(.vertical, 2)
+    }
+
     private var groupedByCwd: [CwdGroup] {
         var dict: [String: [Conversation]] = Dictionary(
             grouping: client.sortedConversations(),
