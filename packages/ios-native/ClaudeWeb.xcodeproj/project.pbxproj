@@ -21,6 +21,7 @@
 		4AA49DDD76AE150CB43E459F /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BC150255A000C4B594FB34 /* Telemetry.swift */; };
 		577BE076AA69A32AC0F06F12 /* ProtocolFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1FDBA5369B9FB21BC91821 /* ProtocolFixtureTests.swift */; };
 		57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA416505AC735C06A084E7EE /* ContentView.swift */; };
+		593A7592AA50BE3915A9627C /* RunsDashboardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481612632594972A31DFC674 /* RunsDashboardSheet.swift */; };
 		69F0714A317BB99738DC18A9 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C189285FD2BC25E599008F0 /* ChatListView.swift */; };
 		6AD512C6C3EBFF3A522035BF /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7869FC7E7224F973A25D5A07 /* ConversationModels.swift */; };
 		6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */; };
@@ -72,6 +73,7 @@
 		350011A28BB99092BDE97C46 /* HealthCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheckView.swift; sourceTree = "<group>"; };
 		42AA631E277EDCEFDF480163 /* InputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBar.swift; sourceTree = "<group>"; };
 		45BC150255A000C4B594FB34 /* Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Telemetry.swift; sourceTree = "<group>"; };
+		481612632594972A31DFC674 /* RunsDashboardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunsDashboardSheet.swift; sourceTree = "<group>"; };
 		4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendClient.swift; sourceTree = "<group>"; };
 		55DF4DA3445654EBE1E3F69B /* ConversationNamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNamer.swift; sourceTree = "<group>"; };
 		592C33B52949B8FC89528D76 /* ProjectRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRegistry.swift; sourceTree = "<group>"; };
@@ -197,6 +199,7 @@
 				141B19D309812F72DC751591 /* GitGateSheet.swift */,
 				8E1FACCED35C3A770740F004 /* NewConversationSheet.swift */,
 				AF2C287FAD57E3EE4B5AC077 /* PermissionSheet.swift */,
+				481612632594972A31DFC674 /* RunsDashboardSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -371,6 +374,7 @@
 				D9EA35CC1324C85BAFB52082 /* ProjectsAPI.swift in Sources */,
 				D0731F6CAC254AB33956E0FB /* Protocol.swift in Sources */,
 				C5294351B59BB0E0751C492A /* RunRouter.swift in Sources */,
+				593A7592AA50BE3915A9627C /* RunsDashboardSheet.swift in Sources */,
 				DA152D4966DF3D049BCA41C2 /* SessionsAPI.swift in Sources */,
 				A86805111F9BBB87D5F766B8 /* Settings.swift in Sources */,
 				ECD39FE8127CCEB3C3630235 /* SettingsView.swift in Sources */,

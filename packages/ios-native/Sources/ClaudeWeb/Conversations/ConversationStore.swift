@@ -365,6 +365,7 @@ final class ConversationStore {
         var s = stateByConversation[convId] ?? ConversationChatState()
         s.currentRunId = runId
         s.busy = true
+        s.runStartedAt = Date()
         s.messages.append(ChatLine(role: .user, text: prompt, runId: runId))
         stateByConversation[convId] = s
 
@@ -465,6 +466,7 @@ final class ConversationStore {
         guard var s = stateByConversation[convId] else { return false }
         s.busy = false
         s.currentRunId = nil
+        s.runStartedAt = nil
         stateByConversation[convId] = s
         telemetry?.log(
             "turn.\(reason)",

@@ -51,6 +51,9 @@ struct ConversationChatState: Equatable {
     /// renders a sheet when the conversation is focused; cleared when the user
     /// dismisses it. Survives focus switches by living on per-conversation state.
     var pendingGitGate: GitStatusReport? = nil
+    /// When the current run started. Set in `startTurn`, cleared in
+    /// `handleSessionEnded`. Used by the H1 run dashboard for "running for 2m".
+    var runStartedAt: Date? = nil
 }
 
 struct ChatLine: Identifiable, Codable, Equatable {

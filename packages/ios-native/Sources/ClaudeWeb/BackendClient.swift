@@ -352,6 +352,13 @@ final class BackendClient {
         Task { [weak self] in try? await self?.webSocket.send(.interrupt(runId: runId)) }
     }
 
+    /// Interrupt a specific conversation's in-flight run. Used by the H1 run
+    /// dashboard to stop background runs without switching focus.
+    func interrupt(convId: String) {
+        guard let runId = store.stateByConversation[convId]?.currentRunId else { return }
+        Task { [weak self] in try? await self?.webSocket.send(.interrupt(runId: runId)) }
+    }
+
     func replyPermission(_ request: PermissionRequest, decision: PermissionDecision) {
         Task { [weak self] in
             try? await self?.webSocket.send(.permissionReply(

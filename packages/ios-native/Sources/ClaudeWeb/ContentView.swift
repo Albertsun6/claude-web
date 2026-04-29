@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showDrawer = false
     @State private var showFilePanel = false
+    @State private var showRunsDashboard = false
     @State private var selectedFile: (cwd: String, relativePath: String, entry: FsEntry)? = nil
 
     var body: some View {
@@ -113,6 +114,11 @@ struct ContentView: View {
         .dynamicTypeSize(settings.dynamicTypeSize)
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+        .sheet(isPresented: $showRunsDashboard) {
+            RunsDashboardSheet()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(item: Binding(
             get: { client.currentPendingPermission },
@@ -255,13 +261,18 @@ struct ContentView: View {
                                         .accessibilityLabel("Bypass 模式：自动允许所有工具")
                                 }
                                 if client.activeRunCount > 0 {
-                                    Text("\(client.activeRunCount)")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 1)
-                                        .background(.orange, in: .capsule)
-                                        .accessibilityLabel("\(client.activeRunCount) 个对话进行中")
+                                    Button {
+                                        showRunsDashboard = true
+                                    } label: {
+                                        Text("\(client.activeRunCount)")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 1)
+                                            .background(.orange, in: .capsule)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("\(client.activeRunCount) 个对话进行中，点击查看")
                                 }
                             }
                             HStack(spacing: 3) {
