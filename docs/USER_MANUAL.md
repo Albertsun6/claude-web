@@ -475,11 +475,13 @@ cd packages/ios-native
 
 | 项 | 默认 | 说明 |
 |---|---|---|
-| 语音模式 | OFF | 进入后顶部锁屏 Now Playing；输入栏 mic 切到自动发送 |
+| 启动时自动进入语音模式 | ON | App 启动自动进入语音模式；设置里可关闭 |
+| 语音模式 | ON（启动自动进入） | 进入后顶部锁屏 Now Playing；输入栏 mic 切到自动发送 |
 | Backend | `https://mymac.tailcf3ccf.ts.net`（真机）/ `http://localhost:3030`（模拟器）| Tailscale URL 或 LAN IP |
 | 浏览起始路径 | `/Users/yongqian/Desktop` | DirectoryPicker（"打开文件夹"）的默认起始位置；新对话不再用它做默认 cwd |
 | 模型 | Haiku 4.5 | 可切 Sonnet 4.6 / Opus 4.7 |
 | 权限模式 | **Plan**（最安全）| Plan / Default / Accept Edits / **Bypass** |
+| 字体大小 | xxLarge | 聊天正文、输入框、工具卡 UI 元素字号 |
 | Token | 空 | backend 设了 `CLAUDE_WEB_TOKEN` 才填 |
 | 自动播报 | ON | TTS 自动念回答 |
 | 风格 | 概要 | Haiku 改写为 1-4 句 vs 逐句原文 |
@@ -499,6 +501,8 @@ cd packages/ios-native
 
 **模型**：项目（cwd）是容器，对话挂在项目下。一个项目可以并行多条对话，互不干扰。
 
+**抽屉宽度**：左侧项目/对话抽屉占屏幕宽的 92%（最宽 380pt），留充足空间显示对话内容。
+
 **顶部 chip**：
 - 左侧绿点 = 已连接（其他状态：黄=连接中，灰=未连接，红=失败 + 错误信息）
 - 中间标题 "Seaidea" 旁边的橙色数字 = 全局活跃 turn 数
@@ -512,7 +516,7 @@ cd packages/ios-native
 
 **新建对话流程**：
 1. 点 **+ 新建对话**
-2. **名称**字段灰字预填 `<目录名> <序号>`（按 cwd 计数），可改
+2. **名称**字段灰字预填 `MMdd-N` 格式（如 `0430-1`；按当天日期计数，全局序号），可改
 3. **工作目录**：
    - 顶部 **打开文件夹** → 进 DirectoryPicker：面包屑 + 子目录 + 上一级 + **新建文件夹…**（直接 mkdir 并自动选中）
    - 下方 **已打开**列表：本机内存里出现过的 cwd（按最近用排序），点击直接选；列表为空时显示空态文字
