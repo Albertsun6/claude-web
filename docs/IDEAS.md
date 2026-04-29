@@ -449,25 +449,10 @@ Settings 加 Toggle，控制 thinking block 默认展开/折叠。当前 thinkin
 >
 > 调研参考：Claude Code docs（permissions / settings / hooks / MCP / resume）、Aider（git 自动提交、architect/ask/code modes、/test /lint /undo /voice）、OpenCode（TUI sessions、permissions、MCP、GitHub agent）、Goose（CLI/Desktop/API、SQLite session、MCP extensions、memory/todo/chat recall）、Continue（@context providers、MCP）、Cursor Bugbot/Background Agents（PR review、后台任务、规则）、Paseo（移动端、worktree、E2E relay）。
 
-### H1. Harness 状态总览 / Run Dashboard ⭐⭐⭐
-灵感来自 OpenCode sessions、Goose session list、Cursor Background Agents。
-
-**可借鉴点**：
-- 一个页面显示所有正在跑和最近结束的 run：cwd、conversation、model、permissionMode、开始时间、持续时间、当前工具、最后输出、是否等待权限。
-- iOS 顶部 badge 只能显示数量；Dashboard 显示"具体在干什么"。
-- 支持快速操作：打开、停止、复制最后错误、跳到 diff、重新运行最后 prompt。
-
-**适用性**：
-- 用户价值：5
-- 架构贴合：5，现有 `runIdToConversation`、telemetry、sessionEnded 已经有基础
-- 实现复杂度：2
-- 风险：2，主要是状态一致性
-- 优先级：P0/P1
-
-**实现草案**：
-- backend 暴露 `/api/runs` 或 WS 广播 `run_status`。
-- iOS 抽屉加"运行中"分组；Web 右侧 panel 加 Runs tab。
-- 每个 run 记录最近一次 toolUse / toolResult 摘要，不保存大 stdout。
+### H1. Harness 状态总览 / Run Dashboard ⭐⭐⭐ ✅ iOS v1 完成
+点 toolbar 橙色 activeRunCount badge → [RunsDashboardSheet](packages/ios-native/Sources/ClaudeWeb/Views/RunsDashboardSheet.swift)：进行中的对话排前，每行显示标题 + cwd basename + 最近一次 toolUse 名 + 输入预览 + 实时 elapsed timer。点行切焦点；点"停止"红丸调 `client.interrupt(convId:)` 中断后台 run 不切焦点。
+**v1 范围**：单客户端从 `stateByConversation` 生成 dashboard，没新增 backend 路由。`runStartedAt` 存在 ConversationChatState。
+**未做**：跨客户端广播（`/api/runs` 或 WS `run_status`），web 端 Runs tab。这俩等真出现"iOS + 桌面同看一份"场景再补。
 
 ### H2. 权限策略编辑器 / Permission Rules UI ⭐⭐⭐
 灵感来自 Claude Code `/permissions`、OpenCode allow/ask/deny 规则。
@@ -509,45 +494,18 @@ Settings 加 Toggle，控制 thinking block 默认展开/折叠。当前 thinkin
 - iOS 设置页加"Hooks"调试入口。
 - Stop / Notification hook 可以接到 iOS 本地通知或 APNs，作为 B1 推送的低成本前置版本。
 
-### H4. Context Attachment 面板 ⭐⭐⭐
-灵感来自 Continue 的 `@File / @Code / @Git Diff / @Terminal / @Docs / @Web / @Clipboard`。
+### H4. Context Attachment 面板 ⭐⭐⭐ ✅ iOS v1 完成（git diff + 剪贴板）
+[ContextAttachSheet](packages/ios-native/Sources/ClaudeWeb/Views/ContextAttachSheet.swift) 从 InputBar 的 paperclip 按钮打开。v1 两源：
+- **当前 git diff**：[/api/context/git-diff](packages/backend/src/routes/context.ts) 跑 `git diff HEAD`，capped 200KB。注入为 `<git_diff cwd="…">…```diff…```</git_diff>`
+- **剪贴板文本**：注入为 `<clipboard>…</clipboard>`
 
-**可借鉴点**：
-- `claude-web` 已经有 `@file`，但 harness 应该帮用户组织上下文，而不只是发纯文本。
-- 输入框旁做"附加上下文"：当前 git diff、最近终端输出、某个 URL、剪贴板、打开的文件、某个 issue/PR。
-- 每个附件可见、可删除、可折叠，发送前知道会给 Claude 什么。
+注入策略：直接拼到 draft（用户可见、可改、可删），不走单独的 attachment 协议。
+**未做**：URL 抓取、GitHub issue/PR、终端输出。这些插槽在 sheet 里加 row + ContextAPI 加方法即可。
 
-**适用性**：
-- 用户价值：5
-- 架构贴合：5，已有 fs/git/session APIs
-- 实现复杂度：3
-- 风险：2，注意不要自动塞隐私内容
-- 优先级：P1
-
-**实现草案**：
-- 后端新增 `/api/context/git-diff`、`/api/context/terminal-last`、`/api/context/url`。
-- 前端/iOS 统一 `ContextAttachment` 协议：`kind + title + body + source`。
-- prompt 发送时把附件拼成明确分隔的 context block。
-
-### H5. Git Safety Gate / 变更出门前检查 ⭐⭐⭐
-灵感来自 Aider 的 git 自动提交、`/diff /test /lint /undo`，Cursor Bugbot 的 PR review。
-
-**可借鉴点**：
-- agent 写完代码后，harness 自动给用户一个"出门前检查"面板：diff、测试、lint、未跟踪文件、潜在 secrets。
-- 不自动 commit，除非用户点按钮或明确要求。
-- 支持"让 Claude 修复失败测试"、"让 Cursor/Bugbot 二审"。
-
-**适用性**：
-- 用户价值：5
-- 架构贴合：4，现有 git API + shell 可支撑
-- 实现复杂度：3
-- 风险：3，不能误提交，不能自动处理 secrets
-- 优先级：P1
-
-**实现草案**：
-- `sessionEnded(completed)` 后，如果 git dirty，弹"查看本次变更"。
-- 面板显示：files changed、diff summary、untracked、建议测试命令、最近测试结果。
-- 接上已有 Cursor CLI 评审 MCP idea，作为可选二审按钮。
+### H5. Git Safety Gate / 变更出门前检查 ⭐⭐⭐ ✅ iOS v1 完成
+[GitGateSheet](packages/ios-native/Sources/ClaudeWeb/Views/GitGateSheet.swift) 在 `sessionEnded(reason: completed)` 之后弹出（仅当 cwd 是 git repo 且 dirty）：分支 + ahead/behind + 已暂存 / 已修改 / 未跟踪三段。"复制变更摘要"按钮把状态码 + 文件路径写到剪贴板。Settings 加 `gitGateEnabled` toggle（默认 ON）。
+**v1 范围**：复用 `/api/git/status`，新加 [GitAPI client](packages/ios-native/Sources/ClaudeWeb/GitAPI.swift) + ConversationChatState.pendingGitGate（per-conversation，与 pendingPermission 同模式）。
+**未做**：跑测试 / lint / 自动检测 secrets / 接 Cursor 二审。"建议测试命令"和"上次测试结果"也没做——那一档要 backend 加更多端点。
 
 ### H6. Session Replay / 可复现运行包 ⭐⭐
 灵感来自 OpenCode/Goose 的 session 管理、Claude Code resume。

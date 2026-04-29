@@ -538,6 +538,34 @@ cd packages/ios-native
 **TTS 缓存**：
 每条对话独立缓存最后一段语音 mp3。切到对话 A 听完一段 → 切到 B 发新内容 → 切回 A 重听按钮 ↻ 还在，按下播 A 的旧回答（不重调 Haiku）。
 
+### Run Dashboard（运行中面板）
+
+顶部标题旁的橙色数字 badge 现在**可点**——打开 [RunsDashboardSheet](packages/ios-native/Sources/ClaudeWeb/Views/RunsDashboardSheet.swift)：
+- **进行中** 分组（橙点）：每行 spinner + 对话名 + 最近一次工具调用名/输入预览（Bash 显示命令首行，Edit/Read 显示文件 basename）+ elapsed 计时器（每 2s 自动刷新）
+- **最近** 分组：按 lastUsed 倒序，最多 20 条
+- 点行 → 切焦点到该对话（自动关闭）
+- "停止"红丸 → `client.interrupt(convId:)` 中断后台 run，**不切焦点**，对话仍在原地
+
+仅活跃运行 ≥1 时 badge 才出现；要单纯看历史，照样用 chip 切换器。
+
+### Git 安全检查（完成后弹）
+
+`session_ended(reason=completed)` 触发时，如果对话的 cwd 是 git 仓库且工作区有未提交修改，弹 [GitGateSheet](packages/ios-native/Sources/ClaudeWeb/Views/GitGateSheet.swift)：
+- 顶部 chip：分支名（等宽）+ ahead/behind + "N 处变化"
+- 三段：**已暂存** / **已修改** / **未跟踪**，每行带状态码彩色徽章（M 橙 / A 绿 / D 红 / R/C 紫 / U 粉 / ? 灰）+ 等宽文件路径
+- **复制变更摘要** 按钮：写到剪贴板的纯文本格式 `XY <path>`（一行一个文件），方便贴 commit message
+- 关闭即清掉 gate；下次完成会重新弹
+
+仅完成（completed）触发；被打断（interrupted）/ 报错（error）不弹。开关在设置 → "Git 安全检查"，默认 ON。
+
+### 附加上下文（paperclip）
+
+InputBar 上 PhotoPicker 旁的 📎 → 打开 [ContextAttachSheet](packages/ios-native/Sources/ClaudeWeb/Views/ContextAttachSheet.swift)：
+- **当前 git diff**（HEAD..worktree）：走 `/api/context/git-diff`，最大 200KB（超过截断并标记）。点击后注入为 `<git_diff cwd="…">…```diff…```</git_diff>` 块
+- **剪贴板文本**：UIPasteboard 的纯文本，注入为 `<clipboard>…</clipboard>`
+
+注入直接拼到 draft，与已有内容用空行分隔。**用户可见、可改、可删**，不走单独的 attachment 协议——发送前自己确认。
+
 ### 文件浏览（右侧抽屉）
 
 主屏右侧边缘**右滑**，或点工具栏 🔎 按钮 → 打开当前 cwd 的文件抽屉（占屏宽 80%，最宽 320pt）。
@@ -615,6 +643,9 @@ cd packages/ios-native
 | DirectoryPicker 浏览 + 新建文件夹 | ✅ |
 | 文件浏览右抽屉 + 文本/Markdown/图片预览 | ✅ |
 | 设置 → 诊断页（CLI / 凭证 / whisper / ffmpeg / edge-tts / 注册表健康检查）| ✅ |
+| 点 badge 看 Run Dashboard（活跃 + 最近 + 后台 stop）| ✅ |
+| 完成后弹 Git 安全检查（dirty 工作区 + 复制摘要）| ✅ |
+| InputBar 📎 附加 git diff / 剪贴板文本到 prompt | ✅ |
 | 离线只读最近对话 | ✅（cache 命中）|
 | **闲置语音模式 → 锁屏 → 用 play 按键启动新录音** | ❌ **iOS 平台限制** |
 | **AirPods 长按柄触发 PTT** | ❌ Apple 不开放给 app |
