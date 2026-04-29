@@ -56,16 +56,28 @@ private struct ChatLineView: View {
                     .background(Color.accentColor.opacity(0.18), in: .rect(cornerRadius: 12))
             }
         case .assistant:
-            // Full markdown — headings, lists, tables, links, code blocks
-            // with copy button. MarkdownUI re-parses on each text change so
-            // streaming updates render correctly.
-            Markdown(line.text)
-                .markdownTheme(.gitHub)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .markdownCodeBlock { configuration in
-                    CodeBlockWithCopy(configuration: configuration)
+            // Full markdown — headings, lists, tables, links, code blocks.
+            // MarkdownUI re-parses on each text change so streaming updates render correctly.
+            VStack(alignment: .leading, spacing: 6) {
+                Markdown(line.text)
+                    .markdownTheme(.gitHub)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    UIPasteboard.general.string = line.text
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "doc.on.doc.fill")
+                            .font(.caption2)
+                        Text("复制全文")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         case .thinking:
             ThinkingBlockView(text: line.text, alwaysExpanded: settings.alwaysExpandThinking)
         case .system:
