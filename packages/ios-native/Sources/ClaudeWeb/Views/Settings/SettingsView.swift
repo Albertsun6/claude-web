@@ -149,6 +149,21 @@ struct SettingsView: View {
                     Text("用 iOS 标准 DynamicType。改完整个 app 立即生效，包括对话区、菜单、按钮。")
                 }
                 Section {
+                    NavigationLink {
+                        HealthCheckView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "stethoscope")
+                                .foregroundStyle(Color.accentColor)
+                            Text("诊断 / 健康检查")
+                        }
+                    }
+                } header: {
+                    Text("诊断")
+                } footer: {
+                    Text("逐项检查 backend 连接、Claude CLI、订阅凭证、whisper / ffmpeg / edge-tts、项目注册表是否可用。出问题时一键复制脱敏报告。")
+                }
+                Section {
                     NavigationLink("查看最近事件 (\(telemetry.ring.count))") {
                         TelemetryDebugView()
                     }

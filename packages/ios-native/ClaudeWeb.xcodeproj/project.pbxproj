@@ -32,6 +32,7 @@
 		C5294351B59BB0E0751C492A /* RunRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DE3519D5D4B6BA73D2C4D5D /* RunRouter.swift */; };
 		CBC22CAD60B6F38CC3E4D28B /* TelemetryDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3CDA99E7C72B2FA85DB71A /* TelemetryDebugView.swift */; };
 		D0731F6CAC254AB33956E0FB /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90163FEB077BB408157C916 /* Protocol.swift */; };
+		D236A7D09D60FE98BD6705D2 /* HealthCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350011A28BB99092BDE97C46 /* HealthCheckView.swift */; };
 		D26C4CDFA3EED053DDB5AF93 /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD24330D2EB3BF5B5938822 /* WebSocketClient.swift */; };
 		D9EA35CC1324C85BAFB52082 /* ProjectsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C686BBF22FF0FA13BF0020D7 /* ProjectsAPI.swift */; };
 		DA152D4966DF3D049BCA41C2 /* SessionsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02CBF7C84A20380B2383AD1 /* SessionsAPI.swift */; };
@@ -64,6 +65,7 @@
 		214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
 		283735CE8528E94F44599D41 /* TTSPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSPlayer.swift; sourceTree = "<group>"; };
 		2C189285FD2BC25E599008F0 /* ChatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListView.swift; sourceTree = "<group>"; };
+		350011A28BB99092BDE97C46 /* HealthCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheckView.swift; sourceTree = "<group>"; };
 		42AA631E277EDCEFDF480163 /* InputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBar.swift; sourceTree = "<group>"; };
 		45BC150255A000C4B594FB34 /* Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Telemetry.swift; sourceTree = "<group>"; };
 		4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendClient.swift; sourceTree = "<group>"; };
@@ -194,6 +196,7 @@
 		97E2EB9F4948B2230A07743F /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				350011A28BB99092BDE97C46 /* HealthCheckView.swift */,
 				E67AEC4B21826DE8E273887E /* SettingsView.swift */,
 				9C3CDA99E7C72B2FA85DB71A /* TelemetryDebugView.swift */,
 			);
@@ -347,6 +350,7 @@
 				7777D446E5D1F743A234FCCB /* FileBrowserPanel.swift in Sources */,
 				2EC250307F7B7C08E9DAFA61 /* FilePreviewSheet.swift in Sources */,
 				F0336354BB84D5D2A5362A95 /* FsAPI.swift in Sources */,
+				D236A7D09D60FE98BD6705D2 /* HealthCheckView.swift in Sources */,
 				302B643809131259B4682595 /* HistorySessionRow.swift in Sources */,
 				458552BC134B372A7B368750 /* InputBar.swift in Sources */,
 				ED27D43A57EAFD4C28DF5C36 /* NewConversationSheet.swift in Sources */,
