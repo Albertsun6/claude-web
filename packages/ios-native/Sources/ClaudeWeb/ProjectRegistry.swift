@@ -113,14 +113,53 @@ final class ProjectRegistry {
         }
     }
 
-    /// Forget a project (server-side: remove from projects.json; jsonl on
-    /// disk preserved). UI should also drop in-memory conversations under
-    /// this cwd.
+    /// Forget a project: server-side removes it from projects.json (jsonl
+    /// transcripts on disk are preserved). Also drops the in-memory
+    /// conversations rooted at this cwd, their session caches, and clears
+    /// focus if the active conversation was one of them — without this
+    /// cleanup the drawer would leave the cwd visible as ·未注册.
     func forgetProject(_ id: String) async throws {
+        let target = projects.first { $0.id == id }
         try await projectsAPI.forget(id: id)
         projects.removeAll { $0.id == id }
         cache.saveProjects(projects)
         historyByProject.removeValue(forKey: id)
+        if let target {
+            dropLocalConversations(forCwd: target.cwd)
+        }
+    }
+
+    /// Single entry point the drawer uses to "close a cwd" — handles both
+    /// registered (calls forgetProject) and unregistered orphans (just drops
+    /// in-memory conversations). Reaches the same end state either way:
+    /// the cwd disappears from the drawer.
+    func closeCwd(_ cwd: String) async throws {
+        let norm = (cwd as NSString).standardizingPath
+        if let project = projects.first(where: { ($0.cwd as NSString).standardizingPath == norm }) {
+            try await forgetProject(project.id)
+        } else {
+            dropLocalConversations(forCwd: cwd)
+        }
+    }
+
+    /// Local-only cleanup. Called by both forgetProject (after the server
+    /// hop) and closeCwd (for unregistered orphans where there is no server
+    /// project to forget). Idempotent — safe to call when there are no
+    /// conversations left under the cwd.
+    private func dropLocalConversations(forCwd cwd: String) {
+        guard let client else { return }
+        let normCwd = (cwd as NSString).standardizingPath
+        let toClose = client.conversations.values
+            .filter { ($0.cwd as NSString).standardizingPath == normCwd }
+            .map { $0.id }
+        for convId in toClose {
+            client.closeConversation(convId)
+            cache.dropSession(convId)
+        }
+        if let curr = client.currentConversationId, toClose.contains(curr) {
+            client.currentConversationId = client.sortedConversations().first?.id
+        }
+        cache.saveConversations(client.conversationsList())
     }
 
     func renameProject(_ id: String, to name: String) async throws -> ProjectDTO {
@@ -153,29 +192,50 @@ final class ProjectRegistry {
     /// Pull a historical session's full transcript and adopt it as a
     /// conversation in BackendClient. dedup: if a conversation with this
     /// sessionId already exists, return its id instead of creating a copy.
+    /// Then automatically subscribes to live jsonl tail so any updates
+    /// driven by another Claude Code client mirror in real time.
     func openHistoricalSession(_ session: SessionMeta, in project: ProjectDTO) async throws -> String {
         guard let client else { throw RegistryError.notBound }
-        // Dedup against existing conversations
+        // Dedup against existing conversations — if already adopted, just
+        // re-subscribe (no-op if already subscribed) so reopening a previously
+        // unsubscribed conversation reconnects the follow.
         if let existing = client.conversations.values.first(where: { $0.sessionId == session.sessionId }) {
+            // Re-fetch transcript to refresh fileSize, then subscribe from the
+            // new offset. Skipped if already following.
+            if !client.isFollowing(existing.id) {
+                if let resp = try? await sessionsAPI.transcript(cwd: project.cwd, sessionId: session.sessionId) {
+                    client.subscribeSession(
+                        convId: existing.id, cwd: project.cwd,
+                        sessionId: session.sessionId,
+                        fromByteOffset: resp.fileSize ?? 0
+                    )
+                }
+            }
             return existing.id
         }
         let resp = try await sessionsAPI.transcript(cwd: project.cwd, sessionId: session.sessionId)
         let lines = TranscriptParser.parse(resp.messages)
         // Use sessionId as the conversation id for historical loads — stable
         // across app restarts, and dedup just works.
+        let derivedTitle = TitleHelper.makeTitle(from: session.preview)
         let conv = Conversation(
             id: session.sessionId,
             cwd: project.cwd,
             sessionId: session.sessionId,
-            title: session.preview.isEmpty
-                ? "（历史会话）"
-                : String(session.preview.prefix(30)),
+            title: derivedTitle.isEmpty ? "（历史会话）" : derivedTitle,
             createdAt: session.modifiedAt,
             lastUsed: session.modifiedAt
         )
         client.adopt(conv, messages: lines)
         cache.saveSession(conv.id, messages: lines)
         cache.saveConversations(client.conversationsList())
+        // Auto-subscribe so any new lines appended by another Claude Code
+        // client tailing the same jsonl mirror in here in real time.
+        client.subscribeSession(
+            convId: conv.id, cwd: project.cwd,
+            sessionId: session.sessionId,
+            fromByteOffset: resp.fileSize ?? 0
+        )
         return conv.id
     }
 

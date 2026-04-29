@@ -135,6 +135,10 @@ enum JSONValue: Codable {
 struct SessionTranscriptResponse: Decodable {
     let sessionId: String
     let messages: [TranscriptEntry]
+    /// Bytes the jsonl had at fetch time. Pass back as `fromByteOffset`
+    /// in `session_subscribe` to follow without dropping or duplicating
+    /// any lines. Optional for backward compat with older backends.
+    let fileSize: Int?
 }
 
 @MainActor

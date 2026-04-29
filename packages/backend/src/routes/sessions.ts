@@ -6,11 +6,16 @@ import path from "node:path";
 import os from "node:os";
 import { verifyAllowedPath } from "../auth.js";
 
-const PROJECTS_DIR = path.join(os.homedir(), ".claude", "projects");
+export const PROJECTS_DIR = path.join(os.homedir(), ".claude", "projects");
 
-function encodeCwd(cwd: string): string {
+export function encodeCwd(cwd: string): string {
   // CLI replaces every "/" with "-" (also strips leading "/" → leading "-")
   return cwd.replace(/\//g, "-");
+}
+
+/** Absolute path to the jsonl transcript backing a Claude Code session. */
+export function sessionFilePath(cwd: string, sessionId: string): string {
+  return path.join(PROJECTS_DIR, encodeCwd(cwd), `${sessionId}.jsonl`);
 }
 
 export interface SessionMeta {
@@ -132,10 +137,12 @@ sessionsRouter.get("/transcript", async (c) => {
   if (!sessionId || !/^[\w-]+$/.test(sessionId)) {
     return c.json({ error: "valid sessionId required" }, 400);
   }
-  const fp = path.join(PROJECTS_DIR, encodeCwd(cwd), `${sessionId}.jsonl`);
+  const fp = sessionFilePath(cwd, sessionId);
   let raw: string;
+  let fileSize = 0;
   try {
     raw = await readFile(fp, "utf-8");
+    fileSize = Buffer.byteLength(raw, "utf-8");
   } catch {
     return c.json({ error: "session not found" }, 404);
   }
@@ -149,5 +156,7 @@ sessionsRouter.get("/transcript", async (c) => {
     if (norm) messages.push(norm);
   }
 
-  return c.json({ sessionId, messages });
+  // fileSize lets the client wire up a `session_subscribe` immediately after
+  // this transcript without dropping or duplicating any intervening lines.
+  return c.json({ sessionId, messages, fileSize });
 });

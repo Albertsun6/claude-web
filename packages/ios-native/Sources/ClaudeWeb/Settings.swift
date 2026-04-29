@@ -121,7 +121,7 @@ final class AppSettings {
         self.slowTts = UserDefaults.standard.bool(forKey: Self.slowTtsKey)
         self.authToken = UserDefaults.standard.string(forKey: Self.authTokenKey) ?? ""
         self.model = UserDefaults.standard.string(forKey: Self.modelKey) ?? "claude-haiku-4-5"
-        self.silentKeepalive = UserDefaults.standard.bool(forKey: Self.silentKeepaliveKey)
+        self.silentKeepalive = UserDefaults.standard.object(forKey: Self.silentKeepaliveKey) as? Bool ?? true
         self.currentConversationId = UserDefaults.standard.string(forKey: Self.currentConversationIdKey)
         self.fontSize = UserDefaults.standard.string(forKey: Self.fontSizeKey) ?? "large"
     }

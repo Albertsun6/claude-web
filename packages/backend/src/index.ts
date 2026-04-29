@@ -10,6 +10,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { runSession } from "./cli-runner.js";
 import { subscribeFs } from "./fs-watcher.js";
+import { subscribeSession } from "./session-watcher.js";
 import { fsRouter } from "./routes/fs.js";
 import { gitRouter } from "./routes/git.js";
 import { voiceRouter } from "./routes/voice.js";
@@ -222,6 +223,8 @@ wss.on("connection", (ws) => {
 
   // Per-connection fs watch subscriptions: cwd → unsubscribe.
   const fsSubs = new Map<string, () => void>();
+  // Per-connection session jsonl tail subscriptions: "cwd::sid" → unsubscribe.
+  const sessionSubs = new Map<string, () => void>();
 
   ws.on("message", async (raw) => {
     let msg: ClientMessage;
@@ -273,6 +276,33 @@ wss.on("connection", (ws) => {
       if (unsub) {
         unsub();
         fsSubs.delete(msg.cwd);
+      }
+      return;
+    }
+
+    if (msg.type === "session_subscribe") {
+      const cwdErr = verifyAllowedPath(msg.cwd);
+      if (cwdErr) {
+        send({ type: "error", error: cwdErr });
+        return;
+      }
+      if (!/^[\w-]+$/.test(msg.sessionId)) {
+        send({ type: "error", error: "invalid sessionId" });
+        return;
+      }
+      const k = `${msg.cwd}::${msg.sessionId}`;
+      if (sessionSubs.has(k)) return; // already subscribed on this connection
+      const unsub = subscribeSession(msg.cwd, msg.sessionId, msg.fromByteOffset, send);
+      sessionSubs.set(k, unsub);
+      return;
+    }
+
+    if (msg.type === "session_unsubscribe") {
+      const k = `${msg.cwd}::${msg.sessionId}`;
+      const unsub = sessionSubs.get(k);
+      if (unsub) {
+        unsub();
+        sessionSubs.delete(k);
       }
       return;
     }
@@ -344,6 +374,8 @@ wss.on("connection", (ws) => {
     runs.clear();
     for (const unsub of fsSubs.values()) unsub();
     fsSubs.clear();
+    for (const unsub of sessionSubs.values()) unsub();
+    sessionSubs.clear();
     allConnections.delete(conn);
   });
 });

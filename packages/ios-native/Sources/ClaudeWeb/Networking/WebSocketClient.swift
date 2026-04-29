@@ -24,6 +24,10 @@ final class WebSocketClient {
     /// RunRouter + ConversationStore can take over from a single call site.
     var onMessage: ((ServerMessage) -> Void)?
 
+    /// Fired after a socket task is created and resumed. BackendClient uses
+    /// this to re-send idempotent subscriptions after reconnect.
+    var onConnected: (() -> Void)?
+
     /// True iff the underlying URLSessionWebSocketTask is currently open.
     /// Callers gate `send` on this so a dropped connection surfaces as a
     /// "fail fast" rather than a queued frame nobody reads.
@@ -80,6 +84,7 @@ final class WebSocketClient {
         t.resume()
         state = .connected
         telemetry?.log("ws.connect.ok")
+        onConnected?()
         receiveTask = Task { [weak self] in await self?.receiveLoop() }
     }
 

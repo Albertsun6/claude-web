@@ -19,8 +19,22 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    // Voice mode toggle moved here from the top bar — F1c4
-                    // will live in the drawer instead.
+                    Toggle("自动朗读回答", isOn: $s.ttsEnabled)
+                    Picker("风格", selection: $s.speakStyle) {
+                        Text("概要（Haiku 改写为 1-4 句）").tag("summary")
+                        Text("逐句（原文）").tag("verbatim")
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    .disabled(!s.ttsEnabled)
+                    Toggle("慢速朗读（-15%）", isOn: $s.slowTts)
+                        .disabled(!s.ttsEnabled)
+                } header: {
+                    Text("朗读")
+                } footer: {
+                    Text("Claude 回复后是否自动 TTS 播放。**独立于「语音对话」开关**——你可以仅看着屏幕打字、让回答念出来。")
+                }
+                Section {
                     Button {
                         if voice.active { voice.exit() } else { voice.enter() }
                     } label: {
@@ -36,9 +50,16 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("语音模式")
+                    Text("语音对话（Hands-free）")
                 } footer: {
-                    Text("打开后顶部锁屏显示 Now Playing 卡片，输入栏 PTT 切换为按播放=录音的语音流。")
+                    Text("戴耳机锁屏后的连续语音对话：接管麦克风 + 锁屏 / 耳机按键 + 显示 Now Playing 卡片 + 长按麦松开**直接发送**。**不影响「自动朗读」独立设置**——开了语音模式但关了自动朗读也能用。")
+                }
+                Section {
+                    Toggle("后台保活（实验性）", isOn: $s.silentKeepalive)
+                } header: {
+                    Text("后台连接")
+                } footer: {
+                    Text("仅用于切走 app / 锁屏后**保持 WebSocket 不掉线**，不接管麦克风、不影响 PTT。原理是播放 0 音量循环音频骗过 iOS 后台挂起。**显著提高**保持率但不保证 100%。Apple 视为后台音频滥用，**不要在 App Store 版本启用**；sideload 自用没事，电池影响很小。")
                 }
                 Section("Backend") {
                     TextField("https://mymac.tailcf3ccf.ts.net", text: $draftURL)
@@ -109,25 +130,6 @@ struct SettingsView: View {
                     Text("字号")
                 } footer: {
                     Text("用 iOS 标准 DynamicType。改完整个 app 立即生效，包括对话区、菜单、按钮。")
-                }
-                Section("语音播报") {
-                    Toggle("自动播报回答", isOn: $s.ttsEnabled)
-                    Picker("风格", selection: $s.speakStyle) {
-                        Text("概要（Haiku 改写为 1-4 句）").tag("summary")
-                        Text("逐句（原文）").tag("verbatim")
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                    .disabled(!s.ttsEnabled)
-                    Toggle("慢速朗读（-15%）", isOn: $s.slowTts)
-                        .disabled(!s.ttsEnabled)
-                }
-                Section {
-                    Toggle("后台保活（实验性）", isOn: $s.silentKeepalive)
-                } header: {
-                    Text("实验功能")
-                } footer: {
-                    Text("开启后会一直播放 0 音量循环音频，**显著提高**切应用 / 锁屏后 WebSocket 保持连接的概率，但**不保证 100% 不断**（iOS 在内存压力 / 网络切换 / 用户滑掉 app 等情况下仍可能挂起）。Apple 视为对后台音频的滥用，**不要在 App Store 版本启用**。仅供 sideload 个人用，电池影响很小。")
                 }
                 Section {
                     NavigationLink("查看最近事件 (\(telemetry.ring.count))") {

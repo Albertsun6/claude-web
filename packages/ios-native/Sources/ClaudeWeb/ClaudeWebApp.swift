@@ -104,6 +104,7 @@ struct ClaudeWebApp: App {
         registry.bindTelemetry(telemetry)
         registry.bind(client: client)
         client.bindTelemetry(telemetry)
+        tts.bindTelemetry(telemetry)
 
         // Persist to disk on every dirty signal. Two writes per signal:
         //   sessions/<convId>.json — full ChatLine[] for this conversation
@@ -120,18 +121,35 @@ struct ClaudeWebApp: App {
 
         let ttsRef = tts
         let voiceRef = voice
-        client.onTurnComplete = { [weak ttsRef, weak clientRef, weak voiceRef] in
+        client.onCompletedTurn = { [weak ttsRef, weak clientRef, weak voiceRef] turn in
             guard let tts = ttsRef, let c = clientRef else { return }
-            let convId = c.currentConversationId
-            // Walk messages back to find the last *spoken* line — usually
-            // the trailing assistant text, but skip past any tool_use rows
-            // that came after (where the answer ends with "I'll do X")
-            // because those don't carry text the user wants read aloud.
-            let spoken = c.currentMessages.reversed().compactMap { $0.spokenText }.first
-            guard let text = spoken else { return }
+            telemetry.log(
+                "tts.turn.captured",
+                props: [
+                    "source": turn.sessionId == nil ? "live_run" : "followed_session",
+                    "textLen": String(turn.spokenText.count),
+                ],
+                conversationId: turn.conversationId,
+                runId: turn.runId
+            )
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 200_000_000)
-                await tts.speakAssistantTurn(text, conversationId: convId)
+                // If the user switched conversations during the small settle
+                // delay, do not start reading the old conversation.
+                guard c.currentConversationId == turn.conversationId,
+                      c.focusGeneration == turn.focusGeneration else {
+                    telemetry.warn(
+                        "tts.turn.skipped_focus_changed",
+                        props: [
+                            "capturedGeneration": String(turn.focusGeneration),
+                            "currentGeneration": String(c.focusGeneration),
+                        ],
+                        conversationId: turn.conversationId,
+                        runId: turn.runId
+                    )
+                    return
+                }
+                await tts.speakAssistantTurn(turn.spokenText, conversationId: turn.conversationId)
                 voiceRef?.refresh()
             }
         }

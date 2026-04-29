@@ -38,16 +38,18 @@ enum TranscriptParser {
 
     private static func renderUser(_ msg: TranscriptMessage) -> [ChatLine] {
         guard let content = msg.content else { return [] }
+        let raw: String
         switch content {
         case .string(let s):
-            return s.isEmpty ? [] : [ChatLine(role: .user, text: s)]
+            raw = s
         case .blocks(let blocks):
             // tool_result wrapped as user → don't render. Only render if the
             // user actually typed (text) blocks.
             let texts = blocks.compactMap { $0.type == "text" ? $0.text : nil }
-            let joined = texts.joined(separator: "\n")
-            return joined.isEmpty ? [] : [ChatLine(role: .user, text: joined)]
+            raw = texts.joined(separator: "\n")
         }
+        let cleaned = TitleHelper.stripSystemInjectedTags(raw)
+        return cleaned.isEmpty ? [] : [ChatLine(role: .user, text: cleaned)]
     }
 
     private static func renderAssistant(_ msg: TranscriptMessage) -> [ChatLine] {

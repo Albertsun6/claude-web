@@ -38,6 +38,7 @@ final class TTSPlayer: NSObject {
     private let backendURL: () -> URL
     private let authToken: () -> String
     private let settings: () -> AppSettings
+    private weak var telemetry: Telemetry?
 
     /// Bumped on cancel / new turn so in-flight fetches abandon.
     private var generation: Int = 0
@@ -50,6 +51,10 @@ final class TTSPlayer: NSObject {
         self.backendURL = backendURL
         self.authToken = authToken
         self.settings = settings
+    }
+
+    func bindTelemetry(_ tel: Telemetry) {
+        self.telemetry = tel
     }
 
     private func authorize(_ req: inout URLRequest) {
@@ -78,10 +83,18 @@ final class TTSPlayer: NSObject {
         cancel()
 
         let cleanedSource = stripForSpeech(raw)
-        if cleanedSource.isEmpty { return }
+        if cleanedSource.isEmpty {
+            telemetry?.warn("tts.skip.empty_after_strip", conversationId: conversationId)
+            return
+        }
 
         let gen = generation
         state = .fetching
+        telemetry?.log(
+            "tts.fetch.start",
+            props: ["style": s.speakStyle, "sourceLen": String(cleanedSource.count)],
+            conversationId: conversationId
+        )
 
         var toSpeak = cleanedSource
         if s.speakStyle == "summary", cleanedSource.count > 30 {
@@ -103,6 +116,11 @@ final class TTSPlayer: NSObject {
         }
         playingConversation = conversationId
         await play(mp3)
+        telemetry?.log(
+            "tts.play.start",
+            props: ["spokenLen": String(toSpeak.count), "bytes": String(mp3.count)],
+            conversationId: conversationId
+        )
     }
 
     /// Replay this conversation's last spoken clip without re-fetching. No-op
@@ -195,6 +213,7 @@ final class TTSPlayer: NSObject {
             if (json["fallback"] as? Bool) == true { return nil }
             return (json["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
+            telemetry?.warn("tts.summary.failed", props: ["error": error.localizedDescription])
             return nil
         }
     }
@@ -213,11 +232,16 @@ final class TTSPlayer: NSObject {
             let (data, response) = try await URLSession.shared.data(for: req)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 state = .error("TTS HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+                telemetry?.error(
+                    "tts.http.failed",
+                    props: ["status": String((response as? HTTPURLResponse)?.statusCode ?? -1)]
+                )
                 return nil
             }
             return data
         } catch {
             state = .error("TTS 请求失败: \(error.localizedDescription)")
+            telemetry?.error("tts.request.failed", error: error)
             return nil
         }
     }
@@ -228,6 +252,7 @@ extension TTSPlayer: AVAudioPlayerDelegate {
         Task { @MainActor in
             self.state = .idle
             self.player = nil
+            self.telemetry?.log("tts.play.finished", props: ["success": String(flag)])
         }
     }
     nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {

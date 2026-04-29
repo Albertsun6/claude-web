@@ -23,6 +23,14 @@ struct DrawerContent: View {
     @State private var expandedCwds: Set<String> = []
     @State private var expandedAllCwds: Set<String> = []
     @State private var loadingCwd: String? = nil
+    @State private var loadingHistoryProjects: Set<String> = []
+
+    // Rename dialogs. Project renames hit /api/projects/:id (server-side);
+    // conversation renames are local-only via the in-memory store.
+    @State private var renamingProject: ProjectDTO? = nil
+    @State private var projectRenameDraft: String = ""
+    @State private var renamingConversation: Conversation? = nil
+    @State private var conversationRenameDraft: String = ""
 
     var body: some View {
         NavigationStack {
@@ -41,21 +49,14 @@ struct DrawerContent: View {
                         loadingCwd = picked
                         defer { loadingCwd = nil }
 
-                        let project = try? await registry.openByPath(cwd: picked)
-
-                        var targetId: String? = nil
-                        if let proj = project,
-                           let sessions = try? await registry.loadHistorySessions(forProject: proj),
-                           let latest = sessions.first {
-                            targetId = try? await registry.openHistoricalSession(latest, in: proj)
-                        }
-
-                        if let targetId {
-                            client.currentConversationId = targetId
-                        } else {
-                            let conv = client.createConversation(cwd: picked)
-                            client.currentConversationId = conv.id
-                        }
+                        // Register the cwd as a server project (idempotent),
+                        // then ALWAYS create a fresh conversation. Previous
+                        // versions auto-jumped into the latest historical
+                        // jsonl — that was surprising. Users who want a past
+                        // session can expand the cwd and tap a history row.
+                        _ = try? await registry.openByPath(cwd: picked)
+                        let conv = client.createConversation(cwd: picked)
+                        client.currentConversationId = conv.id
                         expandedCwds.insert((picked as NSString).standardizingPath)
                         closeDrawer()
                     }
@@ -157,6 +158,16 @@ struct DrawerContent: View {
         List {
             ForEach(groupedByCwd, id: \.cwd) { group in
                 Section {
+                    cwdHeaderRow(group)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                Task { try? await registry.closeCwd(group.cwd) }
+                            } label: {
+                                Label(group.registered ? "关闭" : "清除",
+                                      systemImage: "folder.badge.minus")
+                            }
+                        }
+
                     if loadingCwd == group.cwd {
                         HStack {
                             ProgressView().scaleEffect(0.8)
@@ -164,26 +175,73 @@ struct DrawerContent: View {
                         }
                         .listRowBackground(Color.clear)
                     } else if expandedCwds.contains(group.cwd) {
-                        let displayed = expandedAllCwds.contains(group.cwd) ? group.convs : Array(group.convs.prefix(3))
-                        ForEach(displayed) { conv in
-                            conversationRowView(conv)
+                        let displayed = expandedAllCwds.contains(group.cwd) ? group.items : Array(group.items.prefix(3))
+                        ForEach(displayed) { item in
+                            switch item {
+                            case .conversation(let conv):
+                                conversationRowView(conv)
+                            case .history(let session):
+                                if let project = group.project {
+                                    HistorySessionRow(
+                                        session: session,
+                                        project: project,
+                                        onSelect: { closeDrawer() }
+                                    )
+                                }
+                            }
                         }
-                        if !expandedAllCwds.contains(group.cwd) && group.convs.count > 3 {
-                            Button("显示全部 \(group.convs.count) 条") {
-                                expandedAllCwds.insert(group.cwd)
+                        if loadingHistoryProjects.contains(group.project?.id ?? "") {
+                            HStack {
+                                ProgressView().scaleEffect(0.7)
+                                Text("加载历史…").font(.caption2).foregroundStyle(.secondary)
+                            }
+                            .listRowBackground(Color.clear)
+                        }
+                        if group.items.count > 3 {
+                            let isShowingAll = expandedAllCwds.contains(group.cwd)
+                            Button(isShowingAll ? "收起" : "显示全部 \(group.items.count) 条") {
+                                if isShowingAll {
+                                    expandedAllCwds.remove(group.cwd)
+                                } else {
+                                    expandedAllCwds.insert(group.cwd)
+                                }
                             }
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .listRowBackground(Color.clear)
                         }
-                        CwdHistorySection(project: group.project) { closeDrawer() }
                     }
-                } header: {
-                    cwdSectionHeader(group)
                 }
             }
         }
         .listStyle(.plain)
+        .alert("重命名文件夹", isPresented: Binding(
+            get: { renamingProject != nil },
+            set: { if !$0 { renamingProject = nil } }
+        )) {
+            TextField("名字", text: $projectRenameDraft)
+            Button("取消", role: .cancel) { renamingProject = nil }
+            Button("保存") {
+                if let proj = renamingProject {
+                    let draft = projectRenameDraft
+                    Task { try? await registry.renameProject(proj.id, to: draft) }
+                }
+                renamingProject = nil
+            }
+        }
+        .alert("重命名会话", isPresented: Binding(
+            get: { renamingConversation != nil },
+            set: { if !$0 { renamingConversation = nil } }
+        )) {
+            TextField("名字", text: $conversationRenameDraft)
+            Button("取消", role: .cancel) { renamingConversation = nil }
+            Button("保存") {
+                if let conv = renamingConversation {
+                    client.renameConversation(conv.id, to: conversationRenameDraft)
+                }
+                renamingConversation = nil
+            }
+        }
     }
 
     // MARK: - Footer
@@ -241,12 +299,21 @@ struct DrawerContent: View {
                 client.currentConversationId = conv.id
                 closeDrawer()
             }
-            .swipeActions {
+            .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
                     closeConversation(conv)
                 } label: {
                     Label("关闭", systemImage: "xmark")
                 }
+            }
+            .swipeActions(edge: .leading) {
+                Button {
+                    conversationRenameDraft = conv.title
+                    renamingConversation = conv
+                } label: {
+                    Label("重命名", systemImage: "pencil")
+                }
+                .tint(.blue)
             }
     }
 
@@ -260,58 +327,45 @@ struct DrawerContent: View {
         }
     }
 
+    /// cwd row in the drawer list. Tap area = expand/collapse. Trailing
+    /// buttons: [+] new conversation, [···] menu (rename / close folder).
+    /// Swipe-from-trailing also exposes "close folder" as a fast path.
+    /// (Replaces the previous .contextMenu approach which was unreliable
+    /// because of nested-Button hit-test conflicts.)
     @ViewBuilder
-    private func cwdSectionHeader(_ group: CwdGroup) -> some View {
-        HStack(spacing: 0) {
+    private func cwdHeaderRow(_ group: CwdGroup) -> some View {
+        HStack(spacing: 4) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    if expandedCwds.contains(group.cwd) {
-                        expandedCwds.remove(group.cwd)
-                    } else {
-                        expandedCwds.insert(group.cwd)
-                    }
-                }
+                toggleCwdExpansion(group)
             } label: {
                 HStack(spacing: 6) {
+                    Image(systemName: expandedCwds.contains(group.cwd) ? "chevron.down" : "chevron.right")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .frame(width: 12)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(group.label)
                                 .font(.subheadline.bold())
                                 .foregroundStyle(.primary)
-                                .textCase(nil)
                             if !group.registered {
                                 Text("·未注册")
                                     .font(.caption2)
                                     .foregroundStyle(.orange)
-                                    .textCase(nil)
                             }
                         }
                         Text(group.cwd)
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
-                            .textCase(nil)
                     }
                     Spacer()
-                    if group.convs.count > 0 {
-                        Text("\(group.convs.count)")
+                    if group.items.count > 0 {
+                        Text("\(group.items.count)")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
-                    Image(systemName: expandedCwds.contains(group.cwd) ? "chevron.up" : "chevron.down")
-                        .font(.caption2).foregroundStyle(.secondary)
-                        .padding(.leading, 4)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .contextMenu {
-                if let project = group.project {
-                    Button(role: .destructive) {
-                        Task { try? await registry.forgetProject(project.id) }
-                    } label: {
-                        Label("关闭文件夹", systemImage: "folder.badge.minus")
-                    }
-                }
-            }
 
             Button {
                 let conv = client.createConversation(cwd: group.cwd)
@@ -323,13 +377,55 @@ struct DrawerContent: View {
                 closeDrawer()
             } label: {
                 Image(systemName: "plus.circle")
-                    .font(.subheadline)
+                    .font(.title3)
                     .foregroundColor(.accentColor)
             }
             .buttonStyle(.plain)
-            .frame(width: 32)
+            .frame(width: 32, height: 32)
+
+            Menu {
+                if let project = group.project {
+                    Button {
+                        projectRenameDraft = project.name
+                        renamingProject = project
+                    } label: {
+                        Label("重命名", systemImage: "pencil")
+                    }
+                }
+                Button(role: .destructive) {
+                    Task { try? await registry.closeCwd(group.cwd) }
+                } label: {
+                    Label(group.registered ? "关闭文件夹" : "清除（孤儿）",
+                          systemImage: "folder.badge.minus")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
+    }
+
+    private func toggleCwdExpansion(_ group: CwdGroup) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if expandedCwds.contains(group.cwd) {
+                expandedCwds.remove(group.cwd)
+            } else {
+                expandedCwds.insert(group.cwd)
+                if let project = group.project,
+                   registry.historyByProject[project.id] == nil {
+                    loadingHistoryProjects.insert(project.id)
+                    Task {
+                        defer { loadingHistoryProjects.remove(project.id) }
+                        try? await registry.loadHistorySessions(forProject: project)
+                    }
+                }
+            }
+        }
     }
 
     private var groupedByCwd: [CwdGroup] {
@@ -348,14 +444,23 @@ struct DrawerContent: View {
                     ?? ((cwd as NSString).lastPathComponent.isEmpty
                         ? cwd
                         : (cwd as NSString).lastPathComponent)
+
+                // Merge live conversations with jsonl history (de-duped on sessionId).
+                let knownSessionIds = Set(convs.compactMap { $0.sessionId })
+                let history = (project.flatMap { registry.historyByProject[$0.id] } ?? [])
+                    .filter { !knownSessionIds.contains($0.sessionId) }
+                let merged: [DrawerListItem] = convs.map { .conversation($0) }
+                    + history.map { .history($0) }
+                let sortedItems = merged.sorted { $0.sortDate > $1.sortDate }
+
                 return CwdGroup(
                     cwd: cwd, label: label, registered: project != nil,
-                    project: project, convs: convs
+                    project: project, items: sortedItems
                 )
             }
             .sorted { lhs, rhs in
-                let lhsLatest = lhs.convs.first?.lastUsed ?? .distantPast
-                let rhsLatest = rhs.convs.first?.lastUsed ?? .distantPast
+                let lhsLatest = lhs.items.first?.sortDate ?? .distantPast
+                let rhsLatest = rhs.items.first?.sortDate ?? .distantPast
                 return lhsLatest > rhsLatest
             }
     }
@@ -365,7 +470,26 @@ struct DrawerContent: View {
         let label: String
         let registered: Bool
         let project: ProjectDTO?
-        let convs: [Conversation]
+        let items: [DrawerListItem]
+    }
+
+    private enum DrawerListItem: Identifiable {
+        case conversation(Conversation)
+        case history(SessionMeta)
+
+        var id: String {
+            switch self {
+            case .conversation(let c): return "conv-\(c.id)"
+            case .history(let s): return "hist-\(s.sessionId)"
+            }
+        }
+
+        var sortDate: Date {
+            switch self {
+            case .conversation(let c): return c.lastUsed
+            case .history(let s): return s.modifiedAt
+            }
+        }
     }
 }
 

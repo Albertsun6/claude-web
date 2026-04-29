@@ -35,8 +35,25 @@ final class VoiceSession {
     /// User-facing toggle. Off by default — must be turned on explicitly.
     var active: Bool = false
 
-    /// Last error visible in UI.
+    /// Initialization-time errors (audio session activation, silent loop
+    /// startup, etc). Runtime errors from the recorder / tts subcomponents
+    /// are NOT mirrored here — those live in their own state. See
+    /// `displayError` for the unified surface UI binds to.
     var lastError: String?
+
+    /// Single error string the UI should display. Aggregates the three
+    /// places voice errors come from so that ContentView only needs ONE
+    /// banner / dismiss path. Priority:
+    ///   1. lastError       (init-time: audio session, keepalive)
+    ///   2. recorder.error  (runtime: mic permission, transcribe)
+    ///   3. tts.error       (runtime: edge-tts, playback)
+    /// `dismissError()` clears all three.
+    var displayError: String? {
+        if let m = lastError { return m }
+        if case .error(let m) = recorder?.state { return m }
+        if case .error(let m) = tts?.state { return m }
+        return nil
+    }
 
     /// Derived from the components — single source of truth for what Claude is
     /// doing right now. Recompute when any subcomponent observable changes.
