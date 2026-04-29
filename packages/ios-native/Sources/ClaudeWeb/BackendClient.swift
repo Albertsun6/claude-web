@@ -169,6 +169,11 @@ final class BackendClient {
         }
     }
 
+    /// Update a conversation's title.
+    func updateConversationTitle(_ convId: String, to title: String) {
+        store.updateConversationTitle(convId, title: title)
+    }
+
     /// Stop tailing. Idempotent — no-op if not currently following.
     func unsubscribeSession(convId: String) {
         guard let st = store.followingByConversation[convId] else { return }

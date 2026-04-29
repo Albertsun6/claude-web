@@ -220,12 +220,13 @@ final class ProjectRegistry {
         let lines = TranscriptParser.parse(resp.messages)
         // Use sessionId as the conversation id for historical loads — stable
         // across app restarts, and dedup just works.
-        let derivedTitle = TitleHelper.makeTitle(from: session.preview)
+        let existingTitles = Array(client.conversations.values.map { $0.title })
+        let derivedTitle = ConversationNamer.title(for: session.modifiedAt, existingTitles: existingTitles)
         let conv = Conversation(
             id: session.sessionId,
             cwd: project.cwd,
             sessionId: session.sessionId,
-            title: derivedTitle.isEmpty ? "（历史会话）" : derivedTitle,
+            title: derivedTitle,
             createdAt: session.modifiedAt,
             lastUsed: session.modifiedAt
         )

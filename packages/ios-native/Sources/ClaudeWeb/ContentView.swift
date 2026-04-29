@@ -16,7 +16,7 @@ struct ContentView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let drawerWidth = min(geo.size.width * 0.85, 320)
+            let drawerWidth = min(geo.size.width * 0.92, 380)
             ZStack(alignment: .leading) {
                 mainContent
                     // Edge-swipe from the left opens the drawer. Constrained
@@ -213,29 +213,17 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 6) {
                         ttsControls
-                        // Soft pill — minimal chrome, blends into the nav bar
-                        // but still readable as tap-to-switch.
-                        Button {
-                            withAnimation { showDrawer = true }
-                        } label: {
-                            HStack(spacing: 4) {
-                                statusIndicator
-                                followIndicator
-                                Text(currentTitle)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(Color.accentColor)
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Color(.tertiarySystemFill), in: .capsule)
+                        HStack(spacing: 4) {
+                            statusIndicator
+                            Text(currentTitle)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("当前对话 \(currentTitle)，点击打开抽屉")
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color(.tertiarySystemFill), in: .capsule)
                     }
                 }
             }
@@ -258,9 +246,15 @@ struct ContentView: View {
     private var currentTitle: String {
         if let id = client.currentConversationId,
            let conv = client.conversations[id] {
+            // Stale cache may have persisted the sessionId UUID as the title.
+            if isUUIDLike(conv.title) { return "（历史会话）" }
             return conv.title
         }
         return "新建"
+    }
+
+    private func isUUIDLike(_ s: String) -> Bool {
+        s.count == 36 && s.filter({ $0 == "-" }).count == 4
     }
 
     private var currentCwd: String {
@@ -286,20 +280,6 @@ struct ContentView: View {
         return base.isEmpty ? "Seaidea" : base
     }
 
-    /// Indicator shown when the current conversation is mirroring a
-    /// Claude Code session running in another client. Tap-to-switch via
-    /// the chip already opens the drawer; user takes over by typing a
-    /// prompt (BackendClient.sendPrompt unsubscribes automatically).
-    @ViewBuilder
-    private var followIndicator: some View {
-        if client.isFollowing(client.currentConversationId) {
-            Image(systemName: "dot.radiowaves.left.and.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.green)
-                .symbolEffect(.pulse, isActive: true)
-                .accessibilityLabel("正在跟随 Claude Code 会话")
-        }
-    }
 
     /// Tiny prefix icon inside the conversation chip. Mirrors the most
     /// load-bearing slice of `voice.state` so the user can tell at a glance

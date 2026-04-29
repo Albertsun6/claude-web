@@ -33,6 +33,7 @@ final class AppSettings {
     private static let fontSizeKey = "com.albertsun6.claudeweb-native.fontSize"
     private static let alwaysExpandThinkingKey = "com.albertsun6.claudeweb-native.alwaysExpandThinking"
     private static let verboseToolsKey = "com.albertsun6.claudeweb-native.verboseTools"
+    private static let autoEnterVoiceKey = "com.albertsun6.claudeweb-native.autoEnterVoice"
 
     var backendURL: URL {
         didSet {
@@ -118,6 +119,11 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(verboseTools, forKey: Self.verboseToolsKey) }
     }
 
+    /// Whether to auto-enter voice mode on app launch.
+    var autoEnterVoice: Bool {
+        didSet { UserDefaults.standard.set(autoEnterVoice, forKey: Self.autoEnterVoiceKey) }
+    }
+
     init() {
         // Default: simulator → http://localhost:3030; device → Tailscale URL.
         // We'll prompt the user to pick at first launch in the settings page.
@@ -135,9 +141,10 @@ final class AppSettings {
         self.model = UserDefaults.standard.string(forKey: Self.modelKey) ?? "claude-haiku-4-5"
         self.silentKeepalive = UserDefaults.standard.object(forKey: Self.silentKeepaliveKey) as? Bool ?? true
         self.currentConversationId = UserDefaults.standard.string(forKey: Self.currentConversationIdKey)
-        self.fontSize = UserDefaults.standard.string(forKey: Self.fontSizeKey) ?? "large"
+        self.fontSize = UserDefaults.standard.string(forKey: Self.fontSizeKey) ?? "xxLarge"
         self.alwaysExpandThinking = UserDefaults.standard.object(forKey: Self.alwaysExpandThinkingKey) as? Bool ?? false
         self.verboseTools = UserDefaults.standard.object(forKey: Self.verboseToolsKey) as? Bool ?? false
+        self.autoEnterVoice = UserDefaults.standard.object(forKey: Self.autoEnterVoiceKey) as? Bool ?? true
     }
 
     private static func detectDefaultBackend() -> URL {
@@ -156,7 +163,7 @@ final class AppSettings {
             backendKey, cwdKey, permissionModeKey, ttsEnabledKey,
             speakStyleKey, slowTtsKey, authTokenKey, modelKey,
             silentKeepaliveKey, currentConversationIdKey, fontSizeKey,
-            alwaysExpandThinkingKey, verboseToolsKey,
+            alwaysExpandThinkingKey, verboseToolsKey, autoEnterVoiceKey,
         ]
         for k in keys {
             UserDefaults.standard.removeObject(forKey: k)

@@ -57,6 +57,7 @@ struct SettingsView: View {
                             }
                         }
                     }
+                    Toggle("启动时自动进入语音模式", isOn: $s.autoEnterVoice)
                 } header: {
                     Text("语音对话（Hands-free）")
                 } footer: {
