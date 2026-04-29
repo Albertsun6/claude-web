@@ -43,8 +43,6 @@ targets:
           UIColorName: ""
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        UIApplicationSceneManifest:
-          UIApplicationSupportsMultipleScenes: false
         # Future-proof: declare these now so M3/M4 don't need re-generate.
         UIBackgroundModes:
           - audio

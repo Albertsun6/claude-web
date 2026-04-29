@@ -421,7 +421,7 @@ struct DrawerContent: View {
                     loadingHistoryProjects.insert(project.id)
                     Task {
                         defer { loadingHistoryProjects.remove(project.id) }
-                        try? await registry.loadHistorySessions(forProject: project)
+                        _ = try? await registry.loadHistorySessions(forProject: project)
                     }
                 }
             }

@@ -22,6 +22,12 @@ struct FsHomeResponse: Decodable {
     let cwd: String
 }
 
+struct FsFileResponse: Decodable {
+    let content: String
+    let size: Int
+    let encoding: String
+}
+
 @MainActor
 final class FsAPI {
     private let backend: () -> URL
@@ -77,6 +83,35 @@ final class FsAPI {
         let (data, response) = try await URLSession.shared.data(for: authed(URLRequest(url: url)))
         try ensureOK(response, data)
         return try JSONDecoder().decode(FsHomeResponse.self, from: data)
+    }
+
+    /// Read text file content. Limited to 1MB per backend.
+    func readFile(root: String, relativePath: String) async throws -> String {
+        var components = URLComponents(url: backend(), resolvingAgainstBaseURL: false)!
+        components.path = "/api/fs/file"
+        components.queryItems = [
+            URLQueryItem(name: "root", value: root),
+            URLQueryItem(name: "path", value: relativePath),
+        ]
+        guard let url = components.url else { throw FsError.badURL }
+        let (data, response) = try await URLSession.shared.data(for: authed(URLRequest(url: url)))
+        try ensureOK(response, data)
+        return try JSONDecoder().decode(FsFileResponse.self, from: data).content
+    }
+
+    /// Get binary file URL (for images, PDFs, videos, etc). Limited to 20MB per backend.
+    /// Token is appended as `?token=` so the URL is usable directly in AsyncImage etc.
+    func getBlobURL(root: String, relativePath: String) -> URL {
+        var components = URLComponents(url: backend(), resolvingAgainstBaseURL: false)!
+        components.path = "/api/fs/blob"
+        var items = [
+            URLQueryItem(name: "root", value: root),
+            URLQueryItem(name: "path", value: relativePath),
+        ]
+        let t = token()
+        if !t.isEmpty { items.append(URLQueryItem(name: "token", value: t)) }
+        components.queryItems = items
+        return components.url ?? backend().appendingPathComponent("error")
     }
 
     // MARK: - helpers

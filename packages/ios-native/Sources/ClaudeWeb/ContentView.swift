@@ -13,72 +13,102 @@ struct ContentView: View {
     @State private var draft: String = ""
     @State private var showSettings = false
     @State private var showDrawer = false
+    @State private var showFilePanel = false
+    @State private var selectedFile: (cwd: String, relativePath: String, entry: FsEntry)? = nil
 
     var body: some View {
         GeometryReader { geo in
             let drawerWidth = min(geo.size.width * 0.92, 380)
-            ZStack(alignment: .leading) {
+            ZStack {
                 mainContent
-                    // Edge-swipe from the left opens the drawer. Constrained
-                    // to the leftmost 30pt + horizontal movement dominant
-                    // over vertical so list scrolls don't trigger it.
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 20)
                             .onEnded { val in
                                 let startX = val.startLocation.x
+                                let endX = val.startLocation.x + val.translation.width
                                 let dx = val.translation.width
                                 let dy = val.translation.height
-                                guard !showDrawer else { return }
+                                guard !showDrawer, !showFilePanel else { return }
+                                // Left-edge swipe → left drawer
                                 if startX < 30 && dx > 60 && abs(dx) > abs(dy) * 2 {
                                     withAnimation { showDrawer = true }
+                                }
+                                // Right-edge swipe → file drawer
+                                if endX > geo.size.width - 30 && dx < -60 && abs(dx) > abs(dy) * 2 {
+                                    withAnimation { showFilePanel = true }
                                 }
                             }
                     )
                     .overlay {
-                        if showDrawer {
-                            // Tap or swipe on the dim overlay closes the drawer.
+                        if showDrawer || showFilePanel {
                             Color.black.opacity(0.4)
                                 .ignoresSafeArea()
                                 .onTapGesture {
-                                    withAnimation { showDrawer = false }
+                                    withAnimation {
+                                        showDrawer = false
+                                        showFilePanel = false
+                                    }
                                 }
-                                .gesture(
-                                    DragGesture(minimumDistance: 20)
-                                        .onEnded { val in
-                                            if val.translation.width < -40 {
-                                                withAnimation { showDrawer = false }
-                                            }
-                                        }
-                                )
                                 .transition(.opacity)
                         }
                     }
+
+                // Left drawer
                 if showDrawer {
-                    DrawerContent(
-                        isOpen: $showDrawer,
-                        showSettings: $showSettings
-                    )
-                    .frame(width: drawerWidth)
-                    .frame(maxHeight: .infinity)
-                    .background(Color(.systemBackground))
-                    .ignoresSafeArea(edges: .bottom)
-                    .transition(.move(edge: .leading))
-                    // simultaneousGesture (not .gesture) so the drawer's
-                    // inner List/ScrollView still scrolls vertically while
-                    // a horizontal-dominant swipe closes the drawer.
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 30)
-                            .onEnded { val in
-                                let dx = val.translation.width
-                                let dy = val.translation.height
-                                if dx < -50 && abs(dx) > abs(dy) * 2 {
-                                    withAnimation { showDrawer = false }
+                    HStack(spacing: 0) {
+                        DrawerContent(
+                            isOpen: $showDrawer,
+                            showSettings: $showSettings
+                        )
+                        .frame(width: drawerWidth)
+                        .frame(maxHeight: .infinity)
+                        .background(Color(.systemBackground))
+                        .ignoresSafeArea(edges: .bottom)
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 30)
+                                .onEnded { val in
+                                    let dx = val.translation.width
+                                    let dy = val.translation.height
+                                    if dx < -50 && abs(dx) > abs(dy) * 2 {
+                                        withAnimation { showDrawer = false }
+                                    }
                                 }
+                        )
+                        Spacer()
+                    }
+                    .transition(.move(edge: .leading))
+                }
+
+                // Right file drawer
+                if showFilePanel {
+                    HStack(spacing: 0) {
+                        Spacer()
+                        FileBrowserPanel(
+                            cwd: currentCwd,
+                            onFileSelected: { cwd, relativePath, entry in
+                                selectedFile = (cwd: cwd, relativePath: relativePath, entry: entry)
                             }
-                    )
+                        )
+                        .frame(width: min(geo.size.width * 0.80, 320))
+                        .frame(maxHeight: .infinity)
+                        .background(Color(.systemBackground))
+                        .ignoresSafeArea(edges: .bottom)
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 30)
+                                .onEnded { val in
+                                    let dx = val.translation.width
+                                    let dy = val.translation.height
+                                    if dx > 50 && abs(dx) > abs(dy) * 2 {
+                                        withAnimation { showFilePanel = false }
+                                    }
+                                }
+                        )
+                    }
+                    .transition(.move(edge: .trailing))
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: showDrawer)
+            .animation(.easeInOut(duration: 0.25), value: showFilePanel)
         }
         .dynamicTypeSize(settings.dynamicTypeSize)
         .sheet(isPresented: $showSettings) {
@@ -168,64 +198,78 @@ struct ContentView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 8) {
-                        Button {
-                            withAnimation { showDrawer = true }
-                        } label: {
-                            Image(systemName: "line.3.horizontal")
-                                .accessibilityLabel("打开抽屉")
+                    ToolbarItem(placement: .topBarLeading) {
+                        HStack(spacing: 8) {
+                            Button {
+                                withAnimation { showDrawer = true }
+                            } label: {
+                                Image(systemName: "line.3.horizontal")
+                                    .accessibilityLabel("打开抽屉")
+                            }
+                            // Show a colored dot ONLY when something's wrong —
+                            // healthy connection is silent (no clutter). Errors
+                            // get a red dot here AND the verbose banner below.
+                            if !isConnected {
+                                Circle()
+                                    .fill(chipColor)
+                                    .frame(width: 8, height: 8)
+                                    .accessibilityLabel("连接状态：\(chipLabel)")
+                            }
                         }
-                        // Show a colored dot ONLY when something's wrong —
-                        // healthy connection is silent (no clutter). Errors
-                        // get a red dot here AND the verbose banner below.
-                        if !isConnected {
-                            Circle()
-                                .fill(chipColor)
-                                .frame(width: 8, height: 8)
-                                .accessibilityLabel("连接状态：\(chipLabel)")
+                    }
+                    ToolbarItem(placement: .principal) {
+                        VStack(spacing: 1) {
+                            HStack(spacing: 4) {
+                                Text(currentProjectName)
+                                    .font(.headline)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                if settings.permissionMode == "bypassPermissions" {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.red)
+                                        .font(.system(size: 12))
+                                        .accessibilityLabel("Bypass 模式：自动允许所有工具")
+                                }
+                                if client.activeRunCount > 0 {
+                                    Text("\(client.activeRunCount)")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 1)
+                                        .background(.orange, in: .capsule)
+                                        .accessibilityLabel("\(client.activeRunCount) 个对话进行中")
+                                }
+                            }
+                            HStack(spacing: 3) {
+                                statusIndicator
+                                Text(currentTitle)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        HStack(spacing: 8) {
+                            ttsControls
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.25)) { showFilePanel.toggle() }
+                            } label: {
+                                Image(systemName: "doc.text.magnifyingglass")
+                                    .foregroundStyle(showFilePanel ? Color.accentColor : .secondary)
+                            }
+                            .accessibilityLabel(showFilePanel ? "关闭文件面板" : "打开文件面板")
                         }
                     }
                 }
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Text(currentProjectName)
-                            .font(.headline)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        if settings.permissionMode == "bypassPermissions" {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.red)
-                                .font(.system(size: 12))
-                                .accessibilityLabel("Bypass 模式：自动允许所有工具")
-                        }
-                        if client.activeRunCount > 0 {
-                            Text("\(client.activeRunCount)")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(.orange, in: .capsule)
-                                .accessibilityLabel("\(client.activeRunCount) 个对话进行中")
-                        }
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 6) {
-                        ttsControls
-                        HStack(spacing: 4) {
-                            statusIndicator
-                            Text(currentTitle)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color(.tertiarySystemFill), in: .capsule)
-                    }
-                }
+        }
+        .sheet(isPresented: Binding(
+            get: { selectedFile != nil },
+            set: { if !$0 { selectedFile = nil } }
+        )) {
+            if let (cwd, relativePath, entry) = selectedFile {
+                FilePreviewSheet(cwd: cwd, relativePath: relativePath, entry: entry)
             }
         }
     }

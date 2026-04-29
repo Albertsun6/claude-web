@@ -29,11 +29,6 @@
 	<string>Seaidea connects to your Mac running the backend on the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Seaidea needs your microphone for voice input.</string>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

@@ -12,6 +12,7 @@
 		0B8AF6C30528B0786D38498F /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = D85A973013D2FE59ECC182F4 /* MarkdownUI */; };
 		14FF58C0ACCD40C590C4E172 /* VoiceSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03EB85EB534A11AFEBB9A548 /* VoiceSession.swift */; };
 		29E377D9A943083DCBE89AF4 /* ConversationNamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55DF4DA3445654EBE1E3F69B /* ConversationNamer.swift */; };
+		2EC250307F7B7C08E9DAFA61 /* FilePreviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D069A882FF3EC3C4B44097 /* FilePreviewSheet.swift */; };
 		2EFE065198E9ECF3647CA798 /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */; };
 		302B643809131259B4682595 /* HistorySessionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1513F54E80C419639B1D1705 /* HistorySessionRow.swift */; };
 		332F0397A49A158E100D98B5 /* ProjectRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 592C33B52949B8FC89528D76 /* ProjectRegistry.swift */; };
@@ -22,6 +23,7 @@
 		69F0714A317BB99738DC18A9 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C189285FD2BC25E599008F0 /* ChatListView.swift */; };
 		6AD512C6C3EBFF3A522035BF /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7869FC7E7224F973A25D5A07 /* ConversationModels.swift */; };
 		6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */; };
+		7777D446E5D1F743A234FCCB /* FileBrowserPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5A6AE07ADB47297221AE57 /* FileBrowserPanel.swift */; };
 		9C5CCC80588E51B11C14AA5D /* TranscriptParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13FDDA6FDAA0AB0FB743114 /* TranscriptParser.swift */; };
 		9DAEEFD7C4A2F91D7444BCD0 /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 283735CE8528E94F44599D41 /* TTSPlayer.swift */; };
 		A5117A31C889867986B4E998 /* DirectoryPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4588360C6A81FAB43597D8E /* DirectoryPicker.swift */; };
@@ -74,6 +76,7 @@
 		763A49693E0CE52A2C691B3C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7869FC7E7224F973A25D5A07 /* ConversationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModels.swift; sourceTree = "<group>"; };
 		7CAC5820B96A0B62BECEA82D /* ClaudeWeb.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClaudeWeb.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7E5A6AE07ADB47297221AE57 /* FileBrowserPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserPanel.swift; sourceTree = "<group>"; };
 		8E1FACCED35C3A770740F004 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
 		950F8E2DCA452C46977B3762 /* ClaudeWebTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ClaudeWebTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		989ACA299187F4EE9220555C /* FsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsAPI.swift; sourceTree = "<group>"; };
@@ -88,6 +91,7 @@
 		CF24044B9AC2AAF0F0243B11 /* DrawerContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawerContent.swift; sourceTree = "<group>"; };
 		D2CF08EE066963DF8D4E840B /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		E02CBF7C84A20380B2383AD1 /* SessionsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsAPI.swift; sourceTree = "<group>"; };
+		E1D069A882FF3EC3C4B44097 /* FilePreviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewSheet.swift; sourceTree = "<group>"; };
 		E431C062B9438869B8D6E399 /* ClaudeWebApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeWebApp.swift; sourceTree = "<group>"; };
 		E67AEC4B21826DE8E273887E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E90163FEB077BB408157C916 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocol.swift; sourceTree = "<group>"; };
@@ -179,6 +183,8 @@
 				D1E3B38375A4390DE63C796C /* Chat */,
 				2798789DA8FDEFC459E5E862 /* Drawer */,
 				97E2EB9F4948B2230A07743F /* Settings */,
+				7E5A6AE07ADB47297221AE57 /* FileBrowserPanel.swift */,
+				E1D069A882FF3EC3C4B44097 /* FilePreviewSheet.swift */,
 				8E1FACCED35C3A770740F004 /* NewConversationSheet.swift */,
 				AF2C287FAD57E3EE4B5AC077 /* PermissionSheet.swift */,
 			);
@@ -338,6 +344,8 @@
 				BDF1B6F1B1BAD0C95977B94A /* ConversationStore.swift in Sources */,
 				A5117A31C889867986B4E998 /* DirectoryPicker.swift in Sources */,
 				F4E960AF9B256452B1E59C84 /* DrawerContent.swift in Sources */,
+				7777D446E5D1F743A234FCCB /* FileBrowserPanel.swift in Sources */,
+				2EC250307F7B7C08E9DAFA61 /* FilePreviewSheet.swift in Sources */,
 				F0336354BB84D5D2A5362A95 /* FsAPI.swift in Sources */,
 				302B643809131259B4682595 /* HistorySessionRow.swift in Sources */,
 				458552BC134B372A7B368750 /* InputBar.swift in Sources */,
