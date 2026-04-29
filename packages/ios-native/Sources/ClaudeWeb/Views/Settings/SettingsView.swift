@@ -69,6 +69,14 @@ struct SettingsView: View {
                 } footer: {
                     Text("仅用于切走 app / 锁屏后**保持 WebSocket 不掉线**，不接管麦克风、不影响 PTT。原理是播放 0 音量循环音频骗过 iOS 后台挂起。**显著提高**保持率但不保证 100%。Apple 视为后台音频滥用，**不要在 App Store 版本启用**；sideload 自用没事，电池影响很小。")
                 }
+                Section {
+                    Toggle("始终显示思考过程", isOn: $s.alwaysExpandThinking)
+                    Toggle("详细工具模式", isOn: $s.verboseTools)
+                } header: {
+                    Text("显示")
+                } footer: {
+                    Text("思考块与工具卡片是否默认展开。关闭时卡片显示标题行，点击可展开。")
+                }
                 Section("Backend") {
                     TextField("https://mymac.tailcf3ccf.ts.net", text: $draftURL)
                         .textInputAutocapitalization(.never)

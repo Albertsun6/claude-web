@@ -30,13 +30,16 @@ private struct CardShell<Content: View>: View {
     let icon: String
     let title: String
     let subtitle: String?
-    @State private var expanded = false
+    let initiallyExpanded: Bool
+    @State private var expanded: Bool
     let content: () -> Content
 
-    init(icon: String, title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+    init(icon: String, title: String, subtitle: String? = nil, initiallyExpanded: Bool = false, @ViewBuilder content: @escaping () -> Content) {
         self.icon = icon
         self.title = title
         self.subtitle = subtitle
+        self.initiallyExpanded = initiallyExpanded
+        self._expanded = State(initialValue: initiallyExpanded)
         self.content = content
     }
 
@@ -102,6 +105,7 @@ private struct PrettyJSON: View {
 
 private struct BashCard: View {
     let line: ChatLine
+    @Environment(AppSettings.self) private var settings
     private struct Input: Decodable {
         let command: String?
         let description: String?
@@ -112,7 +116,8 @@ private struct BashCard: View {
         CardShell(
             icon: "terminal.fill",
             title: "Bash",
-            subtitle: cmd.isEmpty ? nil : cmd
+            subtitle: cmd.isEmpty ? nil : cmd,
+            initiallyExpanded: settings.verboseTools
         ) {
             VStack(alignment: .leading, spacing: 6) {
                 if let desc = input?.description, !desc.isEmpty {
@@ -133,6 +138,7 @@ private struct BashCard: View {
 
 private struct EditCard: View {
     let line: ChatLine
+    @Environment(AppSettings.self) private var settings
     private struct Input: Decodable {
         let file_path: String?
         let old_string: String?
@@ -145,7 +151,8 @@ private struct EditCard: View {
         CardShell(
             icon: "square.and.pencil",
             title: "Edit",
-            subtitle: (path as NSString).lastPathComponent
+            subtitle: (path as NSString).lastPathComponent,
+            initiallyExpanded: settings.verboseTools
         ) {
             VStack(alignment: .leading, spacing: 6) {
                 if !path.isEmpty {
@@ -183,6 +190,7 @@ private struct EditCard: View {
 
 private struct WriteCard: View {
     let line: ChatLine
+    @Environment(AppSettings.self) private var settings
     private struct Input: Decodable {
         let file_path: String?
         let content: String?
@@ -194,7 +202,8 @@ private struct WriteCard: View {
         CardShell(
             icon: "doc.fill.badge.plus",
             title: "Write",
-            subtitle: (path as NSString).lastPathComponent
+            subtitle: (path as NSString).lastPathComponent,
+            initiallyExpanded: settings.verboseTools
         ) {
             VStack(alignment: .leading, spacing: 6) {
                 if !path.isEmpty {
@@ -218,6 +227,7 @@ private struct WriteCard: View {
 
 private struct ReadCard: View {
     let line: ChatLine
+    @Environment(AppSettings.self) private var settings
     private struct Input: Decodable {
         let file_path: String?
         let offset: Int?
@@ -234,7 +244,8 @@ private struct ReadCard: View {
         return CardShell(
             icon: "doc.text.magnifyingglass",
             title: "Read",
-            subtitle: line2
+            subtitle: line2,
+            initiallyExpanded: settings.verboseTools
         ) {
             VStack(alignment: .leading, spacing: 4) {
                 if !path.isEmpty {
@@ -255,6 +266,7 @@ private struct ReadCard: View {
 
 private struct TodoWriteCard: View {
     let line: ChatLine
+    @Environment(AppSettings.self) private var settings
     private struct Input: Decodable {
         let todos: [Todo]?
     }
@@ -272,7 +284,8 @@ private struct TodoWriteCard: View {
         return CardShell(
             icon: "checklist",
             title: "TodoWrite",
-            subtitle: summary
+            subtitle: summary,
+            initiallyExpanded: settings.verboseTools
         ) {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(todos) { todo in
@@ -320,6 +333,7 @@ private struct TodoWriteCard: View {
 
 private struct GrepCard: View {
     let line: ChatLine
+    @Environment(AppSettings.self) private var settings
     private struct Input: Decodable {
         let pattern: String?
         let path: String?
@@ -331,7 +345,8 @@ private struct GrepCard: View {
         return CardShell(
             icon: "magnifyingglass",
             title: "Grep",
-            subtitle: input?.pattern
+            subtitle: input?.pattern,
+            initiallyExpanded: settings.verboseTools
         ) {
             VStack(alignment: .leading, spacing: 4) {
                 if let pat = input?.pattern {
@@ -355,6 +370,7 @@ private struct GrepCard: View {
 
 private struct GlobCard: View {
     let line: ChatLine
+    @Environment(AppSettings.self) private var settings
     private struct Input: Decodable {
         let pattern: String?
         let path: String?
@@ -364,7 +380,8 @@ private struct GlobCard: View {
         return CardShell(
             icon: "doc.on.doc",
             title: "Glob",
-            subtitle: input?.pattern
+            subtitle: input?.pattern,
+            initiallyExpanded: settings.verboseTools
         ) {
             VStack(alignment: .leading, spacing: 4) {
                 if let pat = input?.pattern {
@@ -382,11 +399,13 @@ private struct GlobCard: View {
 
 private struct GenericToolCard: View {
     let line: ChatLine
+    @Environment(AppSettings.self) private var settings
     var body: some View {
         CardShell(
             icon: "wrench.and.screwdriver",
             title: line.toolName ?? "Tool",
-            subtitle: nil
+            subtitle: nil,
+            initiallyExpanded: settings.verboseTools
         ) {
             PrettyJSON(raw: line.toolInputJSON)
         }

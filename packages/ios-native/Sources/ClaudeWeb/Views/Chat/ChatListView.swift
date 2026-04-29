@@ -44,6 +44,7 @@ struct ChatListView: View {
 
 private struct ChatLineView: View {
     let line: ChatLine
+    @Environment(AppSettings.self) private var settings
 
     var body: some View {
         switch line.role {
@@ -62,28 +63,11 @@ private struct ChatLineView: View {
                 .markdownTheme(.gitHub)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        case .thinking:
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Image(systemName: "brain")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("思考中...")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fontWeight(.medium)
+                .markdownCodeBlock { configuration in
+                    CodeBlockWithCopy(configuration: configuration)
                 }
-                .padding(.bottom, 2)
-
-                Text(line.text)
-                    .font(.system(size: 13, design: .default))
-                    .foregroundStyle(.secondary)
-                    .italic()
-                    .textSelection(.enabled)
-            }
-            .padding(10)
-            .background(.secondary.opacity(0.08), in: .rect(cornerRadius: 8))
-            .frame(maxWidth: .infinity, alignment: .leading)
+        case .thinking:
+            ThinkingBlockView(text: line.text, alwaysExpanded: settings.alwaysExpandThinking)
         case .system:
             Text(line.text)
                 .font(.caption)
@@ -101,6 +85,77 @@ private struct ChatLineView: View {
         case .toolResult:
             ToolResultRow(line: line)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct ThinkingBlockView: View {
+    let text: String
+    let alwaysExpanded: Bool
+    @State private var expanded: Bool?
+
+    var isExpanded: Bool {
+        expanded ?? alwaysExpanded
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                expanded = !(isExpanded)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "brain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("思考中...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fontWeight(.medium)
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 2)
+
+            if isExpanded {
+                Text(text)
+                    .font(.system(size: 13, design: .default))
+                    .foregroundStyle(.secondary)
+                    .italic()
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(10)
+        .background(.secondary.opacity(0.08), in: .rect(cornerRadius: 8))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct CodeBlockWithCopy: View {
+    let configuration: CodeBlockConfiguration
+    @State private var copied = false
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            configuration.label
+
+            Button {
+                UIPasteboard.general.string = configuration.content
+                copied = true
+                Task {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    copied = false
+                }
+            } label: {
+                Image(systemName: copied ? "checkmark.circle.fill" : "doc.on.doc.fill")
+                    .font(.caption2)
+                    .foregroundStyle(copied ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(8)
         }
     }
 }

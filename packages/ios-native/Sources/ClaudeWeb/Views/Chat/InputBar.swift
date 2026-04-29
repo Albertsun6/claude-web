@@ -29,6 +29,10 @@ struct InputBar: View {
     @State private var pickerSelection: [PhotosPickerItem] = []
     @State private var showFilePicker = false
     @State private var atQuery: String? = nil       // non-nil when @ is active
+    @State private var promptHistory: [String] = []
+    @State private var historyIndex: Int = -1       // -1 = no history browsing
+    @State private var showSlashCommands = false
+    @State private var slashQuery: String? = nil
 
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
@@ -100,14 +104,32 @@ struct InputBar: View {
                     .onSubmit(doSend)
                     .focused($inputFocused)
                     .onChange(of: draft) { _, newValue in
+                        slashQuery = extractSlashQuery(newValue)
+                        if slashQuery != nil { showSlashCommands = true }
+
                         atQuery = extractAtQuery(newValue)
-                        if atQuery != nil { showFilePicker = true }
+                        if atQuery != nil && slashQuery == nil { showFilePicker = true }
                     }
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
+                            Button("↑") { traverseHistory(direction: .up) }
+                                .font(.caption2)
+                                .disabled(historyIndex == 0)
+                            Button("↓") { traverseHistory(direction: .down) }
+                                .font(.caption2)
+                                .disabled(historyIndex < 0)
                             Spacer()
                             Button("完成") { inputFocused = false }
                         }
+                    }
+                    .sheet(isPresented: $showSlashCommands) {
+                        SlashCommandPicker { selected in
+                            draft = selected + " "
+                            showSlashCommands = false
+                            slashQuery = nil
+                        }
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
                     }
                     .sheet(isPresented: $showFilePicker) {
                         AtFilePicker(cwd: cwd, query: atQuery ?? "") { picked in
@@ -145,11 +167,17 @@ struct InputBar: View {
             .padding(.vertical, 8)
         }
         .background(.bar)
+        .onAppear { loadPromptHistory() }
     }
 
     // MARK: - Send
 
     private func doSend() {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            savePromptToHistory(trimmed)
+            historyIndex = -1
+        }
         let attachments = pendingImages.map {
             ImageAttachment(mediaType: $0.mediaType, dataBase64: $0.dataBase64)
         }
@@ -307,5 +335,112 @@ struct InputBar: View {
         }
         draft = String(draft[..<atIdx]) + absPath + " "
         atQuery = nil
+    }
+
+    // MARK: - Prompt history
+
+    private enum HistoryDirection { case up, down }
+
+    private func loadPromptHistory() {
+        if let data = UserDefaults.standard.data(forKey: "promptHistory"),
+           let decoded = try? JSONDecoder().decode([String].self, from: data) {
+            promptHistory = decoded
+        }
+    }
+
+    private func savePromptToHistory(_ prompt: String) {
+        promptHistory.removeAll { $0 == prompt }
+        promptHistory.insert(prompt, at: 0)
+        if promptHistory.count > 50 {
+            promptHistory = Array(promptHistory.prefix(50))
+        }
+        saveHistory()
+    }
+
+    private func traverseHistory(direction: HistoryDirection) {
+        if direction == .up {
+            let nextIdx = historyIndex + 1
+            if nextIdx < promptHistory.count {
+                historyIndex = nextIdx
+                draft = promptHistory[nextIdx]
+            }
+        } else {
+            if historyIndex > 0 {
+                historyIndex -= 1
+                draft = promptHistory[historyIndex]
+            } else if historyIndex == 0 {
+                historyIndex = -1
+                draft = ""
+            }
+        }
+    }
+
+    private func saveHistory() {
+        if let encoded = try? JSONEncoder().encode(promptHistory) {
+            UserDefaults.standard.set(encoded, forKey: "promptHistory")
+        }
+    }
+
+    // MARK: - Slash command detection
+
+    private func extractSlashQuery(_ text: String) -> String? {
+        guard text.hasPrefix("/") else { return nil }
+        let afterSlash = String(text.dropFirst())
+        if afterSlash.contains(" ") || afterSlash.contains("\n") { return nil }
+        return afterSlash
+    }
+}
+
+// MARK: - Slash Command Picker
+
+private struct SlashCommandPicker: View {
+    let onSelect: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private let commands = [
+        ("clear", "清除所有消息"),
+        ("compact", "压缩对话历史"),
+        ("usage", "显示用量统计"),
+        ("think", "启用思考模式"),
+        ("no-think", "关闭思考模式"),
+    ]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(commands, id: \.0) { cmd, desc in
+                    Button {
+                        onSelect("/" + cmd)
+                        dismiss()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Image(systemName: icon(for: cmd))
+                                    .foregroundStyle(Color.accentColor)
+                                Text("/" + cmd)
+                                    .font(.system(.body, design: .monospaced))
+                                    .foregroundStyle(.primary)
+                            }
+                            Text(desc)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .navigationTitle("命令")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func icon(for cmd: String) -> String {
+        switch cmd {
+        case "clear": return "xmark.circle.fill"
+        case "compact": return "arrow.down.doc.fill"
+        case "usage": return "chart.bar.fill"
+        case "think", "no-think": return "brain.fill"
+        default: return "command"
+        }
     }
 }
