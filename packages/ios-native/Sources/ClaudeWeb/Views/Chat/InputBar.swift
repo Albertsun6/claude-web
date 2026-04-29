@@ -33,6 +33,7 @@ struct InputBar: View {
     @State private var historyIndex: Int = -1       // -1 = no history browsing
     @State private var showSlashCommands = false
     @State private var slashQuery: String? = nil
+    @State private var showContextSheet = false
 
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
@@ -97,6 +98,17 @@ struct InputBar: View {
                     Task { await loadPickedImages(items) }
                 }
 
+                // H4 context attachment — paperclip
+                Button {
+                    showContextSheet = true
+                } label: {
+                    Image(systemName: "paperclip")
+                        .frame(width: 32, height: 44)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("附加上下文")
+
                 TextField("输入指令，或按住麦克风说话…", text: $draft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...4)
@@ -134,6 +146,13 @@ struct InputBar: View {
                     .sheet(isPresented: $showFilePicker) {
                         AtFilePicker(cwd: cwd, query: atQuery ?? "") { picked in
                             insertFilePath(picked)
+                        }
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                    }
+                    .sheet(isPresented: $showContextSheet) {
+                        ContextAttachSheet(cwd: cwd) { injected in
+                            appendContext(injected)
                         }
                         .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
@@ -325,6 +344,17 @@ struct InputBar: View {
         // A space or newline after @ means the user finished; dismiss picker.
         if afterAt.contains(" ") || afterAt.contains("\n") { return nil }
         return afterAt   // empty string = just typed @, show full list
+    }
+
+    /// Append a context block (git diff, clipboard) to the draft. If the
+    /// draft already has content, separates with a blank line so blocks
+    /// remain visually distinct.
+    private func appendContext(_ block: String) {
+        if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft = block
+        } else {
+            draft += "\n\n" + block
+        }
     }
 
     /// Replace the `@query` suffix in draft with the picked absolute path.

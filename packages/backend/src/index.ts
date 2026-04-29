@@ -11,6 +11,7 @@ import { gzipSync } from "node:zlib";
 import { runSession } from "./cli-runner.js";
 import { subscribeFs } from "./fs-watcher.js";
 import { subscribeSession } from "./session-watcher.js";
+import { contextRouter } from "./routes/context.js";
 import { fsRouter } from "./routes/fs.js";
 import { healthRouter } from "./routes/health.js";
 import { gitRouter } from "./routes/git.js";
@@ -67,6 +68,7 @@ app.get("/api/auth/info", (c) =>
 // Everything else under /api requires the token (when CLAUDE_WEB_TOKEN is set).
 app.use("/api/*", authMiddleware);
 
+app.route("/api/context", contextRouter);
 app.route("/api/fs", fsRouter);
 app.route("/api/health", healthRouter);
 app.route("/api/git", gitRouter);
