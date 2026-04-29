@@ -111,7 +111,7 @@ enum ServerMessage {
         }
     }
 
-    static func decode(_ data: Data) throws -> ServerMessage {
+    static func decode(_ data: Data) throws -> [ServerMessage] {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = json["type"] as? String else {
             throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "missing type"))
@@ -120,36 +120,38 @@ enum ServerMessage {
         case "sdk_message":
             let runId = (json["runId"] as? String) ?? ""
             let messageDict = json["message"] as? [String: Any] ?? [:]
-            return .sdkMessage(runId: runId, raw: SDKMessage.parse(messageDict))
+            // parse returns array of messages (may include thinking + assistantContent)
+            let messages = SDKMessage.parse(messageDict)
+            return messages.map { .sdkMessage(runId: runId, raw: $0) }
         case "session_ended":
             let runId = (json["runId"] as? String) ?? ""
             let reason = (json["reason"] as? String) ?? "completed"
-            return .sessionEnded(runId: runId, reason: reason)
+            return [.sessionEnded(runId: runId, reason: reason)]
         case "error":
-            return .error(runId: json["runId"] as? String, message: (json["error"] as? String) ?? "unknown")
+            return [.error(runId: json["runId"] as? String, message: (json["error"] as? String) ?? "unknown")]
         case "clear_run_messages":
-            return .clearRunMessages(runId: (json["runId"] as? String) ?? "")
+            return [.clearRunMessages(runId: (json["runId"] as? String) ?? "")]
         case "permission_request":
-            return .permissionRequest(
+            return [.permissionRequest(
                 runId: (json["runId"] as? String) ?? "",
                 requestId: (json["requestId"] as? String) ?? "",
                 toolName: (json["toolName"] as? String) ?? "?",
                 input: (json["input"] as? [String: Any]) ?? [:]
-            )
+            )]
         case "session_event":
             // Re-serialize the entry dict back to JSON Data so the consumer
             // can hand it straight to JSONDecoder<TranscriptEntry>.
             let entry = json["entry"] ?? [:]
             let entryJSON = (try? JSONSerialization.data(withJSONObject: entry, options: []))
                 ?? Data("{}".utf8)
-            return .sessionEvent(
+            return [.sessionEvent(
                 cwd: (json["cwd"] as? String) ?? "",
                 sessionId: (json["sessionId"] as? String) ?? "",
                 byteOffset: (json["byteOffset"] as? Int) ?? 0,
                 entryJSON: entryJSON
-            )
+            )]
         default:
-            return .unknown(type: type)
+            return [.unknown(type: type)]
         }
     }
 }
@@ -159,10 +161,11 @@ enum SDKMessage {
     case systemInit(sessionId: String?, model: String?)
     /// One assistant message with any combination of text + tool_use blocks.
     /// `text` is the joined text content (nil if none); `toolUses` is each
-    /// individual tool_use block in the order they appeared. Thinking blocks
-    /// are filtered at parse time. BackendClient emits one ChatLine per
-    /// piece (assistant text, then a tool_use row per tool call).
+    /// individual tool_use block in the order they appeared.
+    /// BackendClient emits one ChatLine per piece (assistant text, tool_use row per tool call).
     case assistantContent(text: String?, toolUses: [ToolUseInfo])
+    /// Extended thinking block from the assistant.
+    case thinking(text: String)
     /// A user-wrapped tool_result block. `content` is the text output;
     /// `isError` mirrors the CLI's is_error flag.
     case toolResult(content: String, isError: Bool)
@@ -170,27 +173,35 @@ enum SDKMessage {
     case result(usd: Double?)
     case other
 
-    static func parse(_ dict: [String: Any]) -> SDKMessage {
+    static func parse(_ dict: [String: Any]) -> [SDKMessage] {
         let type = dict["type"] as? String ?? ""
         let subtype = dict["subtype"] as? String ?? ""
+        var messages: [SDKMessage] = []
+
         switch (type, subtype) {
         case ("system", "init"):
-            return .systemInit(
+            messages.append(.systemInit(
                 sessionId: dict["session_id"] as? String,
                 model: dict["model"] as? String
-            )
+            ))
         case ("assistant", _):
-            // Walk content blocks. Join text blocks; capture each tool_use
-            // independently. Thinking blocks are silently ignored.
+            // Walk content blocks. Extract thinking blocks separately,
+            // join text blocks, and capture each tool_use independently.
             if let message = dict["message"] as? [String: Any],
                let content = message["content"] as? [[String: Any]] {
                 var texts: [String] = []
                 var tools: [ToolUseInfo] = []
+                var thinking: String?
+
                 for block in content {
                     let blockType = block["type"] as? String ?? ""
                     switch blockType {
                     case "text":
                         if let s = block["text"] as? String { texts.append(s) }
+                    case "thinking":
+                        if let s = block["thinking"] as? String {
+                            thinking = s
+                        }
                     case "tool_use":
                         let name = block["name"] as? String ?? "?"
                         let id = block["id"] as? String
@@ -204,19 +215,30 @@ enum SDKMessage {
                         }
                         tools.append(ToolUseInfo(id: id, name: name, inputJSON: inputJSON))
                     default:
-                        // thinking, redacted_thinking, etc — drop silently
+                        // redacted_thinking, other unknown blocks — drop silently
                         break
                     }
                 }
+
+                // Add thinking block if present
+                if let thinkingText = thinking {
+                    messages.append(.thinking(text: thinkingText))
+                }
+
+                // Add assistant content (text + tools) if present
                 let joined = texts.joined()
                 if !joined.isEmpty || !tools.isEmpty {
-                    return .assistantContent(
+                    messages.append(.assistantContent(
                         text: joined.isEmpty ? nil : joined,
                         toolUses: tools
-                    )
+                    ))
                 }
             }
-            return .other
+
+            // If no messages were added, return other
+            if messages.isEmpty {
+                messages.append(.other)
+            }
         case ("user", _):
             // tool_result blocks come back wrapped as user messages.
             // Extract the first tool_result block's content and error flag.
@@ -230,15 +252,19 @@ enum SDKMessage {
                     } else if let arr = block["content"] as? [[String: Any]] {
                         text = arr.compactMap { $0["text"] as? String }.joined(separator: "\n")
                     }
-                    return .toolResult(content: text, isError: isError)
+                    messages.append(.toolResult(content: text, isError: isError))
                 }
             }
-            return .toolResult(content: "", isError: false)
+            if messages.isEmpty {
+                messages.append(.toolResult(content: "", isError: false))
+            }
         case ("result", _):
-            return .result(usd: dict["total_cost_usd"] as? Double)
+            messages.append(.result(usd: dict["total_cost_usd"] as? Double))
         default:
-            return .other
+            messages.append(.other)
         }
+
+        return messages
     }
 }
 

@@ -62,6 +62,28 @@ private struct ChatLineView: View {
                 .markdownTheme(.gitHub)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        case .thinking:
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "brain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("思考中...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fontWeight(.medium)
+                }
+                .padding(.bottom, 2)
+
+                Text(line.text)
+                    .font(.system(size: 13, design: .default))
+                    .foregroundStyle(.secondary)
+                    .italic()
+                    .textSelection(.enabled)
+            }
+            .padding(10)
+            .background(.secondary.opacity(0.08), in: .rect(cornerRadius: 8))
+            .frame(maxWidth: .infinity, alignment: .leading)
         case .system:
             Text(line.text)
                 .font(.caption)
@@ -87,7 +109,7 @@ private struct ToolResultRow: View {
     let line: ChatLine
     @State private var expanded = false
 
-    private static let previewLines = 5
+    private static let previewLines = 10
 
     var body: some View {
         let allLines = line.text.components(separatedBy: "\n")

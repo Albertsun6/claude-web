@@ -21,7 +21,9 @@ final class WebSocketClient {
     }
 
     /// Decoded incoming messages. Wired by the BackendClient facade so that
-    /// RunRouter + ConversationStore can take over from a single call site.
+    /// RunRouter + ConversationStore can take over from each message.
+    /// `decode` may emit multiple messages (e.g. thinking + assistantContent),
+    /// so the handler is called once per message.
     var onMessage: ((ServerMessage) -> Void)?
 
     /// Fired after a socket task is created and resumed. BackendClient uses
@@ -129,8 +131,12 @@ final class WebSocketClient {
                 case .string(let s): data = s.data(using: .utf8) ?? Data()
                 @unknown default: continue
                 }
-                let server = try ServerMessage.decode(data)
-                onMessage?(server)
+                let messages = try ServerMessage.decode(data)
+                // decode may return multiple messages (e.g. thinking + assistantContent),
+                // so emit each one separately
+                for server in messages {
+                    onMessage?(server)
+                }
             } catch {
                 state = .error("\(error.localizedDescription)")
                 telemetry?.error("ws.receive.failed", error: error)

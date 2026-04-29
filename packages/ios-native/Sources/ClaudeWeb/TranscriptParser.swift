@@ -6,9 +6,9 @@
 // Render rules:
 //   user + content[text]          → user ChatLine
 //   user + content[tool_result]   → skipped (v1 doesn't render tool results)
+//   assistant + content[thinking] → thinking ChatLine
 //   assistant + content[text...]  → assistant ChatLine (text blocks joined)
-//   assistant + content[tool_use] → system "🔧 <ToolName>" ChatLine
-//   assistant + content[thinking] → skipped (internal reasoning, not user-facing)
+//   assistant + content[tool_use] → toolUse ChatLine
 //   result / system / unknown      → skipped
 
 import Foundation
@@ -59,12 +59,21 @@ enum TranscriptParser {
             return s.isEmpty ? [] : [ChatLine(role: .assistant, text: s)]
         case .blocks(let blocks):
             var lines: [ChatLine] = []
-            // Text first (if any).
+
+            // Thinking blocks first (if any).
+            for block in blocks where block.type == "thinking" {
+                if let text = block.thinking {
+                    lines.append(ChatLine(role: .thinking, text: text))
+                }
+            }
+
+            // Text next (if any).
             let texts = blocks.compactMap { $0.type == "text" ? $0.text : nil }
             let joined = texts.joined(separator: "")
             if !joined.isEmpty {
                 lines.append(ChatLine(role: .assistant, text: joined))
             }
+
             // Each tool_use block as its own row. Card views decode
             // toolInputJSON; we capture id so the future "link to result"
             // feature has the data.

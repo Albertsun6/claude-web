@@ -395,6 +395,8 @@ final class BackendClient {
                 store.handleSystemInit(convId: convId, runId: runId, sessionId: sessionId)
             case .assistantContent(let text, let toolUses):
                 store.handleAssistantContent(convId: convId, runId: runId, text: text, toolUses: toolUses)
+            case .thinking(let text):
+                store.handleThinking(convId: convId, runId: runId, text: text)
             case .toolResult(let content, let isError):
                 store.handleToolResult(convId: convId, runId: runId, content: content, isError: isError)
             case .other, .result:

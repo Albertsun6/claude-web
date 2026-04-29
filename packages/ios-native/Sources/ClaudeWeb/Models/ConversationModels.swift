@@ -57,6 +57,8 @@ struct ChatLine: Identifiable, Codable, Equatable {
         /// A tool's result coming back from the CLI. v1 doesn't link it to its
         /// originating tool_use — independent card.
         case toolResult
+        /// Extended thinking / reasoning blocks from the assistant.
+        case thinking
     }
     let id: UUID
     let role: Role
@@ -96,11 +98,11 @@ struct ChatLine: Identifiable, Codable, Equatable {
     }
 
     /// What TTS should read aloud for this line. `nil` = skip (don't speak
-    /// tool calls / system / error rows). Used by the TTS hook in App.
+    /// tool calls / system / error rows / thinking). Used by the TTS hook in App.
     var spokenText: String? {
         switch role {
         case .assistant: return text.isEmpty ? nil : text
-        case .user, .system, .error, .toolUse, .toolResult: return nil
+        case .user, .system, .error, .toolUse, .toolResult, .thinking: return nil
         }
     }
 }

@@ -54,21 +54,23 @@ enum TranscriptContent: Decodable {
 struct TranscriptBlock: Decodable {
     let type: String
     let text: String?
-    let name: String?      // for tool_use
-    let id: String?        // for tool_use
+    let thinking: String?   // for thinking blocks
+    let name: String?       // for tool_use
+    let id: String?         // for tool_use
     /// For tool_use: the input dict serialized as a JSON string. We pass it
     /// through verbatim because re-decoding a heterogeneous dict in Swift
     /// requires AnyCodable shenanigans; card views parse it themselves.
     let inputJSON: String?
 
     enum CodingKeys: String, CodingKey {
-        case type, text, name, id, input
+        case type, text, thinking, name, id, input
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.type = try c.decode(String.self, forKey: .type)
         self.text = try c.decodeIfPresent(String.self, forKey: .text)
+        self.thinking = try c.decodeIfPresent(String.self, forKey: .thinking)
         self.name = try c.decodeIfPresent(String.self, forKey: .name)
         self.id = try c.decodeIfPresent(String.self, forKey: .id)
         // Re-encode whatever shape `input` has into a JSON string. tool_use

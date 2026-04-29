@@ -408,6 +408,12 @@ final class ConversationStore {
         onConversationDirty?(convId)
     }
 
+    func handleThinking(convId: String, runId: String, text: String) {
+        guard var s = stateByConversation[convId] else { return }
+        s.messages.append(ChatLine(role: .thinking, text: text, runId: runId))
+        stateByConversation[convId] = s
+    }
+
     func handleAssistantContent(
         convId: String,
         runId: String,
