@@ -132,6 +132,7 @@ struct ContentView: View {
                 Divider()
                 InputBar(
                     draft: $draft,
+                    cwd: currentCwd,
                     busy: client.currentBusy,
                     onSend: { attachments in send(attachments) },
                     onStop: client.interrupt,
@@ -239,6 +240,14 @@ struct ContentView: View {
             return conv.title
         }
         return "新建"
+    }
+
+    private var currentCwd: String {
+        if let id = client.currentConversationId,
+           let conv = client.conversations[id] {
+            return conv.cwd
+        }
+        return settings.cwd
     }
 
     /// Project name shown in the toolbar's principal slot. Falls back to

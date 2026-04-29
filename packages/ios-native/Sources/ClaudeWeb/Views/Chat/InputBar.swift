@@ -15,6 +15,7 @@ private struct PendingImage: Identifiable {
 
 struct InputBar: View {
     @Binding var draft: String
+    let cwd: String
     let busy: Bool
     let onSend: ([ImageAttachment]) -> Void
     let onStop: () -> Void
@@ -25,6 +26,8 @@ struct InputBar: View {
 
     @State private var pendingImages: [PendingImage] = []
     @State private var pickerSelection: [PhotosPickerItem] = []
+    @State private var showFilePicker = false
+    @State private var atQuery: String? = nil       // non-nil when @ is active
 
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
@@ -95,11 +98,22 @@ struct InputBar: View {
                     .submitLabel(.send)
                     .onSubmit(doSend)
                     .focused($inputFocused)
+                    .onChange(of: draft) { _, newValue in
+                        atQuery = extractAtQuery(newValue)
+                        if atQuery != nil { showFilePicker = true }
+                    }
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
                             Spacer()
                             Button("完成") { inputFocused = false }
                         }
+                    }
+                    .sheet(isPresented: $showFilePicker) {
+                        AtFilePicker(cwd: cwd, query: atQuery ?? "") { picked in
+                            insertFilePath(picked)
+                        }
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
                     }
 
                 pttButton
@@ -250,5 +264,29 @@ struct InputBar: View {
         case .error(let msg): return msg
         default: return ""
         }
+    }
+
+    // MARK: - @ file detection
+
+    /// Returns the query string after the last `@` if it looks like an
+    /// active file completion (no spaces after @). Returns nil otherwise.
+    private func extractAtQuery(_ text: String) -> String? {
+        guard let atIdx = text.range(of: "@", options: .backwards)?.upperBound else {
+            return nil
+        }
+        let afterAt = String(text[atIdx...])
+        // A space or newline after @ means the user finished; dismiss picker.
+        if afterAt.contains(" ") || afterAt.contains("\n") { return nil }
+        return afterAt   // empty string = just typed @, show full list
+    }
+
+    /// Replace the `@query` suffix in draft with the picked absolute path.
+    private func insertFilePath(_ absPath: String) {
+        guard let atIdx = draft.range(of: "@", options: .backwards)?.lowerBound else {
+            draft += absPath
+            return
+        }
+        draft = String(draft[..<atIdx]) + absPath + " "
+        atQuery = nil
     }
 }
