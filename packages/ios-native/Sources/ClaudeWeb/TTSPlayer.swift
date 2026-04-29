@@ -98,9 +98,16 @@ final class TTSPlayer: NSObject {
 
         var toSpeak = cleanedSource
         if s.speakStyle == "summary", cleanedSource.count > 30 {
-            // Trivially short text skips Haiku roundtrip.
             if let summary = await fetchSummary(cleanedSource), gen == generation {
                 toSpeak = summary
+                telemetry?.log("tts.summary.ok", props: ["summaryLen": String(summary.count)],
+                               conversationId: conversationId)
+            } else if gen == generation {
+                // Summary failed — read only the first ~120 chars (2-3 sentences) instead of the full text.
+                toSpeak = truncateForFallback(cleanedSource)
+                telemetry?.warn("tts.summary.fallback", props: ["originalLen": String(cleanedSource.count),
+                                                                 "truncatedLen": String(toSpeak.count)],
+                                conversationId: conversationId)
             }
         }
         if gen != generation { return }
@@ -203,19 +210,43 @@ final class TTSPlayer: NSObject {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         authorize(&req)
-        req.timeoutInterval = 25
+        req.timeoutInterval = 35
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
         do {
             let (data, response) = try await URLSession.shared.data(for: req)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-            // fallback === true ⇒ Haiku failed, just speak the raw cleaned text instead.
-            if (json["fallback"] as? Bool) == true { return nil }
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                telemetry?.warn("tts.summary.http_error", props: ["status": String(code)])
+                return nil
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                telemetry?.warn("tts.summary.bad_json")
+                return nil
+            }
+            if (json["fallback"] as? Bool) == true {
+                let err = json["error"] as? String ?? "unknown"
+                telemetry?.warn("tts.summary.fallback_from_backend", props: ["reason": err])
+                return nil
+            }
             return (json["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
-            telemetry?.warn("tts.summary.failed", props: ["error": error.localizedDescription])
+            telemetry?.warn("tts.summary.request_failed", props: ["error": error.localizedDescription])
             return nil
         }
+    }
+
+    /// When summarization fails, read the first ~120 Chinese characters (about 2 sentences)
+    /// instead of dumping the full response.
+    private func truncateForFallback(_ text: String) -> String {
+        let limit = 120
+        guard text.count > limit else { return text }
+        // Try to break at a sentence boundary (。！？) within the first limit+20 chars.
+        let window = text.prefix(limit + 20)
+        if let idx = window.lastIndex(where: { "。！？.!?".contains($0) }) {
+            let cut = text[...idx]
+            if cut.count >= 20 { return String(cut) }
+        }
+        return String(text.prefix(limit)) + "…"
     }
 
     private func fetchTTS(_ text: String) async -> Data? {

@@ -337,16 +337,32 @@ voiceRouter.post("/cleanup", async (c) => {
   });
 });
 
-const SUMMARIZE_SYSTEM_PROMPT = `你是一个口播改写助手。下面是 Claude 的完整书面回答，里面有 markdown、表格、代码、列表等不适合朗读的内容。请改写成一段**短的、口语化的、能直接读出来的总结**，让听者立刻知道结果和下一步。
+function stripMarkdownFromSummary(text: string): string {
+  return text
+    .replace(/\*{1,3}([^*\n]*)\*{1,3}/g, "$1")
+    .replace(/_{1,2}([^_\n]*)_{1,2}/g, "$1")
+    .replace(/`{1,3}[^`]*`{1,3}/g, "")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[|\\`#*_]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
-铁律：
-- **绝对不要**输出任何 markdown 字符：星号、井号、反引号、方括号、竖线、连字符开头的列表都禁止
-- 不要引号、不要前缀（如"总结："）
-- 1 到 4 句话，最长 80 个汉字
-- 不照搬原文，只挑重点：发生了什么 / 修复了什么 / 接下来该做什么
-- 跳过代码、命令、文件路径、表格、长列表
-- 不说"以下"、"如下"、"请参考屏幕"——直接说要点
-- 用陈述句，自然停顿，避免书面词如"此外"、"综上"`;
+const SUMMARIZE_SYSTEM_PROMPT = `你的任务是把输入文字改写成一段适合朗读的口语总结。直接输出最终文字本身，不要任何前缀、不要自我介绍、不要说"好的"或"以下是总结"，不要任何解释。
+
+禁止规则（违反即为失败）：
+不得输出星号、井号、反引号、方括号、竖线、下划线等任何标点符号或格式字符。
+不得以角色身份开头，例如"我是口播助手"。
+不得加"总结："、"概括："等前缀。
+不得说"以下"、"如下"、"请参考屏幕"。
+不得照搬代码、命令、文件路径、表格、长列表。
+
+输出要求：
+1 到 4 句话，最长 80 个汉字。
+只说要点：发生了什么、修复了什么、接下来做什么。
+用陈述句，自然口语，避免"此外"、"综上"等书面词。`;
 
 voiceRouter.post("/summarize", async (c) => {
   let body: { text?: unknown };
@@ -390,13 +406,20 @@ voiceRouter.post("/summarize", async (c) => {
   if (r.code !== 0) {
     return c.json({ original: text, summary: text, fallback: true, error: r.stderr.slice(0, 200) });
   }
-  let summary = text;
+  let summary = "";
   try {
     const parsed = JSON.parse(r.stdout);
     if (typeof parsed.result === "string" && parsed.result.trim()) summary = parsed.result.trim();
   } catch {
-    const trimmed = r.stdout.trim();
-    if (trimmed) summary = trimmed;
+    // stdout is not JSON — treat as failure so iOS falls back gracefully
+  }
+  if (!summary) {
+    return c.json({ original: text, summary: text, fallback: true, error: "empty result" });
+  }
+  summary = stripMarkdownFromSummary(summary);
+  // If the "summary" is barely shorter than the original, Haiku didn't actually summarize.
+  if (summary.length > text.length * 0.85) {
+    return c.json({ original: text, summary: text, fallback: true, error: "no compression" });
   }
   return c.json({ original: text, summary, durationMs: Date.now() - started });
 });
