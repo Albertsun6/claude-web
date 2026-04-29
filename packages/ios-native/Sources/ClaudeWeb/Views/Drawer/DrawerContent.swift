@@ -32,12 +32,6 @@ struct DrawerContent: View {
     @State private var renamingConversation: Conversation? = nil
     @State private var conversationRenameDraft: String = ""
 
-    @State private var usageAPI: UsageAPI?
-    @State private var usageData: UsageDTO? = nil
-    @State private var usageLoading = false
-    @State private var usageError: String? = nil
-    @State private var showUsageSheet = false
-
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -80,16 +74,6 @@ struct DrawerContent: View {
             } else {
                 Text("以下项目目录不存在，是否从注册表移除？jsonl 历史不会被删。\n\n" +
                      missingProjects.map { "• \($0.name) (\($0.cwd))" }.joined(separator: "\n"))
-            }
-        }
-        .sheet(isPresented: $showUsageSheet) {
-            usageSheet
-        }
-        .onAppear {
-            if usageAPI == nil {
-                let backendRef: () -> URL = { [weak client] in client?.backendBase ?? settings.backendURL }
-                let tokenRef: () -> String = { settings.authToken }
-                usageAPI = UsageAPI(backend: backendRef, token: tokenRef)
             }
         }
     }
@@ -264,13 +248,6 @@ struct DrawerContent: View {
 
     private var footer: some View {
         VStack(spacing: 0) {
-            DrawerRow(icon: "doc.text.magnifyingglass", label: "查看订阅用量", tint: .blue) {
-                Task { await fetchUsage() }
-            }
-            .disabled(usageLoading)
-            if usageLoading {
-                ProgressView().scaleEffect(0.8).padding(.vertical, 4)
-            }
             DrawerRow(icon: "trash", label: "清理失效项目", tint: .red) {
                 Task { await runCleanup() }
             }
@@ -282,139 +259,10 @@ struct DrawerContent: View {
         .padding(.bottom, 8)
     }
 
-    // MARK: - Usage Sheet
-
-    private var usageSheet: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                if let error = usageError {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("获取失败", systemImage: "exclamationmark.circle")
-                            .font(.headline)
-                        Text(error)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.systemRed).opacity(0.1), in: .rect(cornerRadius: 8))
-                } else if let usage = usageData {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("5 小时窗口")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 12) {
-                            ProgressView(value: (usage.fiveHourPct ?? 0) / 100)
-                                .frame(height: 8)
-                            Text("\(Int(usage.fiveHourPct ?? 0))%")
-                                .font(.caption.monospacedDigit())
-                                .frame(width: 40)
-                        }
-                        if let resets = usage.fiveHourResetsAt {
-                            Text("重置于 \(relativeTime(unixTimestamp: resets))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6), in: .rect(cornerRadius: 8))
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("7 天窗口")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 12) {
-                            ProgressView(value: (usage.sevenDayPct ?? 0) / 100)
-                                .frame(height: 8)
-                            Text("\(Int(usage.sevenDayPct ?? 0))%")
-                                .font(.caption.monospacedDigit())
-                                .frame(width: 40)
-                        }
-                        if let resets = usage.sevenDayResetsAt {
-                            Text("重置于 \(relativeTime(unixTimestamp: resets))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6), in: .rect(cornerRadius: 8))
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let tier = usage.tier {
-                            HStack {
-                                Text("Rate Limit Tier")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text(tier)
-                                    .font(.caption.bold())
-                            }
-                        }
-                        if let subType = usage.subscriptionType {
-                            HStack {
-                                Text("Subscription")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text(subType)
-                                    .font(.caption.bold())
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6), in: .rect(cornerRadius: 8))
-                }
-
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("Claude 订阅用量")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showUsageSheet = false }) {
-                        Text("关闭")
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: - Helpers
 
     private func closeDrawer() {
         withAnimation { isOpen = false }
-    }
-
-    private func fetchUsage() async {
-        usageLoading = true
-        usageError = nil
-        defer { usageLoading = false }
-
-        guard let api = usageAPI else {
-            usageError = "API 初始化失败"
-            return
-        }
-
-        do {
-            let data = try await api.fetchUsage()
-            if let err = data.error {
-                usageError = err
-            } else {
-                usageData = data
-                showUsageSheet = true
-            }
-        } catch {
-            usageError = error.localizedDescription
-        }
-    }
-
-    private func relativeTime(unixTimestamp: Int) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(unixTimestamp))
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .short
-        return formatter.string(from: date)
     }
 
     private func runCleanup() async {

@@ -36,6 +36,7 @@ final class Telemetry {
         let buildVersion: String
         let deviceModel: String
 
+        @MainActor
         init(
             level: Level,
             event: String,

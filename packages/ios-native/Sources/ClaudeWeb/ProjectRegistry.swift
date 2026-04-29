@@ -265,7 +265,7 @@ final class ProjectRegistry {
                   let latest = sessions.first else { continue }
             if convs.isEmpty {
                 // Case A: No live conversation — adopt the latest session
-                try? await openHistoricalSession(latest, in: project)
+                _ = try? await openHistoricalSession(latest, in: project)
             } else {
                 // Case B: Live conversations without sessionId — bind the latest
                 for conv in convs where conv.sessionId == nil {

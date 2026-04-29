@@ -17,7 +17,6 @@ import { voiceRouter } from "./routes/voice.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { projectsRouter } from "./routes/projects.js";
 import { telemetryRouter } from "./routes/telemetry.js";
-import { usageRouter } from "./routes/usage.js";
 import {
   permissionRouter,
   registerPermissionChannel,
@@ -74,7 +73,6 @@ app.route("/api/sessions", sessionsRouter);
 app.route("/api/projects", projectsRouter);
 app.route("/api/telemetry", telemetryRouter);
 app.route("/api/permission", permissionRouter);
-app.route("/api/usage", usageRouter);
 
 // Track active runs across all WS clients so /health can report.
 const allConnections = new Set<{ runs: Map<string, RunHandle> }>();

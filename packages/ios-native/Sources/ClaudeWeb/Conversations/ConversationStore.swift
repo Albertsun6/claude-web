@@ -128,7 +128,7 @@ final class ConversationStore {
     /// readable auto-name like "claude-web 1" using the cwd's basename and a
     /// per-cwd counter. The user can override before the first prompt fires;
     /// after the first prompt, the title becomes the prompt's first 30 chars.
-    @discardableResult
+    
     /// Update a conversation's title in-memory and trigger cache sync.
     func updateConversationTitle(_ convId: String, title: String) {
         guard var conv = conversations[convId] else { return }
