@@ -367,7 +367,9 @@ final class BackendClient {
                 store.handleSystemInit(convId: convId, runId: runId, sessionId: sessionId)
             case .assistantContent(let text, let toolUses):
                 store.handleAssistantContent(convId: convId, runId: runId, text: text, toolUses: toolUses)
-            case .toolResult, .other, .result:
+            case .toolResult(let content, let isError):
+                store.handleToolResult(convId: convId, runId: runId, content: content, isError: isError)
+            case .other, .result:
                 break
             }
         case .sessionEnded(_, let reason):

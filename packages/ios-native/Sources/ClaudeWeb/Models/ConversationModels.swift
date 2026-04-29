@@ -54,6 +54,8 @@ struct ChatLine: Identifiable, Codable, Equatable {
     /// For `.toolUse` rows: the tool_use block id, used to match with a
     /// later tool_result if we ever want that. v1 doesn't use it.
     var toolUseId: String?
+    /// For `.toolResult` rows: mirrors the CLI's is_error flag.
+    var isError: Bool
 
     init(
         role: Role,
@@ -61,7 +63,8 @@ struct ChatLine: Identifiable, Codable, Equatable {
         runId: String? = nil,
         toolName: String? = nil,
         toolInputJSON: String? = nil,
-        toolUseId: String? = nil
+        toolUseId: String? = nil,
+        isError: Bool = false
     ) {
         self.id = UUID()
         self.role = role
@@ -70,6 +73,7 @@ struct ChatLine: Identifiable, Codable, Equatable {
         self.toolName = toolName
         self.toolInputJSON = toolInputJSON
         self.toolUseId = toolUseId
+        self.isError = isError
     }
 
     /// What TTS should read aloud for this line. `nil` = skip (don't speak

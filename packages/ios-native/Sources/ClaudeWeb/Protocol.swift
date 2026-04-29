@@ -152,9 +152,9 @@ enum SDKMessage {
     /// are filtered at parse time. BackendClient emits one ChatLine per
     /// piece (assistant text, then a tool_use row per tool call).
     case assistantContent(text: String?, toolUses: [ToolUseInfo])
-    /// A user-wrapped tool_result block. v1 doesn't link it back to its
-    /// tool_use; the row just shows "✓ tool result" placeholder.
-    case toolResult
+    /// A user-wrapped tool_result block. `content` is the text output;
+    /// `isError` mirrors the CLI's is_error flag.
+    case toolResult(content: String, isError: Bool)
     /// Turn finished, with optional cost telemetry.
     case result(usd: Double?)
     case other
@@ -207,8 +207,22 @@ enum SDKMessage {
             }
             return .other
         case ("user", _):
-            // tool_result blocks come back wrapped as user messages — we just acknowledge
-            return .toolResult
+            // tool_result blocks come back wrapped as user messages.
+            // Extract the first tool_result block's content and error flag.
+            if let message = dict["message"] as? [String: Any],
+               let contentArr = message["content"] as? [[String: Any]] {
+                for block in contentArr where block["type"] as? String == "tool_result" {
+                    let isError = block["is_error"] as? Bool ?? false
+                    var text = ""
+                    if let s = block["content"] as? String {
+                        text = s
+                    } else if let arr = block["content"] as? [[String: Any]] {
+                        text = arr.compactMap { $0["text"] as? String }.joined(separator: "\n")
+                    }
+                    return .toolResult(content: text, isError: isError)
+                }
+            }
+            return .toolResult(content: "", isError: false)
         case ("result", _):
             return .result(usd: dict["total_cost_usd"] as? Double)
         default:

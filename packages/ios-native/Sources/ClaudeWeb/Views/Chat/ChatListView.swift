@@ -77,11 +77,69 @@ private struct ChatLineView: View {
             ToolUseRow(line: line)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .toolResult:
-            // A6 v1: independent tool-result row, not linked to its tool_use.
-            Text("✓ tool result")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(.vertical, 2)
+            ToolResultRow(line: line)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+private struct ToolResultRow: View {
+    let line: ChatLine
+    @State private var expanded = false
+
+    private static let previewLines = 5
+
+    var body: some View {
+        let allLines = line.text.components(separatedBy: "\n")
+        let lineCount = allLines.count
+        let isLong = lineCount > Self.previewLines && !line.text.isEmpty
+
+        VStack(alignment: .leading, spacing: 3) {
+            // Header row: icon + count + expand button
+            HStack(spacing: 5) {
+                Image(systemName: line.isError ? "xmark.circle.fill" : "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(line.isError ? .red : .secondary)
+                if line.text.isEmpty {
+                    Text(line.isError ? "错误（无输出）" : "完成（无输出）")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Text(line.isError ? "错误 · \(lineCount) 行" : "\(lineCount) 行")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if isLong {
+                    Spacer()
+                    Button(expanded ? "收起" : "展开全部") {
+                        withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                    }
+                    .font(.caption2)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.accentColor)
+                }
+            }
+
+            // Content preview / full
+            if !line.text.isEmpty {
+                let shownText = (!expanded && isLong)
+                    ? allLines.prefix(Self.previewLines).joined(separator: "\n")
+                    : line.text
+                Text(shownText)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(line.isError ? .red.opacity(0.85) : .secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(6)
+                    .background(.secondary.opacity(0.07), in: .rect(cornerRadius: 6))
+
+                if !expanded && isLong {
+                    Text("… 还有 \(lineCount - Self.previewLines) 行")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 }

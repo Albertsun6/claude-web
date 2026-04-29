@@ -463,6 +463,12 @@ final class ConversationStore {
         stateByConversation[convId] = s
     }
 
+    func handleToolResult(convId: String, runId: String, content: String, isError: Bool) {
+        guard var s = stateByConversation[convId] else { return }
+        s.messages.append(ChatLine(role: .toolResult, text: content, runId: runId, isError: isError))
+        stateByConversation[convId] = s
+    }
+
     func handlePermissionRequest(
         convId: String,
         runId: String,
