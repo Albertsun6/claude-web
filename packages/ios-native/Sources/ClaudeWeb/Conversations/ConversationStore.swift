@@ -316,6 +316,16 @@ final class ConversationStore {
         stateByConversation[convId] = s
     }
 
+    // MARK: - Session binding (drawer sid display)
+
+    /// Lightweight sessionId binding for conversations that lack one. Only
+    /// writes if `conv.sessionId == nil` — never overwrites a live binding.
+    func bindSessionId(_ sessionId: String, toConversation convId: String) {
+        guard var conv = conversations[convId], conv.sessionId == nil else { return }
+        conv.sessionId = sessionId
+        conversations[convId] = conv
+    }
+
     // MARK: - Send-side mutations
 
     struct StartedTurn {

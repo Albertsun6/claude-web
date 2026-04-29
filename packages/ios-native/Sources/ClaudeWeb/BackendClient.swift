@@ -299,6 +299,11 @@ final class BackendClient {
         store.removeQueuedPrompt(id: id, forConversation: convId)
     }
 
+    func bindSessionId(_ sessionId: String, toConversation convId: String) {
+        store.bindSessionId(sessionId, toConversation: convId)
+        onConversationDirty?(convId)
+    }
+
     /// UI-side convenience: send to the currently-focused conversation,
     /// auto-creating one in `defaultCwdForNew` if none exists yet (typical
     /// first-launch case). Existing conversations keep their original cwd.

@@ -74,6 +74,9 @@ final class ProjectRegistry {
 
         // 2. Server reconcile
         await refresh()
+
+        // 3. Restore missing sessionIds so drawer shows sids for all conversations
+        Task { await autoRestoreSessionIds() }
     }
 
     /// Pull fresh project list from server. On failure, mark offline and
@@ -237,6 +240,38 @@ final class ProjectRegistry {
             fromByteOffset: resp.fileSize ?? 0
         )
         return conv.id
+    }
+
+    // MARK: - Session restoration (drawer sid display)
+
+    /// Auto-restore sessionIds for conversations that lack one. Runs
+    /// in background so it doesn't block UI. Two cases:
+    ///
+    /// A) Project has no live conversations (cache was cleared) → adopt the
+    ///    most recent historical session so it appears in the drawer with a sid.
+    ///
+    /// B) Project has conversations but sessionId == nil (cache exists, but
+    ///    conversation was created but never sent a prompt) → bind the most
+    ///    recent sessionId to the conversation without reloading transcript.
+    private func autoRestoreSessionIds() async {
+        guard let client else { return }
+        for project in projects {
+            let norm = (project.cwd as NSString).standardizingPath
+            let convs = client.sortedConversations().filter {
+                ($0.cwd as NSString).standardizingPath == norm
+            }
+            guard let sessions = try? await sessionsAPI.list(cwd: project.cwd),
+                  let latest = sessions.first else { continue }
+            if convs.isEmpty {
+                // Case A: No live conversation — adopt the latest session
+                try? await openHistoricalSession(latest, in: project)
+            } else {
+                // Case B: Live conversations without sessionId — bind the latest
+                for conv in convs where conv.sessionId == nil {
+                    client.bindSessionId(latest.sessionId, toConversation: conv.id)
+                }
+            }
+        }
     }
 
     // MARK: - Conversation queries (cross-reference via cwd)
