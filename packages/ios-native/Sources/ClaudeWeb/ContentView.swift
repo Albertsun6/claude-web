@@ -130,6 +130,20 @@ struct ContentView: View {
                 ChatListView(messages: client.currentMessages)
                     .frame(maxHeight: .infinity)
                 Divider()
+                if client.activeRunCount > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Text("Wandering...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.bar)
+                }
                 if !client.currentPendingQueue.isEmpty {
                     QueueStrip(
                         queue: client.currentPendingQueue,

@@ -144,6 +144,7 @@ When in doubt: ask the user "要更新手册吗？" rather than assume.
 | `docs/USER_MANUAL.md` | **What the app does today** — user-facing reference |
 | `docs/IDEAS.md` | Deferred features (yes-but-not-now) |
 | `docs/IMPROVEMENTS.md` | Historic audit (mostly closed) |
+| `docs/ENGINEERING_GOVERNANCE.md` | Engineering constraints plan: framework choices, CI, protocol tests, ADRs |
 | `docs/MOBILE_VOICE.md` | Mobile voice strategy doc |
 | `docs/ENTERPRISE_INTERNAL.md` | Speculative multi-user migration plan |
 | `docs/IOS_NATIVE_REVIEW.md` / `_2.md` / `_3.md` | iOS native code-review threads (M1-M4.5) |
