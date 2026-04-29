@@ -2,28 +2,29 @@ import { useState } from "react";
 import { useStore } from "../store";
 import { replyPermission } from "../ws-client";
 
-type Scope = "once" | "run" | "project";
-
 export function PermissionModal() {
   const pending = useStore((s) => s.pendingPermission);
   const activeCwd = useStore((s) => s.activeCwd);
-  const [scope, setScope] = useState<Scope>("once");
+  const [autoAllowThisRun, setAutoAllowThisRun] = useState(false);
+  const [autoAllowThisProject, setAutoAllowThisProject] = useState(false);
 
   if (!pending) return null;
 
   const allow = () => {
-    if (scope === "run") {
+    if (autoAllowThisRun) {
       useStore.getState().allowToolForRun(pending.runId, pending.toolName);
-    } else if (scope === "project" && activeCwd) {
+    } else if (autoAllowThisProject && activeCwd) {
       useStore.getState().allowToolForProject(activeCwd, pending.toolName);
     }
-    replyPermission(pending.requestId, "allow", pending.runId);
-    setScope("once");
+    replyPermission(pending.requestId, "allow", pending.runId, pending.toolName);
+    setAutoAllowThisRun(false);
+    setAutoAllowThisProject(false);
   };
 
   const deny = () => {
-    replyPermission(pending.requestId, "deny", pending.runId);
-    setScope("once");
+    replyPermission(pending.requestId, "deny", pending.runId, pending.toolName);
+    setAutoAllowThisRun(false);
+    setAutoAllowThisProject(false);
   };
 
   return (
@@ -38,25 +39,30 @@ export function PermissionModal() {
         <pre>{JSON.stringify(pending.input, null, 2)}</pre>
 
         <fieldset className="perm-scope">
-          <legend>允许范围</legend>
+          <legend>后续处理</legend>
           <label>
-            <input type="radio" name="scope" checked={scope === "once"} onChange={() => setScope("once")} />
-            <span>仅此一次</span>
-          </label>
-          <label>
-            <input type="radio" name="scope" checked={scope === "run"} onChange={() => setScope("run")} />
-            <span>本轮（直到对话结束）</span>
+            <input
+              type="checkbox"
+              checked={autoAllowThisRun}
+              onChange={(e) => {
+                setAutoAllowThisRun(e.target.checked);
+                if (e.target.checked) setAutoAllowThisProject(false);
+              }}
+            />
+            <span>本轮对话中的 {pending.toolName} 总是允许</span>
           </label>
           <label className={!activeCwd ? "perm-scope-disabled" : ""}>
             <input
-              type="radio"
-              name="scope"
-              checked={scope === "project"}
-              onChange={() => setScope("project")}
+              type="checkbox"
+              checked={autoAllowThisProject}
               disabled={!activeCwd}
+              onChange={(e) => {
+                setAutoAllowThisProject(e.target.checked);
+                if (e.target.checked) setAutoAllowThisRun(false);
+              }}
             />
             <span>
-              本项目永久 <span className="perm-scope-warn">(localStorage 保留)</span>
+              本项目永久允许 {pending.toolName} <span className="perm-scope-warn">(localStorage 保留)</span>
             </span>
           </label>
         </fieldset>

@@ -35,8 +35,25 @@ final class VoiceSession {
     /// User-facing toggle. Off by default — must be turned on explicitly.
     var active: Bool = false
 
-    /// Last error visible in UI.
+    /// Initialization-time errors (audio session activation, silent loop
+    /// startup, etc). Runtime errors from the recorder / tts subcomponents
+    /// are NOT mirrored here — those live in their own state. See
+    /// `displayError` for the unified surface UI binds to.
     var lastError: String?
+
+    /// Single error string the UI should display. Aggregates the three
+    /// places voice errors come from so that ContentView only needs ONE
+    /// banner / dismiss path. Priority:
+    ///   1. lastError       (init-time: audio session, keepalive)
+    ///   2. recorder.error  (runtime: mic permission, transcribe)
+    ///   3. tts.error       (runtime: edge-tts, playback)
+    /// `dismissError()` clears all three.
+    var displayError: String? {
+        if let m = lastError { return m }
+        if case .error(let m) = recorder?.state { return m }
+        if case .error(let m) = tts?.state { return m }
+        return nil
+    }
 
     /// Derived from the components — single source of truth for what Claude is
     /// doing right now. Recompute when any subcomponent observable changes.
@@ -54,7 +71,7 @@ final class VoiceSession {
         case .fetching: return .thinking // Haiku → tts call counts as thinking-ish
         default: break
         }
-        if client?.busy == true { return .thinking }
+        if client?.currentBusy == true { return .thinking }
         return .idle
     }
 
@@ -418,8 +435,8 @@ final class VoiceSession {
 
     private func updateNowPlaying() {
         var info: [String: Any] = [:]
-        info[MPMediaItemPropertyTitle] = "Claude Voice · " + title()
-        info[MPMediaItemPropertyArtist] = "claude-web"
+        info[MPMediaItemPropertyTitle] = "Seaidea · " + title()
+        info[MPMediaItemPropertyArtist] = "Seaidea"
         // playbackRate truth-table (be honest with iOS):
         //   playingTTS                              → 1.0  (real audio)
         //   pausedTTS                               → 0.0  (real but paused)
@@ -449,10 +466,10 @@ final class VoiceSession {
             // In voice mode, play button starts recording. Keepalive-only
             // mode has no remote commands registered — say "运行中" instead
             // so user isn't misled into thinking play will record.
-            return active ? "待命 · 按播放开始录音" : "Claude · 后台运行"
+            return active ? "待命 · 按播放开始录音" : "Seaidea · 后台运行"
         case .recording: return "录音中… · 再按一次结束"
         case .transcribing: return "识别中…"
-        case .thinking: return "Claude 在想…"
+        case .thinking: return "正在思考…"
         case .playingTTS: return "正在播报 · " + (settings?.cwd.split(separator: "/").last.map(String.init) ?? "")
         case .pausedTTS: return "已暂停"
         case .error(let m): return "出错: \(m)"

@@ -25,15 +25,20 @@ final class TTSPlayer: NSObject {
     }
 
     var state: State = .idle
-    /// Last text we fetched audio for — replay button uses this so a second
-    /// hit doesn't re-summarize.
-    private var lastSpokenText: String?
-    private var lastAudioData: Data?
+    /// Per-conversation replay cache. Keyed by conversation id so that
+    /// switching conversations doesn't stomp the previous one's last reply.
+    /// In-memory only; F1c3 caches to disk via Cache layer.
+    private var lastSpokenByConversation: [String: String] = [:]
+    private var lastAudioByConversation: [String: Data] = [:]
+    /// Which conversation is currently playing (the one whose audio is in
+    /// `player`). Used to refuse cross-conversation replay collisions.
+    private var playingConversation: String?
 
     private var player: AVAudioPlayer?
     private let backendURL: () -> URL
     private let authToken: () -> String
     private let settings: () -> AppSettings
+    private weak var telemetry: Telemetry?
 
     /// Bumped on cancel / new turn so in-flight fetches abandon.
     private var generation: Int = 0
@@ -48,6 +53,10 @@ final class TTSPlayer: NSObject {
         self.settings = settings
     }
 
+    func bindTelemetry(_ tel: Telemetry) {
+        self.telemetry = tel
+    }
+
     private func authorize(_ req: inout URLRequest) {
         let t = authToken()
         if !t.isEmpty {
@@ -55,21 +64,37 @@ final class TTSPlayer: NSObject {
         }
     }
 
-    var hasReplay: Bool { lastAudioData != nil && state != .playing }
+    /// Whether the given conversation has a cached audio clip ready to replay.
+    /// Returned false when this conversation is mid-playback already (the UI
+    /// shows pause/stop instead of replay in that case).
+    func hasReplay(for conversationId: String?) -> Bool {
+        guard let id = conversationId,
+              lastAudioByConversation[id] != nil else { return false }
+        if state == .playing && playingConversation == id { return false }
+        return true
+    }
 
     /// High-level entry point: speak Claude's full response. Goes through
     /// summarize first (unless settings.speakStyle == "verbatim") and strips
     /// markdown so the TTS doesn't read "**" as "星号星号".
-    func speakAssistantTurn(_ raw: String) async {
+    func speakAssistantTurn(_ raw: String, conversationId: String?) async {
         let s = settings()
         guard s.ttsEnabled else { return }
         cancel()
 
         let cleanedSource = stripForSpeech(raw)
-        if cleanedSource.isEmpty { return }
+        if cleanedSource.isEmpty {
+            telemetry?.warn("tts.skip.empty_after_strip", conversationId: conversationId)
+            return
+        }
 
         let gen = generation
         state = .fetching
+        telemetry?.log(
+            "tts.fetch.start",
+            props: ["style": s.speakStyle, "sourceLen": String(cleanedSource.count)],
+            conversationId: conversationId
+        )
 
         var toSpeak = cleanedSource
         if s.speakStyle == "summary", cleanedSource.count > 30 {
@@ -85,16 +110,38 @@ final class TTSPlayer: NSObject {
             return
         }
 
-        lastSpokenText = toSpeak
-        lastAudioData = mp3
+        if let id = conversationId {
+            lastSpokenByConversation[id] = toSpeak
+            lastAudioByConversation[id] = mp3
+        }
+        playingConversation = conversationId
         await play(mp3)
+        telemetry?.log(
+            "tts.play.start",
+            props: ["spokenLen": String(toSpeak.count), "bytes": String(mp3.count)],
+            conversationId: conversationId
+        )
     }
 
-    /// Replay the last spoken clip without re-fetching.
-    func replay() async {
-        guard let data = lastAudioData else { return }
+    /// Replay this conversation's last spoken clip without re-fetching. No-op
+    /// if there's no cache for that conversation.
+    func replay(for conversationId: String?) async {
+        guard let id = conversationId,
+              let data = lastAudioByConversation[id] else { return }
         cancel()
+        playingConversation = id
         await play(data)
+    }
+
+    /// Drop the per-conversation audio cache (e.g. when the conversation is
+    /// closed). The currently-playing audio is unaffected if it belongs to a
+    /// different conversation.
+    func clearCache(for conversationId: String) {
+        lastSpokenByConversation.removeValue(forKey: conversationId)
+        lastAudioByConversation.removeValue(forKey: conversationId)
+        if playingConversation == conversationId {
+            cancel()
+        }
     }
 
     func pause() {
@@ -110,10 +157,13 @@ final class TTSPlayer: NSObject {
     }
 
     /// Stop ongoing playback AND abandon any in-flight summary/tts fetch.
+    /// Cached per-conversation audio is preserved — only the live playback
+    /// state and pending fetch are torn down.
     func cancel() {
         generation += 1
         player?.stop()
         player = nil
+        playingConversation = nil
         if state == .playing || state == .paused || state == .fetching {
             state = .idle
         }
@@ -124,6 +174,7 @@ final class TTSPlayer: NSObject {
         generation += 1
         player?.stop()
         player = nil
+        playingConversation = nil
         state = .idle
     }
 
@@ -162,6 +213,7 @@ final class TTSPlayer: NSObject {
             if (json["fallback"] as? Bool) == true { return nil }
             return (json["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
+            telemetry?.warn("tts.summary.failed", props: ["error": error.localizedDescription])
             return nil
         }
     }
@@ -180,11 +232,16 @@ final class TTSPlayer: NSObject {
             let (data, response) = try await URLSession.shared.data(for: req)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 state = .error("TTS HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+                telemetry?.error(
+                    "tts.http.failed",
+                    props: ["status": String((response as? HTTPURLResponse)?.statusCode ?? -1)]
+                )
                 return nil
             }
             return data
         } catch {
             state = .error("TTS 请求失败: \(error.localizedDescription)")
+            telemetry?.error("tts.request.failed", error: error)
             return nil
         }
     }
@@ -195,6 +252,7 @@ extension TTSPlayer: AVAudioPlayerDelegate {
         Task { @MainActor in
             self.state = .idle
             self.player = nil
+            self.telemetry?.log("tts.play.finished", props: ["success": String(flag)])
         }
     }
     nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {

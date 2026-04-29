@@ -34,10 +34,24 @@ export type ClientMessage =
       decision: "allow" | "deny";
       // Optional: if supplied, backend routes O(1) instead of scanning runs.
       runId?: string;
+      // Optional: tool name for logging/audit
+      toolName?: string;
     }
   | { type: "interrupt"; runId?: string }
   | { type: "fs_subscribe"; cwd: string }
-  | { type: "fs_unsubscribe"; cwd: string };
+  | { type: "fs_unsubscribe"; cwd: string }
+  | {
+      // Subscribe to incremental jsonl changes for a Claude Code session.
+      // Backend tails ~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl from
+      // `fromByteOffset` (defaults to current EOF) and pushes one
+      // `session_event` per new normalized entry. Used by Seaidea to mirror
+      // a session that another Claude Code client is actively driving.
+      type: "session_subscribe";
+      cwd: string;
+      sessionId: string;
+      fromByteOffset?: number;
+    }
+  | { type: "session_unsubscribe"; cwd: string; sessionId: string };
 
 export type ServerMessage =
   | { type: "sdk_message"; runId: string; message: unknown }
@@ -65,4 +79,16 @@ export type ServerMessage =
       cwd: string;
       change: "add" | "change" | "unlink" | "addDir" | "unlinkDir";
       relPath: string;
+    }
+  | {
+      // One normalized jsonl entry from a subscribed session. `entry` is
+      // already filtered through normalizeJsonlEntry — same shape as items
+      // returned by /api/sessions/transcript. `byteOffset` is the file
+      // position right after this line, so clients can reconnect with
+      // `fromByteOffset = byteOffset` to resume without gaps.
+      type: "session_event";
+      cwd: string;
+      sessionId: string;
+      byteOffset: number;
+      entry: unknown;
     };

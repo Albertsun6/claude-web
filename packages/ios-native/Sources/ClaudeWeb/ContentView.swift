@@ -9,125 +9,316 @@ struct ContentView: View {
     @Environment(VoiceRecorder.self) private var recorder
     @Environment(TTSPlayer.self) private var tts
     @Environment(VoiceSession.self) private var voice
+    @Environment(ProjectRegistry.self) private var registry
     @State private var draft: String = ""
     @State private var showSettings = false
+    @State private var showDrawer = false
 
     var body: some View {
+        GeometryReader { geo in
+            let drawerWidth = min(geo.size.width * 0.85, 320)
+            ZStack(alignment: .leading) {
+                mainContent
+                    // Edge-swipe from the left opens the drawer. Constrained
+                    // to the leftmost 30pt + horizontal movement dominant
+                    // over vertical so list scrolls don't trigger it.
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 20)
+                            .onEnded { val in
+                                let startX = val.startLocation.x
+                                let dx = val.translation.width
+                                let dy = val.translation.height
+                                guard !showDrawer else { return }
+                                if startX < 30 && dx > 60 && abs(dx) > abs(dy) * 2 {
+                                    withAnimation { showDrawer = true }
+                                }
+                            }
+                    )
+                    .overlay {
+                        if showDrawer {
+                            // Tap or swipe on the dim overlay closes the drawer.
+                            Color.black.opacity(0.4)
+                                .ignoresSafeArea()
+                                .onTapGesture {
+                                    withAnimation { showDrawer = false }
+                                }
+                                .gesture(
+                                    DragGesture(minimumDistance: 20)
+                                        .onEnded { val in
+                                            if val.translation.width < -40 {
+                                                withAnimation { showDrawer = false }
+                                            }
+                                        }
+                                )
+                                .transition(.opacity)
+                        }
+                    }
+                if showDrawer {
+                    DrawerContent(
+                        isOpen: $showDrawer,
+                        showSettings: $showSettings
+                    )
+                    .frame(width: drawerWidth)
+                    .frame(maxHeight: .infinity)
+                    .background(Color(.systemBackground))
+                    .ignoresSafeArea(edges: .bottom)
+                    .transition(.move(edge: .leading))
+                    // simultaneousGesture (not .gesture) so the drawer's
+                    // inner List/ScrollView still scrolls vertically while
+                    // a horizontal-dominant swipe closes the drawer.
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 30)
+                            .onEnded { val in
+                                let dx = val.translation.width
+                                let dy = val.translation.height
+                                if dx < -50 && abs(dx) > abs(dy) * 2 {
+                                    withAnimation { showDrawer = false }
+                                }
+                            }
+                    )
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: showDrawer)
+        }
+        .dynamicTypeSize(settings.dynamicTypeSize)
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
+        .sheet(item: Binding(
+            get: { client.currentPendingPermission },
+            set: { _ in /* dismissed by replyPermission */ }
+        )) { req in
+            PermissionSheet(request: req, client: client) { decision in
+                client.replyPermission(req, decision: decision)
+            }
+            .presentationDetents([.medium])
+        }
+    }
+
+    private var mainContent: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                connectionChip
-                if settings.permissionMode == "bypassPermissions" {
-                    // Persistent danger reminder. User asked for Bypass to
-                    // skip per-tool prompts, but the reviewer flagged that
-                    // having this silently persistent across restarts is
-                    // risky on a voice-input device — easy to forget.
+                if !isConnected, let label = nonConnectedLabel {
+                    // Connection problem banner — only when NOT connected.
+                    // Green/connected state is signaled by the dot in toolbar
+                    // and doesn't need a banner.
                     HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.white)
-                        Text("Bypass 已开启 · Claude 可执行任何工具")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white)
+                        Circle().fill(chipColor).frame(width: 6, height: 6)
+                        Text(label).font(.caption2).foregroundStyle(.secondary)
                         Spacer()
                     }
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.red)
+                    .padding(.vertical, 4)
+                    .background(.bar)
                 }
-                if let err = voice.lastError {
-                    HStack {
+                if let err = voice.displayError {
+                    HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
-                        Text(err).font(.caption)
-                        Spacer()
+                        Text(err)
+                            .font(.caption)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
                         Button("关闭") {
-                            voice.lastError = nil
+                            voice.dismissError()
                         }
                         .font(.caption)
                     }
                     .padding(8)
                     .background(.orange.opacity(0.15))
                 }
-                ChatListView(messages: client.messages)
+                ChatListView(messages: client.currentMessages)
                     .frame(maxHeight: .infinity)
                 Divider()
+                if !client.currentPendingQueue.isEmpty {
+                    QueueStrip(
+                        queue: client.currentPendingQueue,
+                        onRemove: { id in client.removeQueuedPrompt(id: id) }
+                    )
+                }
                 InputBar(
                     draft: $draft,
-                    busy: client.busy,
-                    onSend: send,
+                    cwd: currentCwd,
+                    busy: client.currentBusy,
+                    onSend: { attachments in send(attachments) },
+                    onQueue: { attachments in enqueue(attachments) },
                     onStop: client.interrupt,
                     onTranscript: { text in
                         if voice.active {
-                            client.sendPrompt(text, cwd: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
+                            client.sendPromptCurrent(text, defaultCwdForNew: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
                         } else {
                             draft = text
                         }
                     }
                 )
             }
-            .navigationTitle("Claude")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        if voice.active { voice.exit() } else { voice.enter() }
-                    } label: {
-                        Label(
-                            voice.active ? "退出语音模式" : "进入语音模式",
-                            systemImage: voice.active ? "headphones.circle.fill" : "headphones"
-                        )
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(voice.active ? .green : .accentColor)
+                    HStack(spacing: 8) {
+                        Button {
+                            withAnimation { showDrawer = true }
+                        } label: {
+                            Image(systemName: "line.3.horizontal")
+                                .accessibilityLabel("打开抽屉")
+                        }
+                        // Show a colored dot ONLY when something's wrong —
+                        // healthy connection is silent (no clutter). Errors
+                        // get a red dot here AND the verbose banner below.
+                        if !isConnected {
+                            Circle()
+                                .fill(chipColor)
+                                .frame(width: 8, height: 8)
+                                .accessibilityLabel("连接状态：\(chipLabel)")
+                        }
                     }
-                    .accessibilityLabel(voice.active ? "退出语音模式" : "进入语音模式")
+                }
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Text(currentProjectName)
+                            .font(.headline)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if settings.permissionMode == "bypassPermissions" {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                                .font(.system(size: 12))
+                                .accessibilityLabel("Bypass 模式：自动允许所有工具")
+                        }
+                        if client.activeRunCount > 0 {
+                            Text("\(client.activeRunCount)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(.orange, in: .capsule)
+                                .accessibilityLabel("\(client.activeRunCount) 个对话进行中")
+                        }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
+                    HStack(spacing: 6) {
+                        ttsControls
+                        // Soft pill — minimal chrome, blends into the nav bar
+                        // but still readable as tap-to-switch.
+                        Button {
+                            withAnimation { showDrawer = true }
+                        } label: {
+                            HStack(spacing: 4) {
+                                statusIndicator
+                                followIndicator
+                                Text(currentTitle)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Color(.tertiarySystemFill), in: .capsule)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("当前对话 \(currentTitle)，点击打开抽屉")
                     }
                 }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
-            .sheet(item: Binding(
-                get: { client.pendingPermission },
-                set: { _ in /* dismissed by replyPermission */ }
-            )) { req in
-                PermissionSheet(request: req) { decision in
-                    client.replyPermission(req, decision: decision)
-                }
-                .presentationDetents([.medium])
             }
         }
     }
 
-    private var connectionChip: some View {
-        HStack(spacing: 6) {
-            Circle().fill(chipColor).frame(width: 8, height: 8)
-            Text(chipLabel).font(.caption).foregroundStyle(.secondary)
-            Spacer()
-            ttsControls
-            Text(settings.cwd.split(separator: "/").last.map(String.init) ?? settings.cwd)
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+    private var isConnected: Bool {
+        client.state == .connected
+    }
+
+    private var nonConnectedLabel: String? {
+        switch client.state {
+        case .connected: return nil
+        case .connecting: return "连接中…"
+        case .disconnected: return "未连接"
+        case .error(let msg): return "失败: \(msg)"
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.bar)
+    }
+
+    private var currentTitle: String {
+        if let id = client.currentConversationId,
+           let conv = client.conversations[id] {
+            return conv.title
+        }
+        return "新建"
+    }
+
+    private var currentCwd: String {
+        if let id = client.currentConversationId,
+           let conv = client.conversations[id] {
+            return conv.cwd
+        }
+        return settings.cwd
+    }
+
+    /// Project name shown in the toolbar's principal slot. Falls back to
+    /// the cwd's basename if the cwd isn't registered as a server project,
+    /// and to "Seaidea" when there's no current conversation at all.
+    private var currentProjectName: String {
+        guard let id = client.currentConversationId,
+              let conv = client.conversations[id] else {
+            return "Seaidea"
+        }
+        if let project = registry.project(forCwd: conv.cwd) {
+            return project.name
+        }
+        let base = (conv.cwd as NSString).lastPathComponent
+        return base.isEmpty ? "Seaidea" : base
+    }
+
+    /// Indicator shown when the current conversation is mirroring a
+    /// Claude Code session running in another client. Tap-to-switch via
+    /// the chip already opens the drawer; user takes over by typing a
+    /// prompt (BackendClient.sendPrompt unsubscribes automatically).
+    @ViewBuilder
+    private var followIndicator: some View {
+        if client.isFollowing(client.currentConversationId) {
+            Image(systemName: "dot.radiowaves.left.and.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.green)
+                .symbolEffect(.pulse, isActive: true)
+                .accessibilityLabel("正在跟随 Claude Code 会话")
+        }
+    }
+
+    /// Tiny prefix icon inside the conversation chip. Mirrors the most
+    /// load-bearing slice of `voice.state` so the user can tell at a glance
+    /// whether Claude is recording / transcribing / thinking — without
+    /// having to look at the chat list. TTS-playing/paused states are
+    /// intentionally omitted because `ttsControls` already shows them
+    /// explicitly with playback buttons. Errors live in the banner.
+    @ViewBuilder
+    private var statusIndicator: some View {
+        switch voice.state {
+        case .recording:
+            Image(systemName: "mic.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.red)
+        case .transcribing:
+            Image(systemName: "waveform")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.blue)
+                .symbolEffect(.variableColor.iterative, isActive: true)
+        case .thinking:
+            Image(systemName: "ellipsis")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.orange)
+                .symbolEffect(.pulse, isActive: true)
+        case .idle, .playingTTS, .pausedTTS, .error:
+            EmptyView()
+        }
     }
 
     @ViewBuilder
     private var ttsControls: some View {
-        if voice.state == .error("") || isErrored {
-            Button {
-                voice.dismissError()
-            } label: {
-                Label("清除错误", systemImage: "exclamationmark.triangle.fill")
-                    .labelStyle(.iconOnly)
-                    .foregroundStyle(.orange)
-            }
-        }
+        // Error indicator removed — all voice/TTS errors now surface through
+        // the single banner above ChatListView (driven by voice.displayError).
         switch tts.state {
         case .fetching:
             ProgressView().scaleEffect(0.7)
@@ -146,8 +337,11 @@ struct ContentView: View {
                 Image(systemName: "stop.fill")
             }
         case .idle:
-            if tts.hasReplay {
-                Button { Task { await tts.replay() } } label: {
+            if tts.hasReplay(for: client.currentConversationId) {
+                Button {
+                    let convId = client.currentConversationId
+                    Task { await tts.replay(for: convId) }
+                } label: {
                     Image(systemName: "arrow.counterclockwise")
                 }
             }
@@ -156,13 +350,7 @@ struct ContentView: View {
         }
     }
 
-    private var isErrored: Bool {
-        if case .error = recorder.state { return true }
-        if case .error = tts.state { return true }
-        return false
-    }
-
-    private var chipColor: Color {
+private var chipColor: Color {
         switch client.state {
         case .connected: return .green
         case .connecting: return .yellow
@@ -180,342 +368,66 @@ struct ContentView: View {
         }
     }
 
-    private func send() {
+    private func send(_ attachments: [ImageAttachment] = []) {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        client.sendPrompt(text, cwd: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
+        let atts: [ImageAttachment]? = attachments.isEmpty ? nil : attachments
+        guard !text.isEmpty || atts != nil else { return }
+        client.sendPromptCurrent(
+            text.isEmpty ? "(图片)" : text,
+            defaultCwdForNew: settings.cwd,
+            model: settings.model,
+            permissionMode: settings.permissionMode,
+            attachments: atts
+        )
+        draft = ""
+    }
+
+    private func enqueue(_ attachments: [ImageAttachment] = []) {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let atts: [ImageAttachment]? = attachments.isEmpty ? nil : attachments
+        guard !text.isEmpty || atts != nil else { return }
+        client.enqueuePromptCurrent(
+            text.isEmpty ? "(图片)" : text,
+            model: settings.model,
+            permissionMode: settings.permissionMode,
+            attachments: atts
+        )
         draft = ""
     }
 }
 
-private struct ChatListView: View {
-    let messages: [ChatLine]
+// MARK: - QueueStrip
+
+private struct QueueStrip: View {
+    let queue: [QueuedPrompt]
+    let onRemove: (String) -> Void
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(messages) { line in
-                        ChatLineView(line: line)
-                            .id(line.id)
-                    }
-                }
-                .padding(12)
-            }
-            .onChange(of: messages.last?.id) { _, newID in
-                guard let newID else { return }
-                withAnimation { proxy.scrollTo(newID, anchor: .bottom) }
-            }
-            // Also follow assistant streaming updates (id stays same, text grows).
-            .onChange(of: messages.last?.text) { _, _ in
-                guard let last = messages.last else { return }
-                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-            }
-        }
-    }
-}
-
-private struct ChatLineView: View {
-    let line: ChatLine
-
-    var body: some View {
-        switch line.role {
-        case .user:
-            HStack {
-                Spacer(minLength: 40)
-                Text(line.text)
-                    .padding(10)
-                    .background(Color.accentColor.opacity(0.18), in: .rect(cornerRadius: 12))
-            }
-        case .assistant:
-            Text(line.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-        case .system:
-            Text(line.text)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 2)
-        case .error:
-            Text(line.text)
-                .font(.caption)
-                .foregroundStyle(.red)
-                .padding(8)
-                .background(.red.opacity(0.08), in: .rect(cornerRadius: 8))
-        }
-    }
-}
-
-private struct InputBar: View {
-    @Binding var draft: String
-    let busy: Bool
-    let onSend: () -> Void
-    let onStop: () -> Void
-    let onTranscript: (String) -> Void
-
-    @Environment(VoiceRecorder.self) private var recorder
-
-    var body: some View {
-        VStack(spacing: 6) {
-            // Recorder status hint above the bar
-            if recorder.state != .idle {
-                HStack(spacing: 6) {
-                    Circle().fill(statusColor).frame(width: 8, height: 8)
-                    Text(statusLabel).font(.caption).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-            }
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("输入指令，或按住麦克风说话…", text: $draft, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...4)
-                    .submitLabel(.send)
-                    .onSubmit(onSend)
-                pttButton
-                if busy {
-                    Button(role: .destructive, action: onStop) {
-                        Image(systemName: "stop.fill")
-                            .frame(width: 44, height: 44)
-                    }
-                } else {
-                    Button(action: onSend) {
-                        Image(systemName: "paperplane.fill")
-                            .frame(width: 44, height: 44)
-                    }
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.bar)
-    }
-
-    /// Hold-to-talk: press starts, release stops + transcribes.
-    /// We use a long-press gesture with min 0 sec so it engages immediately.
-    private var pttButton: some View {
-        Button {
-            // Tap-to-toggle for accessibility — tap once starts, tap again stops.
-            Task { await togglePTT() }
-        } label: {
-            Image(systemName: recordingIcon)
-                .frame(width: 44, height: 44)
-                .foregroundStyle(recordingFG)
-                .background(recordingBG, in: .circle)
-        }
-        .buttonStyle(.plain)
-        .simultaneousGesture(
-            // Hold-to-talk: starts on press, transcribes on release.
-            // minimumDistance > 0 prevents the tap recognizer from firing for holds.
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    if recorder.state == .idle {
-                        Task { await recorder.start() }
-                    }
-                }
-                .onEnded { _ in
-                    if recorder.state == .recording {
-                        Task {
-                            if let text = await recorder.stopAndTranscribe(), !text.isEmpty {
-                                onTranscript(text)
-                            }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 12)
+                ForEach(queue) { item in
+                    HStack(spacing: 4) {
+                        Text(String(item.text.prefix(28)) + (item.text.count > 28 ? "…" : ""))
+                            .font(.caption)
+                            .lineLimit(1)
+                        Button { onRemove(item.id) } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .semibold))
                         }
+                        .buttonStyle(.plain)
                     }
-                }
-        )
-        .disabled(busy)
-    }
-
-    private func togglePTT() async {
-        switch recorder.state {
-        case .idle:
-            await recorder.start()
-        case .recording:
-            if let text = await recorder.stopAndTranscribe(), !text.isEmpty {
-                onTranscript(text)
-            }
-        default:
-            break
-        }
-    }
-
-    private var recordingIcon: String {
-        switch recorder.state {
-        case .recording: return "mic.fill"
-        case .uploading: return "waveform"
-        default: return "mic"
-        }
-    }
-    private var recordingFG: Color {
-        recorder.state == .idle ? .accentColor : .white
-    }
-    private var recordingBG: Color {
-        switch recorder.state {
-        case .recording: return .red
-        case .uploading: return .blue
-        default: return Color.accentColor.opacity(0.15)
-        }
-    }
-    private var statusColor: Color {
-        switch recorder.state {
-        case .recording: return .red
-        case .uploading: return .blue
-        case .error: return .orange
-        default: return .gray
-        }
-    }
-    private var statusLabel: String {
-        switch recorder.state {
-        case .recording: return "录音中…松开发送"
-        case .uploading: return "上传识别中…"
-        case .error(let msg): return msg
-        default: return ""
-        }
-    }
-}
-
-struct SettingsView: View {
-    @Environment(AppSettings.self) private var settings
-    @Environment(\.dismiss) private var dismiss
-    @State private var draftURL: String = ""
-    @State private var draftCwd: String = ""
-    @State private var draftMode: String = "plan"
-
-    var body: some View {
-        @Bindable var s = settings
-        NavigationStack {
-            Form {
-                Section("Backend") {
-                    TextField("https://mymac.tailcf3ccf.ts.net", text: $draftURL)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
-                    Button("用模拟器默认 (localhost:3030)") {
-                        draftURL = "http://localhost:3030"
-                    }
-                    Button("用 Tailscale 默认") {
-                        draftURL = "https://mymac.tailcf3ccf.ts.net"
-                    }
-                }
-                Section("工作目录") {
-                    TextField("/Users/you/Desktop", text: $draftCwd)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-                Section {
-                    SecureField("CLAUDE_WEB_TOKEN（可选）", text: $s.authToken)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                } header: {
-                    Text("鉴权")
-                } footer: {
-                    Text("如果 backend 启用了 token 认证，粘贴这里。WS 用 ?token= 拼，HTTP 用 Bearer。改完会自动重连。")
-                }
-                Section("模型") {
-                    Picker("模型", selection: $s.model) {
-                        Text("Haiku 4.5（快、便宜，默认）").tag("claude-haiku-4-5")
-                        Text("Sonnet 4.6（平衡）").tag("claude-sonnet-4-6")
-                        Text("Opus 4.7（最强、最贵）").tag("claude-opus-4-7")
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                }
-                Section {
-                    Picker("权限模式", selection: $draftMode) {
-                        Text("Plan（只读规划，最安全）").tag("plan")
-                        Text("Default（每次工具问允许 / 拒绝）").tag("default")
-                        Text("Accept Edits（自动允许编辑，Bash 仍问）").tag("acceptEdits")
-                        Text("Bypass（自动允许所有工具）⚠️").tag("bypassPermissions")
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                } header: {
-                    Text("权限模式")
-                } footer: {
-                    Text("Bypass 模式下 Claude 可以直接跑 Bash / Edit / Write 等任何工具，不再弹询问。**只在你完全信任当前 cwd + 会话内容时**用。")
-                }
-                Section("语音播报") {
-                    Toggle("自动播报回答", isOn: $s.ttsEnabled)
-                    Picker("风格", selection: $s.speakStyle) {
-                        Text("概要（Haiku 改写为 1-4 句）").tag("summary")
-                        Text("逐句（原文）").tag("verbatim")
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                    .disabled(!s.ttsEnabled)
-                    Toggle("慢速朗读（-15%）", isOn: $s.slowTts)
-                        .disabled(!s.ttsEnabled)
-                }
-                Section {
-                    Toggle("后台保活（实验性）", isOn: $s.silentKeepalive)
-                } header: {
-                    Text("实验功能")
-                } footer: {
-                    Text("开启后会一直播放 0 音量循环音频，**显著提高**切应用 / 锁屏后 WebSocket 保持连接的概率，但**不保证 100% 不断**（iOS 在内存压力 / 网络切换 / 用户滑掉 app 等情况下仍可能挂起）。Apple 视为对后台音频的滥用，**不要在 App Store 版本启用**。仅供 sideload 个人用，电池影响很小。")
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.secondary.opacity(0.15), in: .capsule)
                 }
             }
-            .navigationTitle("设置")
-            .toolbar {
-                // Single "完成" button. Pickers / Toggles bind directly to
-                // $s.xxx so they commit inline; only the textfield drafts
-                // (URL / cwd) and permission mode need explicit save here.
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") {
-                        if let u = URL(string: draftURL) { s.backendURL = u }
-                        s.cwd = draftCwd
-                        s.permissionMode = draftMode
-                        dismiss()
-                    }
-                    .fontWeight(.bold)
-                }
-            }
-            .onAppear {
-                draftURL = settings.backendURL.absoluteString
-                draftCwd = settings.cwd
-                draftMode = settings.permissionMode
-            }
+            .padding(.trailing, 12)
+            .padding(.vertical, 6)
         }
-    }
-}
-
-struct PermissionSheet: View {
-    let request: PermissionRequest
-    let onDecision: (PermissionDecision) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("工具") {
-                    Text(request.toolName).font(.title3.bold())
-                }
-                Section("内容") {
-                    Text(request.preview)
-                        .font(.body.monospaced())
-                        .textSelection(.enabled)
-                        .lineLimit(10)
-                }
-                Section {
-                    Button(role: .destructive) {
-                        onDecision(.deny)
-                        dismiss()
-                    } label: {
-                        Label("拒绝", systemImage: "xmark.circle.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    Button {
-                        onDecision(.allow)
-                        dismiss()
-                    } label: {
-                        Label("允许", systemImage: "checkmark.circle.fill")
-                            .frame(maxWidth: .infinity)
-                            .fontWeight(.semibold)
-                    }
-                }
-            }
-            .navigationTitle("权限请求")
-            .navigationBarTitleDisplayMode(.inline)
-        }
+        .background(.bar)
     }
 }

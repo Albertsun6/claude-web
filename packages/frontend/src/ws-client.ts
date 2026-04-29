@@ -158,7 +158,7 @@ function handleServerMessage(msg: ServerMessage): void {
     const cwd = runToCwd.get(msg.runId);
     if (store.isToolAllowedForRun(msg.runId, msg.toolName)
       || (cwd && store.isToolAllowedForProject(cwd, msg.toolName))) {
-      send({ type: "permission_reply", requestId: msg.requestId, decision: "allow", runId: msg.runId });
+      send({ type: "permission_reply", requestId: msg.requestId, decision: "allow", runId: msg.runId, toolName: msg.toolName });
       return;
     }
     store.setPendingPermission({
@@ -261,8 +261,9 @@ export function replyPermission(
   requestId: string,
   decision: "allow" | "deny",
   runId?: string,
+  toolName?: string,
 ): void {
-  send({ type: "permission_reply", requestId, decision, runId });
+  send({ type: "permission_reply", requestId, decision, runId, toolName });
   useStore.getState().setPendingPermission(undefined);
 }
 

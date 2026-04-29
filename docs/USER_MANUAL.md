@@ -447,9 +447,11 @@ Safari 分享 → 添加到主屏幕 → 全屏 standalone。
 
 ---
 
-## iOS 原生 app（Claude Voice）
+## iOS 原生 app（Seaidea）
 
 **这是 v1 推荐的手机端方案**。SwiftUI 重写，绕开 PWA 在 iOS 上的诸多约束（autoplay、物理静音键、后台 mic）。Capacitor 路径已标 deprecated。
+
+> Bundle 显示名是 **Seaidea**（避免跟 Anthropic 的 Claude 商标冲突）。Bundle id 仍是 `com.albertsun6.claudeweb-native`。
 
 ### 安装
 
@@ -473,8 +475,9 @@ cd packages/ios-native
 
 | 项 | 默认 | 说明 |
 |---|---|---|
+| 语音模式 | OFF | 进入后顶部锁屏 Now Playing；输入栏 mic 切到自动发送 |
 | Backend | `https://mymac.tailcf3ccf.ts.net`（真机）/ `http://localhost:3030`（模拟器）| Tailscale URL 或 LAN IP |
-| 工作目录 | `/Users/yongqian/Desktop` | Claude 跑命令的 cwd |
+| 浏览起始路径 | `/Users/yongqian/Desktop` | DirectoryPicker（"打开文件夹"）的默认起始位置；新对话不再用它做默认 cwd |
 | 模型 | Haiku 4.5 | 可切 Sonnet 4.6 / Opus 4.7 |
 | 权限模式 | **Plan**（最安全）| Plan / Default / Accept Edits / **Bypass** |
 | Token | 空 | backend 设了 `CLAUDE_WEB_TOKEN` 才填 |
@@ -492,6 +495,44 @@ cd packages/ios-native
 | **Accept Edits** | 自动允许 Edit/Write，Bash 仍弹 |
 | **Bypass** ⚠️ | **自动允许所有工具**。Claude 可直接 `rm -rf` 你的项目。开了主屏顶部会有红色常驻警示条 |
 
+### 项目与对话
+
+**模型**：项目（cwd）是容器，对话挂在项目下。一个项目可以并行多条对话，互不干扰。
+
+**顶部 chip**：
+- 左侧绿点 = 已连接（其他状态：黄=连接中，灰=未连接，红=失败 + 错误信息）
+- 中间标题 "Seaidea" 旁边的橙色数字 = 全局活跃 turn 数
+- 右侧对话名 + ▼ 是切换器入口，点开列表
+
+**切换器全屏 sheet**：
+- 顶部 **+ 新建对话** 按钮
+- 下方按项目分组（cwd 相同算一个项目），section header 显示项目名 + 完整路径
+  - 如果 cwd 没在服务器 `~/.claude-web/projects.json` 注册（少见），header 后挂 "·未注册" 橙色标记
+- 行右滑 → 关闭对话（仅卸载内存，jsonl 不删）
+
+**新建对话流程**：
+1. 点 **+ 新建对话**
+2. **名称**字段灰字预填 `<目录名> <序号>`（按 cwd 计数），可改
+3. **工作目录**：
+   - 顶部 **打开文件夹** → 进 DirectoryPicker：面包屑 + 子目录 + 上一级 + **新建文件夹…**（直接 mkdir 并自动选中）
+   - 下方 **已打开**列表：本机内存里出现过的 cwd（按最近用排序），点击直接选；列表为空时显示空态文字
+4. 选了 cwd 后名称随之更新（除非你已自定义）
+5. 点右上 **开始**
+
+**持久化**：
+- 对话 metadata + 消息历史缓存到 `~/Library/.../Application Support/com.albertsun6.claudeweb-native/cache/`（Codable JSON，会话最多 50 条 LRU）
+- 首次发 prompt → CLI 回 systemInit 立即把 `sessionId` 写到缓存，**杀掉 app 重启 sessionId 不会丢**，下次 prompt 用 `--resume` 接上原 jsonl
+- 项目目录注册到服务器 `~/.claude-web/projects.json`（任意设备的 backend 都能看到同一份项目列表）
+- 重启 app → 自动恢复上次焦点对话 + 消息
+
+**离线行为**：
+- WS 断 → chip 显示"未连接"或"失败"，输入栏不能发新 prompt
+- 但已加载的对话**仍可读** —— 都从本地 cache 来
+- 重新连接后 backend 状态回来
+
+**TTS 缓存**：
+每条对话独立缓存最后一段语音 mp3。切到对话 A 听完一段 → 切到 B 发新内容 → 切回 A 重听按钮 ↻ 还在，按下播 A 的旧回答（不重调 Haiku）。
+
 ### 前台 PTT（推按说话）
 
 输入框右下圆形 mic 按钮：
@@ -501,7 +542,9 @@ cd packages/ios-native
 
 转写走 Mac 后端 `/api/voice/transcribe`（whisper-cli + 项目词表 + Haiku cleanup）。识别率比 SFSpeechRecognizer 高，但要后端在线。
 
-### 语音模式（左上耳机图标）
+### 语音模式（设置里的开关）
+
+设置 ⚙️ → 顶部"语音模式"行点击切换。F1c2 之后从顶栏耳机按钮挪到了设置里（顶栏腾给项目+对话切换）。
 
 进入语音模式后：
 - PTT **不再进输入框，自动发送**（hands-free 优化）
@@ -525,9 +568,10 @@ cd packages/ios-native
 
 ### TTS 控制
 
-顶部状态栏右侧（cwd 旁边）：
+顶部 chip 中段：
 - **⏸ 暂停** / **▶ 继续** / **⏹ 停止**：在 TTS 播放期间显示
 - **↻ 重听**：上一段播完后显示，**用缓存 mp3 直接重播**，不重调 Haiku
+- 切对话 → 当前播放停（不会跨对话串音）；缓存仍在，切回去 ↻ 还能听
 
 ### 可用 / 不可用一览
 
@@ -542,15 +586,25 @@ cd packages/ios-native
 | TTS 播放期间锁屏 play/pause 按钮控制 | ✅ |
 | 语音模式自动发送（hands-free） | ✅ |
 | 后台保活 → 切 app WS 不断 | ⚠️ 实验性，大多数情况可用 |
+| 多对话并行（不同 cwd 或同 cwd 都行） | ✅ |
+| 切对话不打断后台正在跑的 turn | ✅ |
+| 切对话时停 TTS / 每对话独立 ↻ 缓存 | ✅ |
+| 杀 app 重启恢复对话 + 消息 + sessionId 绑定 | ✅ |
+| 项目跨设备共享列表（服务器 projects.json）| ✅ |
+| DirectoryPicker 浏览 + 新建文件夹 | ✅ |
+| 离线只读最近对话 | ✅（cache 命中）|
 | **闲置语音模式 → 锁屏 → 用 play 按键启动新录音** | ❌ **iOS 平台限制** |
 | **AirPods 长按柄触发 PTT** | ❌ Apple 不开放给 app |
 | **后台麦克风长时间录音** | ❌ Apple 只发给 VOIP entitlement |
+| 历史 jsonl session 浏览 / 一键 resume | ⏳ F1c4-c5 |
+| 项目重命名 / 删除（iOS 内）| ⏳ F1c4 / web 端做 |
 
 ### 已知限制（不打算修）
 
 1. **Now Playing 卡片只在 TTS 真在播时稳定显示**。idle 语音模式 + silent keepalive 也写了 metadata，但 iOS 不一定显示。这是平台行为（参考 [WWDC22 PushToTalk](https://developer.apple.com/videos/play/wwdc2022/10117/)），不投入修
 2. **首次进入语音模式不自动开 keepalive**，要手动到设置开。设计如此（保活独立于语音模式）
-3. **App 名"Claude Voice"** 跟 Anthropic 官方"Claude" app 区分；图标暂用 Capacitor 占位
+3. **App 名"Seaidea"** 跟 Anthropic 官方"Claude" app 区分；图标暂用 Capacitor 占位
+4. **新对话不发 prompt 也会写 cache**，便于"创建后切走再回来"。空对话 metadata 占用极小，不主动清理
 
 ### 故障排查
 
@@ -561,16 +615,43 @@ cd packages/ios-native
 | 顶部小圆点黄/红 | iPhone Tailscale 没开 / Mac backend 死 / 网络切换中 |
 | 切其它 app 回来连接断 | 设置开"后台保活"；或接受偶尔重连 |
 | TTS 没响 | 检查 iPhone 物理静音键、AirPods 路由 |
-| 录音转写空 | 麦权限被拒 → 设置 → Claude Voice → 麦克风 |
+| 录音转写空 | 麦权限被拒 → 设置 → Seaidea → 麦克风 |
+| 切到对话发现消息没了 | cache 没命中 / 对话刚被关；重新发 prompt 会以同 sessionId resume（如果绑过）|
+| 项目分组 header 显示 "·未注册" | 服务器项目注册失败（backend 死过 / token 错）；下次有网时手动重发个 prompt 可触发再次注册 |
 | Bypass 误开 | 主屏顶部红条提示；设置改回 Plan |
 | 锁屏 play 按钮没反应 | 平台限制，不是 bug |
 
-### 后续工作（M5）
+### 埋点 / 调试日志
 
-- TestFlight 配置 + Apple Developer $99 订阅
+设置 ⚙️ 底部"调试 / 埋点"区块：
+- **查看最近事件**：进 in-app 列表，倒序显示内存里 ring 的事件（最多 1000 条）
+- **上次上报**：显示最近一次成功上报到后端的相对时间
+- **立即上报**：触发一次 flush
+
+事件写到后端 `~/.claude-web/telemetry.jsonl`（10 MB 滚动到 `.1`），Mac 上 `tail -f` / `jq` 排查。
+
+iOS 埋点的关键事件（用于排查 bug）：
+- `app.launch` / `app.foreground` / `app.background` / `app.terminate`
+- `ws.connect.start` / `ws.connect.ok` / `ws.receive.failed`
+- `route.orphan_runid` / `route.no_runid` / `route.conversation_missing` —— **路由 drop 信号**，并行对话或重连后出现说明有 bug
+- `prompt.send` / `prompt.send.failed` / `prompt.send.not_connected`
+- `session.bound`（systemInit 绑了 sessionId）
+- `turn.completed` / `turn.error` / `turn.interrupted`
+- `permission.request`
+- `project.open` / `project.open.failed`
+- `cache.decode.failed` / `cache.encode.failed` / `cache.lru.evicted`
+- `registry.refresh.ok` / `registry.refresh.offline`
+
+不捕：prompt 文本、回答内容、文件内容（PII）。捕：内部 ID（conversationId / sessionId / runId）、错误描述、HTTP 状态码、模型名 / 权限模式。
+
+### 后续工作
+
+- **F1c4** 抽屉 UX（项目侧栏，把切换器从 sheet 改成左侧 drawer；项目重命名 / 关闭）
+- **F1c5** 历史 jsonl session 浏览 + 一键 resume
+- **A6** 工具调用卡片（Edit/Bash/Read 各自卡片渲染）+ **A7** Markdown
+- TestFlight 配置 + Apple Developer $99 订阅（M5）
 - 真机长时间使用稳定性验证
 - Mac mini 迁移（见 [docs/MAC_MINI_MIGRATION.md](docs/MAC_MINI_MIGRATION.md)）
-- 新功能（项目列表 / 历史会话浏览 / Claude Code skills 调用 / ...）按需
 
 ---
 

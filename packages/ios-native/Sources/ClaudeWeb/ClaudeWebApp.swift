@@ -1,4 +1,7 @@
-// App entry point. Wires Settings + BackendClient into the SwiftUI environment.
+// App entry point. Wires Settings + BackendClient + Cache + ProjectRegistry +
+// HTTP API clients into the SwiftUI environment, runs the bootstrap sequence
+// on launch (cache → reconcile with server), and hooks onConversationDirty
+// so every state-changing event flushes to disk.
 
 import SwiftUI
 
@@ -9,6 +12,11 @@ struct ClaudeWebApp: App {
     @State private var recorder: VoiceRecorder
     @State private var tts: TTSPlayer
     @State private var voice: VoiceSession
+    @State private var cache: Cache
+    @State private var projectsAPI: ProjectsAPI
+    @State private var sessionsAPI: SessionsAPI
+    @State private var registry: ProjectRegistry
+    @State private var telemetry: Telemetry
 
     init() {
         let s = AppSettings()
@@ -24,6 +32,19 @@ struct ClaudeWebApp: App {
             settings: { s }
         ))
         _voice = State(initialValue: VoiceSession())
+
+        let cacheInst = Cache()
+        _cache = State(initialValue: cacheInst)
+        let projAPI = ProjectsAPI(backend: backendRef, token: tokenRef)
+        _projectsAPI = State(initialValue: projAPI)
+        let sessAPI = SessionsAPI(backend: backendRef, token: tokenRef)
+        _sessionsAPI = State(initialValue: sessAPI)
+        _registry = State(initialValue: ProjectRegistry(
+            cache: cacheInst,
+            projectsAPI: projAPI,
+            sessionsAPI: sessAPI
+        ))
+        _telemetry = State(initialValue: Telemetry(backend: backendRef, token: tokenRef))
     }
 
     var body: some Scene {
@@ -34,37 +55,19 @@ struct ClaudeWebApp: App {
                 .environment(recorder)
                 .environment(tts)
                 .environment(voice)
+                .environment(registry)
+                .environment(telemetry)
+                .environment(cache)
                 .onAppear {
-                    client.connect()
-                    // CRITICAL ORDER: bind() must run BEFORE keepalive apply,
-                    // because applySilentKeepaliveChange reads settings via
-                    // the weak ref bind() injects. Calling apply first would
-                    // see settings == nil and silently no-op the saved
-                    // "after-restart auto-keepalive" expectation.
-                    let ttsRef = tts
-                    let clientRef = client
-                    let voiceRef = voice
-                    client.onTurnComplete = { [weak ttsRef, weak clientRef, weak voiceRef] in
-                        guard let tts = ttsRef, let c = clientRef else { return }
-                        guard let lastAssistant = c.messages.last(where: { $0.role == .assistant })?.text else { return }
-                        Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 200_000_000)
-                            await tts.speakAssistantTurn(lastAssistant)
-                            voiceRef?.refresh()
-                        }
-                    }
-                    voice.bind(
-                        recorder: recorder,
-                        tts: tts,
-                        client: client,
-                        settings: settings,
-                        sendPrompt: { [weak clientRef] text in
-                            clientRef?.sendPrompt(text, cwd: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
-                        }
-                    )
-                    // Now safe — settings is bound, applySilentKeepaliveChange
-                    // can see the persisted flag.
-                    voice.applySilentKeepaliveChange()
+                    bootstrap()
+                }
+                .onChange(of: client.currentConversationId) { _, newId in
+                    // Switching conversations cuts off TTS from the previous
+                    // one — otherwise the playback bleeds across conversations
+                    // and the user hears A's reply while looking at B.
+                    tts.cancel()
+                    // Mirror to settings so app restart restores focus.
+                    settings.currentConversationId = newId
                 }
                 .onChange(of: settings.backendURL) { _, newURL in
                     client.backendBase = newURL
@@ -76,12 +79,103 @@ struct ClaudeWebApp: App {
                 // Refresh Now Playing whenever any underlying state shifts.
                 .onChange(of: recorder.state) { _, _ in voice.refresh() }
                 .onChange(of: tts.state) { _, _ in voice.refresh() }
-                .onChange(of: client.busy) { _, _ in voice.refresh() }
+                .onChange(of: client.currentBusy) { _, _ in voice.refresh() }
                 // silentKeepalive toggle takes effect immediately — start
                 // or stop the silent loop without exiting voice mode.
                 .onChange(of: settings.silentKeepalive) { _, _ in
                     voice.applySilentKeepaliveChange()
                 }
+        }
+    }
+
+    /// One-shot launch sequence. Order matters:
+    ///   1. Bind ProjectRegistry to BackendClient so adopt() can route into it
+    ///   2. Hook onConversationDirty → save to Cache (must be set BEFORE
+    ///      adopt() runs, otherwise initial cache read won't trigger writes
+    ///      but that's fine — they're already cached)
+    ///   3. Wire VoiceSession.bind (must precede applySilentKeepaliveChange
+    ///      because the latter dereferences settings via bind's weak ref)
+    ///   4. Connect WS
+    ///   5. Run registry.bootstrap (cache → fetch → reconcile)
+    ///   6. Restore currentConversationId from last session
+    private func bootstrap() {
+        telemetry.log("app.launch")
+        cache.bindTelemetry(telemetry)
+        registry.bindTelemetry(telemetry)
+        registry.bind(client: client)
+        client.bindTelemetry(telemetry)
+        tts.bindTelemetry(telemetry)
+
+        // Persist to disk on every dirty signal. Two writes per signal:
+        //   sessions/<convId>.json — full ChatLine[] for this conversation
+        //   conversations.json     — metadata for ALL conversations
+        // The conversations.json write is necessary every time because the
+        // dirty conversation might have just received its sessionId binding.
+        let cacheRef = cache
+        let clientRef = client
+        client.onConversationDirty = { [weak clientRef] convId in
+            guard let c = clientRef else { return }
+            cacheRef.saveSession(convId, messages: c.stateByConversation[convId]?.messages ?? [])
+            cacheRef.saveConversations(c.conversationsList())
+        }
+
+        let ttsRef = tts
+        let voiceRef = voice
+        client.onCompletedTurn = { [weak ttsRef, weak clientRef, weak voiceRef] turn in
+            guard let tts = ttsRef, let c = clientRef else { return }
+            telemetry.log(
+                "tts.turn.captured",
+                props: [
+                    "source": turn.sessionId == nil ? "live_run" : "followed_session",
+                    "textLen": String(turn.spokenText.count),
+                ],
+                conversationId: turn.conversationId,
+                runId: turn.runId
+            )
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                // If the user switched conversations during the small settle
+                // delay, do not start reading the old conversation.
+                guard c.currentConversationId == turn.conversationId,
+                      c.focusGeneration == turn.focusGeneration else {
+                    telemetry.warn(
+                        "tts.turn.skipped_focus_changed",
+                        props: [
+                            "capturedGeneration": String(turn.focusGeneration),
+                            "currentGeneration": String(c.focusGeneration),
+                        ],
+                        conversationId: turn.conversationId,
+                        runId: turn.runId
+                    )
+                    return
+                }
+                await tts.speakAssistantTurn(turn.spokenText, conversationId: turn.conversationId)
+                voiceRef?.refresh()
+            }
+        }
+
+        voice.bind(
+            recorder: recorder,
+            tts: tts,
+            client: client,
+            settings: settings,
+            sendPrompt: { [weak clientRef] text in
+                clientRef?.sendPromptCurrent(text, defaultCwdForNew: settings.cwd, model: settings.model, permissionMode: settings.permissionMode)
+            }
+        )
+        voice.applySilentKeepaliveChange()
+
+        client.connect()
+
+        // Bootstrap is async — fires in background, UI is already showing the
+        // cache snapshot loaded synchronously by registry.bootstrap.
+        Task { @MainActor in
+            await registry.bootstrap()
+            // Restore last focus AFTER cache replay seeded BackendClient.
+            if let savedId = settings.currentConversationId,
+               client.conversations[savedId] != nil {
+                client.currentConversationId = savedId
+            }
         }
     }
 }

@@ -1,5 +1,20 @@
-// Single WebSocket client to the Mac backend. Reconnects with backoff on drop.
-// Exposes published @Observable state for the UI to bind to.
+// Facade over WebSocketClient + ConversationStore + RunRouter. UI binds
+// to this single object; under the hood each WS message is decoded by
+// the transport, routed via RunRouter to a conversation, and then mutated
+// into ConversationStore by the handler dispatch in `handle(_:)`.
+//
+// Why three pieces instead of one:
+// - WebSocketClient is the only thing that knows about URLSession and
+//   reconnect logic. Easy to swap or test against a mock transport.
+// - ConversationStore is pure state, no networking. Receive-side mutators
+//   are public so this facade can dispatch ServerMessage cases by name.
+// - RunRouter is just a runId→conversationId map; isolating it makes the
+//   "every msg routes; sessionEnded releases" invariant easier to audit.
+//
+// Public API surface here is what ContentView / ProjectRegistry /
+// ClaudeWebApp call. Forwarding properties (state, currentMessages,
+// conversations, etc.) preserve @Observable tracking through the
+// underlying @Observable subobjects.
 
 import Foundation
 import Observation
@@ -7,295 +22,494 @@ import Observation
 @MainActor
 @Observable
 final class BackendClient {
-    enum ConnState: Equatable {
-        case disconnected
-        case connecting
-        case connected
-        case error(String)
-    }
+    private let webSocket: WebSocketClient
+    private let store: ConversationStore
+    private let router: RunRouter
 
-    var state: ConnState = .disconnected
-    var messages: [ChatLine] = []
-    var sessionId: String?
-    var busy: Bool = false
-    var currentRunId: String?
-    /// When non-nil, UI shows a sheet asking allow/deny.
-    var pendingPermission: PermissionRequest?
-
-    /// Invoked once per turn after `session_ended` arrives. App wires this to
-    /// the TTS player so the assistant's reply gets read aloud.
-    var onTurnComplete: (() -> Void)?
-
-    /// User-tweakable backend URL (settings page writes here, persisted in UserDefaults).
-    var backendBase: URL {
-        didSet { reconnect() }
-    }
-
-    /// Optional CLAUDE_WEB_TOKEN. Empty = no auth.
-    /// Read via closure so changes in Settings flow through immediately.
-    private let authToken: () -> String
-
-    private var task: URLSessionWebSocketTask?
-    private var session: URLSession
-    private var reconnectDelay: TimeInterval = 1
-    private var reconnectTask: Task<Void, Never>?
-    private var receiveTask: Task<Void, Never>?
+    private weak var telemetry: Telemetry?
 
     init(backendBase: URL, authToken: @escaping () -> String = { "" }) {
-        self.backendBase = backendBase
-        self.authToken = authToken
-        let config = URLSessionConfiguration.default
-        config.waitsForConnectivity = true
-        config.timeoutIntervalForRequest = 30
-        self.session = URLSession(configuration: config)
-    }
+        let ws = WebSocketClient(backendBase: backendBase, authToken: authToken)
+        self.webSocket = ws
+        self.store = ConversationStore()
+        self.router = RunRouter()
 
-    func connect() {
-        guard task == nil else { return }
-        state = .connecting
-        let scheme = backendBase.scheme == "https" ? "wss" : "ws"
-        var components = URLComponents(url: backendBase, resolvingAgainstBaseURL: false)!
-        components.scheme = scheme
-        components.path = "/ws"
-        // CLAUDE_WEB_TOKEN goes via ?token= so the WS upgrade can be auth'd
-        // before any frames are exchanged (matches the web frontend).
-        let token = authToken()
-        if !token.isEmpty {
-            var items = components.queryItems ?? []
-            items.append(URLQueryItem(name: "token", value: token))
-            components.queryItems = items
+        // Wire transport → router+store. Capturing self weakly avoids a
+        // retain cycle between BackendClient and WebSocketClient.
+        ws.onMessage = { [weak self] msg in
+            self?.handle(msg)
         }
-        guard let wsURL = components.url else { state = .error("bad URL"); return }
-        let t = session.webSocketTask(with: wsURL)
-        task = t
-        t.resume()
-        state = .connected
-        receiveTask = Task { [weak self] in await self?.receiveLoop() }
-    }
-
-    func disconnect() {
-        receiveTask?.cancel()
-        receiveTask = nil
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        task?.cancel(with: .goingAway, reason: nil)
-        task = nil
-        state = .disconnected
-    }
-
-    func reconnect() {
-        disconnect()
-        reconnectDelay = 1
-        connect()
-    }
-
-    private func scheduleReconnect() {
-        reconnectTask?.cancel()
-        let delay = reconnectDelay
-        reconnectTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.task = nil
-                self.connect()
-                self.reconnectDelay = min(delay * 2, 30)
-            }
+        ws.onConnected = { [weak self] in
+            self?.resubscribeFollowedSessions()
         }
     }
 
-    private func receiveLoop() async {
-        guard let t = task else { return }
-        while !Task.isCancelled {
-            do {
-                let msg = try await t.receive()
-                let data: Data
-                switch msg {
-                case .data(let d): data = d
-                case .string(let s): data = s.data(using: .utf8) ?? Data()
-                @unknown default: continue
-                }
-                let server = try ServerMessage.decode(data)
-                handle(server)
-            } catch {
-                state = .error("\(error.localizedDescription)")
-                scheduleReconnect()
-                return
-            }
-        }
+    func bindTelemetry(_ tel: Telemetry) {
+        self.telemetry = tel
+        webSocket.bindTelemetry(tel)
+        store.bindTelemetry(tel)
     }
 
-    private func handle(_ msg: ServerMessage) {
-        switch msg {
-        case .sdkMessage(_, let sdk):
-            switch sdk {
-            case .systemInit(let sessionId, _):
-                if let sessionId { self.sessionId = sessionId }
-            case .assistantText(let text):
-                appendOrAppendToLast(role: .assistant, text: text)
-            case .toolUse(let name):
-                messages.append(ChatLine(role: .system, text: "🔧 \(name)"))
-            case .toolResult, .other:
-                break
-            case .result:
-                break
-            }
-        case .sessionEnded(_, let reason):
-            busy = false
-            currentRunId = nil
-            // Auto-speak only on a clean completion. interrupted / error paths
-            // shouldn't surprise-talk.
-            if reason == "completed" {
-                onTurnComplete?()
-            }
-        case .error(_, let message):
-            messages.append(ChatLine(role: .error, text: message))
-            busy = false
-        case .clearRunMessages(let runId):
-            messages.removeAll { $0.runId == runId }
-        case .permissionRequest(let runId, let requestId, let toolName, let input):
-            // Show modal — Claude is blocked until we reply. Auto-deny if a
-            // newer request arrives (shouldn't happen but defensive).
-            pendingPermission = PermissionRequest(
-                runId: runId, requestId: requestId, toolName: toolName, input: input
-            )
-        case .unknown:
-            break
-        }
+    // MARK: - Forwarded transport API
+
+    var state: ConnState {
+        webSocket.state
     }
 
-    func replyPermission(_ request: PermissionRequest, decision: PermissionDecision) {
+    var backendBase: URL {
+        get { webSocket.backendBase }
+        set { webSocket.backendBase = newValue }
+    }
+
+    func connect() { webSocket.connect() }
+    func disconnect() { webSocket.disconnect() }
+    func reconnect() { webSocket.reconnect() }
+
+    // MARK: - Forwarded store API
+
+    var conversations: [String: Conversation] {
+        store.conversations
+    }
+
+    var stateByConversation: [String: ConversationChatState] {
+        store.stateByConversation
+    }
+
+    var currentConversationId: String? {
+        get { store.currentConversationId }
+        set { store.currentConversationId = newValue }
+    }
+
+    var currentMessages: [ChatLine] { store.currentMessages }
+    var currentBusy: Bool { store.currentBusy }
+    var currentPendingPermission: PermissionRequest? { store.currentPendingPermission }
+    var currentPendingQueue: [QueuedPrompt] { store.currentPendingQueue }
+    var activeRunCount: Int { store.activeRunCount }
+
+    var onConversationDirty: ((String) -> Void)? {
+        get { store.onConversationDirty }
+        set { store.onConversationDirty = newValue }
+    }
+
+    var focusGeneration: Int { store.focusGeneration }
+
+    var onCompletedTurn: ((ConversationStore.CompletedTurn) -> Void)? {
+        get { store.onCompletedTurn }
+        set { store.onCompletedTurn = newValue }
+    }
+
+    @discardableResult
+    func createConversation(cwd: String, title: String? = nil) -> Conversation {
+        store.createConversation(cwd: cwd, title: title)
+    }
+
+    func adopt(_ conversation: Conversation, messages: [ChatLine] = []) {
+        store.adopt(conversation, messages: messages)
+    }
+
+    func conversationsList() -> [Conversation] {
+        store.conversationsList()
+    }
+
+    func sortedConversations() -> [Conversation] {
+        store.sortedConversations()
+    }
+
+    func peekNextAutoName(forCwd cwd: String) -> String {
+        store.peekNextAutoName(forCwd: cwd)
+    }
+
+    func renameConversation(_ id: String, to newTitle: String) {
+        store.renameConversation(id, to: newTitle)
+    }
+
+    // MARK: - Follow mode (live jsonl tail of an external Claude Code session)
+
+    var followingByConversation: [String: ConversationStore.FollowState] {
+        store.followingByConversation
+    }
+
+    /// True iff `convId` is currently following an external session.
+    func isFollowing(_ convId: String?) -> Bool {
+        guard let convId else { return false }
+        return store.followingByConversation[convId] != nil
+    }
+
+    /// Start tailing the jsonl for `(cwd, sessionId)` and routing each new
+    /// entry into `convId`. `fromByteOffset` should be the file size at the
+    /// moment the caller fetched the historical transcript, so the stream
+    /// picks up right after that snapshot.
+    func subscribeSession(convId: String, cwd: String, sessionId: String, fromByteOffset: Int) {
+        store.startFollowing(convId: convId, cwd: cwd, sessionId: sessionId, byteOffset: fromByteOffset)
         Task { [weak self] in
-            try? await self?.send(.permissionReply(
-                requestId: request.requestId,
-                decision: decision.rawValue,
-                runId: request.runId
-            ))
+            try? await self?.webSocket.send(
+                .sessionSubscribe(cwd: cwd, sessionId: sessionId, fromByteOffset: fromByteOffset)
+            )
         }
-        if pendingPermission?.requestId == request.requestId {
-            pendingPermission = nil
+        telemetry?.log("session.follow.start",
+                       props: ["sessionId": sessionId, "offset": String(fromByteOffset)],
+                       conversationId: convId)
+    }
+
+    private func resubscribeFollowedSessions() {
+        let follows = store.followingByConversation
+        guard !follows.isEmpty else { return }
+        telemetry?.log("session.follow.resubscribe", props: ["count": String(follows.count)])
+        for (convId, st) in follows {
+            Task { [weak self] in
+                try? await self?.webSocket.send(
+                    .sessionSubscribe(cwd: st.cwd, sessionId: st.sessionId, fromByteOffset: st.byteOffset)
+                )
+            }
+            telemetry?.log(
+                "session.follow.resubscribe.one",
+                props: ["sessionId": st.sessionId, "offset": String(st.byteOffset)],
+                conversationId: convId
+            )
         }
     }
 
-    /// Streamed assistant text often arrives as multiple sdk_messages with the
-    /// FULL accumulated text each time (not deltas). Detect that and replace
-    /// rather than append duplicates.
-    private func appendOrAppendToLast(role: ChatLine.Role, text: String) {
-        if role == .assistant,
-           let last = messages.last,
-           last.role == .assistant,
-           last.runId == currentRunId,
-           text.hasPrefix(last.text) {
-            messages[messages.count - 1] = ChatLine(role: .assistant, text: text, runId: currentRunId)
-            return
+    /// Stop tailing. Idempotent — no-op if not currently following.
+    func unsubscribeSession(convId: String) {
+        guard let st = store.followingByConversation[convId] else { return }
+        store.stopFollowing(convId: convId)
+        Task { [weak self] in
+            try? await self?.webSocket.send(
+                .sessionUnsubscribe(cwd: st.cwd, sessionId: st.sessionId)
+            )
         }
-        messages.append(ChatLine(role: role, text: text, runId: currentRunId))
+        telemetry?.log("session.follow.stop",
+                       props: ["sessionId": st.sessionId],
+                       conversationId: convId)
+    }
+
+    /// Drop a conversation. Sends an interrupt for any in-flight run, then
+    /// releases the runId from the router and clears the state. Caller is
+    /// responsible for picking a new focus if `id == currentConversationId`.
+    func closeConversation(_ id: String) {
+        // If we're following an external session for this conversation, tell
+        // backend to release the watcher subscription. Must run BEFORE
+        // store.closeConversation since that clears followingByConversation.
+        if let st = store.followingByConversation[id] {
+            Task { [weak self] in
+                try? await self?.webSocket.send(.sessionUnsubscribe(cwd: st.cwd, sessionId: st.sessionId))
+            }
+        }
+        let runs = store.closeConversation(id)
+        for runId in runs {
+            Task { [weak self] in try? await self?.webSocket.send(.interrupt(runId: runId)) }
+            router.release(runId: runId)
+        }
+        // Defensive: drop any remaining router entries pointing here in case
+        // multiple runs were ever in flight for the same conversation.
+        router.releaseAll(forConversation: id)
     }
 
     // MARK: - Send
 
+    /// Send a prompt to a specific conversation. cwd comes from the
+    /// conversation itself (set at creation). `resumeSessionId` is sourced
+    /// from the conversation's metadata, so the CLI continues the same
+    /// session if one was bound earlier.
     func sendPrompt(
         _ prompt: String,
-        cwd: String,
+        conversationId: String,
         model: String = "claude-haiku-4-5",
-        permissionMode: String = "plan"
+        permissionMode: String = "plan",
+        attachments: [ImageAttachment]? = nil
     ) {
         // Fail fast if WS isn't open — otherwise sendPrompt sets busy=true,
         // the send silently fails, and the UI gets stuck in "thinking" forever.
-        guard task != nil else {
-            messages.append(ChatLine(role: .error, text: "未连接后端，发送失败"))
+        guard webSocket.isOpen else {
+            telemetry?.warn("prompt.send.not_connected", conversationId: conversationId)
+            store.appendError(toConversation: conversationId, "未连接后端，发送失败")
             return
         }
+        guard store.conversations[conversationId] != nil else {
+            // Caller bug: prompt for conversation we don't track. Defensive log.
+            telemetry?.error("prompt.send.unknown_conversation", conversationId: conversationId)
+            store.appendError(toConversation: conversationId, "对话不存在: \(conversationId)")
+            return
+        }
+
+        // Auto "take over": if this conversation is currently following an
+        // external Claude Code session, drop the subscription before we fire
+        // a prompt of our own. Otherwise the CLI's --resume on this sid would
+        // race with whatever client is on the other end.
+        if isFollowing(conversationId) {
+            unsubscribeSession(convId: conversationId)
+        }
+
         let runId = UUID().uuidString
-        currentRunId = runId
-        busy = true
-        messages.append(ChatLine(role: .user, text: prompt, runId: runId))
+        router.bind(runId: runId, to: conversationId)
+
+        // We just verified the conversation exists, so startTurn cannot fail.
+        guard let started = store.startTurn(convId: conversationId, runId: runId, prompt: prompt) else {
+            router.release(runId: runId)
+            return
+        }
 
         let msg = ClientMessage.userPrompt(
             runId: runId,
             prompt: prompt,
-            cwd: cwd,
+            cwd: started.cwd,
             model: model,
             permissionMode: permissionMode,
-            resumeSessionId: sessionId
+            resumeSessionId: started.resumeSessionId,
+            attachments: attachments
+        )
+        telemetry?.log(
+            "prompt.send",
+            props: [
+                "model": model,
+                "mode": permissionMode,
+                "promptLen": String(prompt.count),
+                "resume": started.resumeSessionId == nil ? "no" : "yes",
+            ],
+            conversationId: conversationId, runId: runId
         )
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.send(msg)
+                try await self.webSocket.send(msg)
             } catch {
-                // Reset busy / runId so VoiceSession.state goes back to idle
-                // and remote commands work again. The user sees the error in
-                // chat and can retry.
-                self.messages.append(ChatLine(role: .error, text: "发送失败: \(error.localizedDescription)"))
-                if self.currentRunId == runId {
-                    self.busy = false
-                    self.currentRunId = nil
-                }
+                self.telemetry?.error("prompt.send.failed", error: error, conversationId: conversationId, runId: runId)
+                self.store.handleSendFailure(convId: conversationId, runId: runId, errorDescription: error.localizedDescription)
+                self.router.release(runId: runId)
             }
         }
     }
 
+    /// Enqueue a prompt to run automatically after the next session_ended(completed).
+    /// If the conversation is idle the item waits in queue until the next completed turn.
+    func enqueuePromptCurrent(
+        _ text: String,
+        model: String = "claude-haiku-4-5",
+        permissionMode: String = "plan",
+        attachments: [ImageAttachment]? = nil
+    ) {
+        guard let convId = store.currentConversationId else { return }
+        let q = QueuedPrompt(text: text, model: model, permissionMode: permissionMode, attachments: attachments)
+        store.enqueuePrompt(q, forConversation: convId)
+        telemetry?.log("queue.enqueue", props: ["textLen": String(text.count), "queueLen": String(store.currentPendingQueue.count)], conversationId: convId)
+    }
+
+    func removeQueuedPrompt(id: String) {
+        guard let convId = store.currentConversationId else { return }
+        store.removeQueuedPrompt(id: id, forConversation: convId)
+    }
+
+    /// UI-side convenience: send to the currently-focused conversation,
+    /// auto-creating one in `defaultCwdForNew` if none exists yet (typical
+    /// first-launch case). Existing conversations keep their original cwd.
+    func sendPromptCurrent(
+        _ prompt: String,
+        defaultCwdForNew: String,
+        model: String = "claude-haiku-4-5",
+        permissionMode: String = "plan",
+        attachments: [ImageAttachment]? = nil
+    ) {
+        let id: String
+        if let existing = store.currentConversationId, store.conversations[existing] != nil {
+            id = existing
+        } else {
+            id = store.createConversation(cwd: defaultCwdForNew).id
+            store.currentConversationId = id
+        }
+        sendPrompt(prompt, conversationId: id, model: model, permissionMode: permissionMode, attachments: attachments)
+    }
+
+    /// Interrupt the run in the currently-focused conversation. Other
+    /// conversations' runs keep going.
     func interrupt() {
-        guard let runId = currentRunId else { return }
-        Task { [weak self] in try? await self?.send(.interrupt(runId: runId)) }
+        guard let convId = store.currentConversationId,
+              let runId = store.stateByConversation[convId]?.currentRunId else { return }
+        Task { [weak self] in try? await self?.webSocket.send(.interrupt(runId: runId)) }
     }
 
-    /// Throws on encode / network failure so the caller can reset busy / runId.
-    private func send(_ message: ClientMessage) async throws {
-        guard let t = task else {
-            throw NSError(domain: "BackendClient", code: -1,
-                          userInfo: [NSLocalizedDescriptionKey: "WebSocket not connected"])
+    func replyPermission(_ request: PermissionRequest, decision: PermissionDecision) {
+        Task { [weak self] in
+            try? await self?.webSocket.send(.permissionReply(
+                requestId: request.requestId,
+                decision: decision.rawValue,
+                runId: request.runId,
+                toolName: request.toolName
+            ))
         }
-        let data = try JSONEncoder().encode(message)
-        let s = String(data: data, encoding: .utf8) ?? "{}"
-        try await t.send(.string(s))
+        if let convId = router.resolve(runId: request.runId) {
+            store.clearPendingPermission(convId: convId, requestId: request.requestId)
+        }
     }
-}
 
-struct ChatLine: Identifiable, Equatable {
-    enum Role: String { case user, assistant, system, error }
-    let id = UUID()
-    let role: Role
-    var text: String
-    var runId: String?
-
-    init(role: Role, text: String, runId: String? = nil) {
-        self.role = role
-        self.text = text
-        self.runId = runId
+    func allowToolForRun(_ runId: String, _ toolName: String) {
+        store.allowToolForRun(runId, toolName)
     }
-}
 
-struct PermissionRequest: Identifiable, Equatable {
-    var id: String { requestId }
-    let runId: String
-    let requestId: String
-    let toolName: String
-    let input: [String: Any]
+    func isToolAllowedForRun(_ runId: String, _ toolName: String) -> Bool {
+        store.isToolAllowedForRun(runId, toolName)
+    }
 
-    /// One-line preview rendered into the modal so the user can see what
-    /// they're approving (file path for Edit, command for Bash, etc).
-    var preview: String {
-        switch toolName {
-        case "Bash":
-            return (input["command"] as? String) ?? ""
-        case "Edit", "Write":
-            return (input["file_path"] as? String) ?? (input["path"] as? String) ?? ""
-        case "Read":
-            return (input["file_path"] as? String) ?? ""
-        default:
-            // Fallback: pretty-print whole input
-            if let data = try? JSONSerialization.data(withJSONObject: input, options: [.prettyPrinted]),
-               let s = String(data: data, encoding: .utf8) {
-                return s
+    func forgetRunAllowlist(_ runId: String) {
+        store.forgetRunAllowlist(runId)
+    }
+
+    // MARK: - Receive routing
+
+    private func handle(_ msg: ServerMessage) {
+        // session_event has no runId — route by sessionId directly to the
+        // followed conversation.
+        if case .sessionEvent(let cwd, let sessionId, let byteOffset, let entryJSON) = msg {
+            handleSessionEvent(cwd: cwd, sessionId: sessionId, byteOffset: byteOffset, entryJSON: entryJSON)
+            return
+        }
+
+        // Resolve which conversation this message belongs to. Messages whose
+        // runId we don't know — orphan reconnect frames, conversations the
+        // user already closed, global errors — silently drop. They must NOT
+        // bleed into currentConversationId by default.
+        guard let runId = msg.runId else {
+            telemetry?.warn("route.no_runid", props: ["msgType": msg.typeName])
+            return
+        }
+        guard let convId = router.resolve(runId: runId) else {
+            telemetry?.warn("route.orphan_runid", props: ["runId": runId, "msgType": msg.typeName])
+            return
+        }
+        guard store.stateByConversation[convId] != nil else {
+            // Conversation entry is gone (closed mid-flight). Drop the runId
+            // mapping defensively so the table doesn't leak.
+            telemetry?.warn("route.conversation_missing", props: ["runId": runId, "convId": convId], conversationId: convId)
+            router.release(runId: runId)
+            return
+        }
+
+        switch msg {
+        case .sdkMessage(_, let sdk):
+            switch sdk {
+            case .systemInit(let sessionId, _):
+                store.handleSystemInit(convId: convId, runId: runId, sessionId: sessionId)
+            case .assistantContent(let text, let toolUses):
+                store.handleAssistantContent(convId: convId, runId: runId, text: text, toolUses: toolUses)
+            case .toolResult(let content, let isError):
+                store.handleToolResult(convId: convId, runId: runId, content: content, isError: isError)
+            case .other, .result:
+                break
             }
-            return ""
+        case .sessionEnded(_, let reason):
+            // Clean the runId mapping on EVERY end reason (completed / error /
+            // interrupted). Otherwise the table grows unbounded and routing
+            // could mis-attribute future runs that happen to recycle the id.
+            _ = store.handleSessionEnded(convId: convId, runId: runId, reason: reason)
+            router.release(runId: runId)
+            forgetRunAllowlist(runId)
+            if reason == "completed" { fireNextQueued(convId: convId) }
+        case .error(_, let message):
+            store.handleError(convId: convId, runId: runId, message: message)
+            // Even on error, drop the run-id mapping to prevent leak.
+            router.release(runId: runId)
+        case .clearRunMessages:
+            store.handleClearRunMessages(convId: convId, runId: runId)
+        case .permissionRequest(_, let requestId, let toolName, let input):
+            // Auto-allow if user opted in for this run+tool
+            if store.isToolAllowedForRun(runId, toolName) {
+                Task { [weak self] in
+                    try? await self?.webSocket.send(.permissionReply(
+                        requestId: requestId,
+                        decision: "allow",
+                        runId: runId,
+                        toolName: toolName
+                    ))
+                }
+                telemetry?.log(
+                    "permission.auto_allow",
+                    props: ["tool": toolName, "requestId": requestId],
+                    conversationId: convId, runId: runId
+                )
+                return
+            }
+            store.handlePermissionRequest(
+                convId: convId,
+                runId: runId,
+                requestId: requestId,
+                toolName: toolName,
+                input: input
+            )
+        case .sessionEvent:
+            // Already handled at the top of `handle(_:)` — early-return guard
+            // means switch never reaches this case in practice. Listed for
+            // exhaustiveness.
+            return
+        case .unknown:
+            return
         }
     }
 
-    static func == (lhs: PermissionRequest, rhs: PermissionRequest) -> Bool {
-        lhs.requestId == rhs.requestId
+    private func fireNextQueued(convId: String) {
+        // Don't dequeue until we know the WS is up — if we dequeue first and
+        // sendPrompt fails (WS dropped between turns), the item is silently lost
+        // with no retry opportunity.
+        guard webSocket.isOpen else {
+            telemetry?.warn("queue.fire.skipped_no_ws", conversationId: convId)
+            return
+        }
+        guard let next = store.dequeueNextPrompt(forConversation: convId) else { return }
+        telemetry?.log("queue.fire", props: ["textLen": String(next.text.count)], conversationId: convId)
+        // Schedule on the next run-loop tick so session_ended UI changes render
+        // before the new turn begins.
+        Task { [weak self] in
+            self?.sendPrompt(next.text, conversationId: convId,
+                             model: next.model,
+                             permissionMode: next.permissionMode,
+                             attachments: next.attachments)
+        }
+    }
+
+    /// Route an incremental jsonl entry into the conversation that's
+    /// currently following this sessionId. The `entryJSON` payload is the
+    /// raw JSON of one normalized entry — same shape as items returned by
+    /// `/api/sessions/transcript`. Decoded into `TranscriptEntry`, run
+    /// through `TranscriptParser`, and any resulting ChatLines are
+    /// appended to the conversation's transcript.
+    private func handleSessionEvent(cwd: String, sessionId: String, byteOffset: Int, entryJSON: Data) {
+        // Find which conversation is following this session. Match against
+        // `followingByConversation` (NOT just `conversation.sessionId`) so
+        // we don't accidentally inject events into a conversation that's
+        // simply a historical load with the same sid but isn't subscribed.
+        guard let convId = store.followedConversation(cwd: cwd, sessionId: sessionId),
+              let follow = store.followingByConversation[convId] else {
+            telemetry?.warn("session_event.no_follower", props: ["cwd": cwd, "sessionId": sessionId])
+            return
+        }
+        guard store.stateByConversation[convId] != nil else {
+            telemetry?.warn("session_event.conversation_missing",
+                            props: ["sessionId": sessionId], conversationId: convId)
+            return
+        }
+        guard byteOffset > follow.byteOffset else {
+            telemetry?.warn(
+                "session_event.duplicate_offset",
+                props: ["sessionId": sessionId, "offset": String(byteOffset), "current": String(follow.byteOffset)],
+                conversationId: convId
+            )
+            return
+        }
+
+        do {
+            let entry = try JSONDecoder().decode(TranscriptEntry.self, from: entryJSON)
+            let lines = TranscriptParser.parse([entry])
+            for line in lines {
+                store.appendChatLine(convId: convId, line: line)
+            }
+            store.updateFollowOffset(convId: convId, byteOffset: byteOffset)
+            if entry.type == "result" {
+                _ = store.handleFollowedSessionCompleted(convId: convId, sessionId: sessionId)
+            }
+            // Persist after each event so a force-quit doesn't lose what we
+            // mirrored from the external session.
+            onConversationDirty?(convId)
+        } catch {
+            telemetry?.error("session_event.decode_failed", error: error,
+                             props: ["sessionId": sessionId], conversationId: convId)
+        }
     }
 }
-
-enum PermissionDecision: String { case allow, deny }
