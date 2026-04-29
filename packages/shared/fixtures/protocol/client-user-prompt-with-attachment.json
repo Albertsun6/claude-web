@@ -1,0 +1,15 @@
+{
+  "type": "user_prompt",
+  "runId": "run-def456",
+  "prompt": "这个代码的问题是什么?",
+  "cwd": "/Users/test/project",
+  "model": "claude-sonnet-4-6",
+  "permissionMode": "acceptEdits",
+  "resumeSessionId": "session-xyz789",
+  "attachments": [
+    {
+      "mediaType": "image/png",
+      "dataBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    }
+  ]
+}

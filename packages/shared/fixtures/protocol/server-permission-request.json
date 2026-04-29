@@ -1,0 +1,9 @@
+{
+  "type": "permission_request",
+  "runId": "run-abc123",
+  "requestId": "req-perm-001",
+  "toolName": "Bash",
+  "input": {
+    "command": "rm -rf /tmp/test"
+  }
+}

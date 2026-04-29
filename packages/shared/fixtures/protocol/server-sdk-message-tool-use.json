@@ -1,0 +1,21 @@
+{
+  "type": "sdk_message",
+  "runId": "run-abc123",
+  "message": {
+    "type": "assistant",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tool-1",
+          "name": "Bash",
+          "input": {
+            "command": "echo hello",
+            "description": "打印 hello"
+          }
+        }
+      ]
+    }
+  }
+}

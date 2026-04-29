@@ -1,0 +1,7 @@
+{
+  "type": "permission_reply",
+  "requestId": "req-perm-001",
+  "decision": "allow",
+  "runId": "run-abc123",
+  "toolName": "Bash"
+}

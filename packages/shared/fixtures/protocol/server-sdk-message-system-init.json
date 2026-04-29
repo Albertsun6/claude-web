@@ -1,0 +1,10 @@
+{
+  "type": "sdk_message",
+  "runId": "run-abc123",
+  "message": {
+    "type": "system",
+    "subtype": "init",
+    "session_id": "session-xyz789",
+    "model": "claude-haiku-4-5"
+  }
+}

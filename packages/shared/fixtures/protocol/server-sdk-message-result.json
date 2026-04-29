@@ -1,0 +1,9 @@
+{
+  "type": "sdk_message",
+  "runId": "run-abc123",
+  "message": {
+    "type": "result",
+    "subtype": "success",
+    "total_cost_usd": 0.0012
+  }
+}

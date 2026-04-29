@@ -1,0 +1,8 @@
+{
+  "type": "user_prompt",
+  "runId": "run-abc123",
+  "prompt": "帮我写一个 hello world",
+  "cwd": "/Users/test/project",
+  "model": "claude-haiku-4-5",
+  "permissionMode": "default"
+}

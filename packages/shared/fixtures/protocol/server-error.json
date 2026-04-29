@@ -1,0 +1,5 @@
+{
+  "type": "error",
+  "runId": "run-abc123",
+  "error": "cwd not in allowed roots"
+}

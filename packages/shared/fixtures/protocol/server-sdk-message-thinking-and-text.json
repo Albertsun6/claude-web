@@ -1,0 +1,20 @@
+{
+  "type": "sdk_message",
+  "runId": "run-abc123",
+  "message": {
+    "type": "assistant",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "用户想要帮助，我应该友好回应。"
+        },
+        {
+          "type": "text",
+          "text": "当然可以！"
+        }
+      ]
+    }
+  }
+}

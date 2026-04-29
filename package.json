@@ -6,7 +6,8 @@
   "scripts": {
     "dev:backend": "pnpm --filter @claude-web/backend dev",
     "dev:frontend": "pnpm --filter @claude-web/frontend dev",
-    "test:cli": "pnpm --filter @claude-web/backend test:cli"
+    "test:cli": "pnpm --filter @claude-web/backend test:cli",
+    "test:protocol": "pnpm --filter @claude-web/shared test"
   },
   "packageManager": "pnpm@9.0.0"
 }

@@ -1,0 +1,16 @@
+{
+  "type": "sdk_message",
+  "runId": "run-abc123",
+  "message": {
+    "type": "assistant",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "你好！有什么我可以帮助你的？"
+        }
+      ]
+    }
+  }
+}

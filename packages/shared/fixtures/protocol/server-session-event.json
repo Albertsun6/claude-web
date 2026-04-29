@@ -1,0 +1,18 @@
+{
+  "type": "session_event",
+  "cwd": "/Users/test/project",
+  "sessionId": "session-xyz789",
+  "byteOffset": 2048,
+  "entry": {
+    "type": "assistant",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "继续上次的任务…"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "type": "session_subscribe",
+  "cwd": "/Users/test/project",
+  "sessionId": "session-xyz789",
+  "fromByteOffset": 1024
+}

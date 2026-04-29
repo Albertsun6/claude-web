@@ -1,0 +1,18 @@
+{
+  "type": "sdk_message",
+  "runId": "run-abc123",
+  "message": {
+    "type": "user",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "tool-1",
+          "content": "hello\n",
+          "is_error": false
+        }
+      ]
+    }
+  }
+}
