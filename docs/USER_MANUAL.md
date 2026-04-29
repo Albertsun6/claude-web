@@ -238,7 +238,8 @@ VoiceBar 麦克风按钮上方有两个下拉 + 刷新 ↻：
 ### 概要 vs 原话
 **☑ 概要** 勾选（默认开）：每轮 Claude 回完后，用 Haiku 改写成 1-4 句口语，再用 Edge TTS 朗读。
 - ≤30 字短答跳过 Haiku，原文直接念
-- 严格剥离 markdown：`**` `##` `` ` `` 等不会被念成"星号星号"
+- 严格剥离 markdown：`**` `##` `` ` `` 等不会被念成"星号星号"。后端在 prompt 里加禁字规则后**还会再跑一遍 `stripMarkdownFromSummary`** 兜底，模型偶尔泄漏的格式符也不会进 TTS
+- **总结失败兜底**：Haiku 调用超时 / HTTP 错 / 模型 fallback 时，不会再"全文朗读"——而是截前 ~120 个字（在 `。！？.!?` 边界切），保证不夸张。失败原因写到 telemetry（`tts.summary.http_error` / `bad_json` / `fallback_from_backend` / `request_failed`）
 
 不勾 → **逐句完整朗读**所有原文。
 
@@ -537,6 +538,22 @@ cd packages/ios-native
 **TTS 缓存**：
 每条对话独立缓存最后一段语音 mp3。切到对话 A 听完一段 → 切到 B 发新内容 → 切回 A 重听按钮 ↻ 还在，按下播 A 的旧回答（不重调 Haiku）。
 
+### 文件浏览（右侧抽屉）
+
+主屏右侧边缘**右滑**，或点工具栏 🔎 按钮 → 打开当前 cwd 的文件抽屉（占屏宽 80%，最宽 320pt）。
+
+- 树形浏览，点目录递进，`..` 上一级，↻ 刷新
+- 文件按扩展名图标区分（swift / ts / py / md / 图片 / 视频 / 音频 …）
+- 点文件 → 弹半屏预览 sheet：
+  | 类型 | 渲染 |
+  |---|---|
+  | 文本（默认） | 等宽（代码扩展名）/ 普通衬线 |
+  | `.md` | `AttributedString` 渲染（标题 / 列表 / 链接） |
+  | `.png .jpg .gif .webp .heic .bmp .ico` | AsyncImage（走 `/api/fs/blob`，token 在 query） |
+  | `.pdf .mp4 .webm .mov .mp3 .wav .m4a` | "尚不支持在 app 内预览" 占位 |
+- 文件大小限制：文本 ≤ 1MB（`/api/fs/file`），二进制 ≤ 20MB（`/api/fs/blob`）
+- 抽屉左滑或点遮罩关闭
+
 ### 前台 PTT（推按说话）
 
 输入框右下圆形 mic 按钮：
@@ -596,6 +613,8 @@ cd packages/ios-native
 | 杀 app 重启恢复对话 + 消息 + sessionId 绑定 | ✅ |
 | 项目跨设备共享列表（服务器 projects.json）| ✅ |
 | DirectoryPicker 浏览 + 新建文件夹 | ✅ |
+| 文件浏览右抽屉 + 文本/Markdown/图片预览 | ✅ |
+| 设置 → 诊断页（CLI / 凭证 / whisper / ffmpeg / edge-tts / 注册表健康检查）| ✅ |
 | 离线只读最近对话 | ✅（cache 命中）|
 | **闲置语音模式 → 锁屏 → 用 play 按键启动新录音** | ❌ **iOS 平台限制** |
 | **AirPods 长按柄触发 PTT** | ❌ Apple 不开放给 app |
@@ -624,6 +643,26 @@ cd packages/ios-native
 | 项目分组 header 显示 "·未注册" | 服务器项目注册失败（backend 死过 / token 错）；下次有网时手动重发个 prompt 可触发再次注册 |
 | Bypass 误开 | 主屏顶部红条提示；设置改回 Plan |
 | 锁屏 play 按钮没反应 | 平台限制，不是 bug |
+
+### 诊断 / 健康检查
+
+设置 ⚙️ → "诊断 / 健康检查"。打开后并发跑一次后端 `/api/health/full`，逐项渲染：
+
+| 检查项 | 含义 |
+|---|---|
+| Claude CLI | `claude --version` 能跑 |
+| Claude 订阅凭证 | `~/.claude/.credentials.json` **或** macOS Keychain `Claude Code-credentials` 存在 |
+| whisper-cli | `whisper-cli --help` 退出 0 |
+| Whisper 模型 | `~/.whisper-models/ggml-large-v3*.bin` 至少有一个 |
+| ffmpeg | `ffmpeg -version` 能跑 |
+| edge-tts | `edge-tts --help` 退出 0 |
+| 项目注册表 | `~/.claude-web/projects.json` 所在目录可写 |
+| Token 鉴权 | `CLAUDE_WEB_TOKEN` 是否已配（未配 = warn，公开暴露要配） |
+| 路径白名单 | `CLAUDE_WEB_ALLOWED_ROOTS` 是否已配 |
+
+每行绿/黄/红圆点 + detail + 修复 hint。底部还显示 backend node 版本、平台、已运行时长、app 版本/构建。
+
+**复制脱敏诊断报告** 按钮：把状态汇总成纯文本贴到剪贴板（**只含主机名，不含 token**），出问题时贴到 issue。
 
 ### 埋点 / 调试日志
 
