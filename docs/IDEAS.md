@@ -447,6 +447,211 @@ Settings 加 Toggle，控制 thinking block 默认展开/折叠。当前 thinkin
 
 ---
 
+## Claude CLI Harness 候选（2026-04 调研）
+
+> 定位：`claude-web` 不重新实现 agent。真正的 agent 仍是 `claude` CLI；`claude-web` 要做的是更好的 harness：把权限、安全、上下文、会话、通知、移动端控制、Git/PR 工作流和可观察性包起来。
+>
+> 调研参考：Claude Code docs（permissions / settings / hooks / MCP / resume）、Aider（git 自动提交、architect/ask/code modes、/test /lint /undo /voice）、OpenCode（TUI sessions、permissions、MCP、GitHub agent）、Goose（CLI/Desktop/API、SQLite session、MCP extensions、memory/todo/chat recall）、Continue（@context providers、MCP）、Cursor Bugbot/Background Agents（PR review、后台任务、规则）、Paseo（移动端、worktree、E2E relay）。
+
+### H1. Harness 状态总览 / Run Dashboard ⭐⭐⭐
+灵感来自 OpenCode sessions、Goose session list、Cursor Background Agents。
+
+**可借鉴点**：
+- 一个页面显示所有正在跑和最近结束的 run：cwd、conversation、model、permissionMode、开始时间、持续时间、当前工具、最后输出、是否等待权限。
+- iOS 顶部 badge 只能显示数量；Dashboard 显示"具体在干什么"。
+- 支持快速操作：打开、停止、复制最后错误、跳到 diff、重新运行最后 prompt。
+
+**适用性**：
+- 用户价值：5
+- 架构贴合：5，现有 `runIdToConversation`、telemetry、sessionEnded 已经有基础
+- 实现复杂度：2
+- 风险：2，主要是状态一致性
+- 优先级：P0/P1
+
+**实现草案**：
+- backend 暴露 `/api/runs` 或 WS 广播 `run_status`。
+- iOS 抽屉加"运行中"分组；Web 右侧 panel 加 Runs tab。
+- 每个 run 记录最近一次 toolUse / toolResult 摘要，不保存大 stdout。
+
+### H2. 权限策略编辑器 / Permission Rules UI ⭐⭐⭐
+灵感来自 Claude Code `/permissions`、OpenCode allow/ask/deny 规则。
+
+**可借鉴点**：
+- 当前已有 PreToolUse hook 和 permission sheet，但规则主要靠 CLI / settings。
+- 做成 UI：按项目配置 `allow / ask / deny`，支持工具名、Bash 命令前缀、路径范围。
+- 显示"为什么这次要问我"：命中了哪条规则、工具名、cwd、runId。
+
+**适用性**：
+- 用户价值：5
+- 架构贴合：4，现有 permission route 可扩展
+- 实现复杂度：3
+- 风险：4，安全功能不能做错；deny 必须优先于 allow
+- 优先级：P1
+
+**实现草案**：
+- 先做只读规则查看：读取 Claude settings / project settings 中的 permission 配置。
+- 第二步做本项目 `.claude/settings.local.json` 的可视化编辑。
+- permission sheet 展示规则来源：user / project / local / runtime。
+
+### H3. Hook 可视化与安全审计 ⭐⭐
+灵感来自 Claude Code hooks：PreToolUse、PostToolUse、Notification、Stop。
+
+**可借鉴点**：
+- Claude Code hooks 能在工具执行前后跑脚本。对 harness 来说，关键不是再造 hooks，而是让用户知道 hooks 在做什么。
+- UI 列出当前项目启用的 hooks、触发次数、最近输出、失败原因。
+- 高风险 hook 警告：会修改文件、会执行 shell、来源于 project settings。
+
+**适用性**：
+- 用户价值：4
+- 架构贴合：4
+- 实现复杂度：3
+- 风险：3，读取/展示为主风险低，编辑风险高
+- 优先级：P2
+
+**实现草案**：
+- `/api/claude/settings` 只读解析 user/project/local settings。
+- iOS 设置页加"Hooks"调试入口。
+- Stop / Notification hook 可以接到 iOS 本地通知或 APNs，作为 B1 推送的低成本前置版本。
+
+### H4. Context Attachment 面板 ⭐⭐⭐
+灵感来自 Continue 的 `@File / @Code / @Git Diff / @Terminal / @Docs / @Web / @Clipboard`。
+
+**可借鉴点**：
+- `claude-web` 已经有 `@file`，但 harness 应该帮用户组织上下文，而不只是发纯文本。
+- 输入框旁做"附加上下文"：当前 git diff、最近终端输出、某个 URL、剪贴板、打开的文件、某个 issue/PR。
+- 每个附件可见、可删除、可折叠，发送前知道会给 Claude 什么。
+
+**适用性**：
+- 用户价值：5
+- 架构贴合：5，已有 fs/git/session APIs
+- 实现复杂度：3
+- 风险：2，注意不要自动塞隐私内容
+- 优先级：P1
+
+**实现草案**：
+- 后端新增 `/api/context/git-diff`、`/api/context/terminal-last`、`/api/context/url`。
+- 前端/iOS 统一 `ContextAttachment` 协议：`kind + title + body + source`。
+- prompt 发送时把附件拼成明确分隔的 context block。
+
+### H5. Git Safety Gate / 变更出门前检查 ⭐⭐⭐
+灵感来自 Aider 的 git 自动提交、`/diff /test /lint /undo`，Cursor Bugbot 的 PR review。
+
+**可借鉴点**：
+- agent 写完代码后，harness 自动给用户一个"出门前检查"面板：diff、测试、lint、未跟踪文件、潜在 secrets。
+- 不自动 commit，除非用户点按钮或明确要求。
+- 支持"让 Claude 修复失败测试"、"让 Cursor/Bugbot 二审"。
+
+**适用性**：
+- 用户价值：5
+- 架构贴合：4，现有 git API + shell 可支撑
+- 实现复杂度：3
+- 风险：3，不能误提交，不能自动处理 secrets
+- 优先级：P1
+
+**实现草案**：
+- `sessionEnded(completed)` 后，如果 git dirty，弹"查看本次变更"。
+- 面板显示：files changed、diff summary、untracked、建议测试命令、最近测试结果。
+- 接上已有 Cursor CLI 评审 MCP idea，作为可选二审按钮。
+
+### H6. Session Replay / 可复现运行包 ⭐⭐
+灵感来自 OpenCode/Goose 的 session 管理、Claude Code resume。
+
+**可借鉴点**：
+- 当前能读 jsonl 历史，但缺少"这次 run 当时到底带了哪些参数"。
+- 保存可复现元数据：cwd、model、permissionMode、resume sessionId、prompt、附件摘要、环境变量白名单、Claude CLI 版本。
+- 出错时一键生成 bug report 或重新跑。
+
+**适用性**：
+- 用户价值：4
+- 架构贴合：5，runId 已经存在
+- 实现复杂度：2
+- 风险：3，注意不要记录 token / secrets
+- 优先级：P2
+
+**实现草案**：
+- backend 在启动 run 前写 `~/.claude-web/runs/<runId>.json`。
+- iOS/Web 历史里加"运行详情"。
+- 出错时可复制一段脱敏诊断信息。
+
+### H7. Worktree Task Launcher ⭐⭐⭐
+灵感来自 Paseo worktree、Cursor Background Agents。
+
+**可借鉴点**：
+- 当前已有 Worktree 隔离并行对话 idea；这里补一个更产品化的入口。
+- 用户选择任务类型："修 bug / 做功能 / 写测试 / 重构"，harness 自动创建 worktree、命名分支、启动 Claude、跑检查、最后给 merge/丢弃选项。
+
+**适用性**：
+- 用户价值：5
+- 架构贴合：4
+- 实现复杂度：4
+- 风险：4，分支/冲突/磁盘清理要稳
+- 优先级：P1/P2
+
+**实现草案**：
+- 在 P1 Worktree 隔离基础上加模板化 launcher。
+- 默认只在 clean working tree 自动创建；dirty 时要求用户确认。
+- 完成后生成"变更包"：diff + 测试结果 + Claude summary。
+
+### H8. 移动端远程连接模式：Tailscale 优先，E2E Relay 备选 ⭐⭐
+灵感来自 Paseo 的 E2E encrypted relay。
+
+**可借鉴点**：
+- 现在 Tailscale 已够个人使用；但如果未来分享给其他设备/家人/临时机器，harness 需要更平滑的配对方式。
+- relay 只转发加密字节，不读 prompt、代码、输出。
+- QR code / pairing link 作为信任根。
+
+**适用性**：
+- 用户价值：3
+- 架构贴合：3
+- 实现复杂度：5
+- 风险：5，安全和运维复杂
+- 优先级：P3
+
+**实现草案**：
+- 暂不实现自建 relay。
+- 先把 Tailscale / Cloudflare Tunnel / LAN URL 的配置做成引导页和健康检查。
+- 真有多网络分享需求时，再 spike relay。
+
+### H9. Harness 自检 / Health Check ⭐⭐⭐
+灵感来自 Goose/CLI 工具的 doctor/config 命令、Claude Code settings 层级。
+
+**可借鉴点**：
+- 黑屏、签名、后端、CLI auth、Tailscale、token、allowed roots、外部工具缺失，这些都不是 agent 能力，是 harness 可靠性问题。
+- 做一个 `/api/health/full` 和 iOS 设置页"诊断"：逐项显示绿/黄/红。
+
+**适用性**：
+- 用户价值：5
+- 架构贴合：5
+- 实现复杂度：2
+- 风险：2，注意不要泄露路径/token
+- 优先级：P0/P1
+
+**实现草案**：
+- 检查项：backend reachable、WS connect、Claude CLI path/version、credentials 存在、allowed roots、whisper/ffmpeg/edge-tts、projects.json 可写、iOS backend URL、app version/build、最近 telemetry error。
+- 一键复制脱敏诊断报告。
+- iOS 首次启动失败时至少显示诊断页，而不是黑屏。
+
+### H10. Agent 模式路由 / Mode-aware UI ⭐⭐
+灵感来自 Claude Code plan/permission modes、Aider ask/code/architect modes。
+
+**可借鉴点**：
+- harness 应该清楚告诉用户当前是在"问答、规划、执行、旁路权限、只读"哪个模式。
+- 输入框和按钮随模式变化：Plan 模式显示"批准并执行"，Ask 模式禁用工具风险提示，Bypass 模式红色常驻警告。
+
+**适用性**：
+- 用户价值：4
+- 架构贴合：5，settings 已有 permissionMode/model
+- 实现复杂度：2
+- 风险：2
+- 优先级：P2
+
+**实现草案**：
+- iOS 顶部标题旁显示 mode chip。
+- `permissionMode == plan` 时把 ExitPlanMode 计划文件作为一等 UI，而不是普通消息。
+- 对 `bypassPermissions` 加二次确认和会话内红色标识。
+
+---
+
 ## 已完成（参考）
 
 详见 git log，主要里程碑：
