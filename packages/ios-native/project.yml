@@ -61,3 +61,15 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"  # iPhone only for v1
         SUPPORTS_MACCATALYST: "NO"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  ClaudeWebTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: ClaudeWebTests
+    dependencies:
+      - target: ClaudeWeb
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.albertsun6.claudeweb-native.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_UIDeviceFamily: "[1]"

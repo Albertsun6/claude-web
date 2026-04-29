@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Protocol fixture tests
+        run: pnpm test:protocol
+
+      - name: Frontend TypeScript build
+        run: pnpm --filter @claude-web/frontend build
+
+      - name: Protocol sync check
+        run: |
+          BASE=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+          if [ -z "$BASE" ]; then
+            echo "No parent commit, skipping diff check"
+            exit 0
+          fi
+          PROTO=$(git diff --name-only "$BASE" HEAD | grep -cE \
+            "packages/shared/src/protocol\.ts|packages/ios-native/Sources/ClaudeWeb/Protocol\.swift" \
+            || true)
+          FIXTURES=$(git diff --name-only "$BASE" HEAD | grep -c \
+            "packages/shared/fixtures/protocol/" || true)
+          if [ "$PROTO" -gt 0 ] && [ "$FIXTURES" -eq 0 ]; then
+            echo "❌ protocol.ts or Protocol.swift changed but no fixture updated."
+            echo "Please update packages/shared/fixtures/protocol/ to reflect the change."
+            exit 1
+          fi
+          echo "✅ Protocol sync check passed"

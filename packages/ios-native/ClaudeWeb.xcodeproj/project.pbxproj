@@ -16,6 +16,7 @@
 		332F0397A49A158E100D98B5 /* ProjectRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 592C33B52949B8FC89528D76 /* ProjectRegistry.swift */; };
 		458552BC134B372A7B368750 /* InputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42AA631E277EDCEFDF480163 /* InputBar.swift */; };
 		4AA49DDD76AE150CB43E459F /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BC150255A000C4B594FB34 /* Telemetry.swift */; };
+		577BE076AA69A32AC0F06F12 /* ProtocolFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1FDBA5369B9FB21BC91821 /* ProtocolFixtureTests.swift */; };
 		57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA416505AC735C06A084E7EE /* ContentView.swift */; };
 		69F0714A317BB99738DC18A9 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C189285FD2BC25E599008F0 /* ChatListView.swift */; };
 		6AD512C6C3EBFF3A522035BF /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7869FC7E7224F973A25D5A07 /* ConversationModels.swift */; };
@@ -42,6 +43,16 @@
 		FF8CBD5F9FCA9771CE8949A1 /* PermissionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2C287FAD57E3EE4B5AC077 /* PermissionSheet.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		0C2EF871824D8014FF8A8643 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 717DA13FF387E84EC9EB94E8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 59BE935CE7793D344E204498;
+			remoteInfo = ClaudeWeb;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		03EB85EB534A11AFEBB9A548 /* VoiceSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSession.swift; sourceTree = "<group>"; };
 		0DE3519D5D4B6BA73D2C4D5D /* RunRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunRouter.swift; sourceTree = "<group>"; };
@@ -56,11 +67,13 @@
 		592C33B52949B8FC89528D76 /* ProjectRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRegistry.swift; sourceTree = "<group>"; };
 		5CF31E552D528619F13A5B40 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		691A5D95478C1BEA6C41D851 /* ToolCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolCards.swift; sourceTree = "<group>"; };
+		6A1FDBA5369B9FB21BC91821 /* ProtocolFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocolFixtureTests.swift; sourceTree = "<group>"; };
 		6B80ADC25852208EBDCC0BA7 /* AtFilePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtFilePicker.swift; sourceTree = "<group>"; };
 		763A49693E0CE52A2C691B3C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7869FC7E7224F973A25D5A07 /* ConversationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModels.swift; sourceTree = "<group>"; };
 		7CAC5820B96A0B62BECEA82D /* ClaudeWeb.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClaudeWeb.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E1FACCED35C3A770740F004 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
+		950F8E2DCA452C46977B3762 /* ClaudeWebTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ClaudeWebTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		989ACA299187F4EE9220555C /* FsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsAPI.swift; sourceTree = "<group>"; };
 		9AF5FF381485944DDD277DA6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9C3CDA99E7C72B2FA85DB71A /* TelemetryDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryDebugView.swift; sourceTree = "<group>"; };
@@ -107,6 +120,14 @@
 				0DE3519D5D4B6BA73D2C4D5D /* RunRouter.swift */,
 			);
 			path = Conversations;
+			sourceTree = "<group>";
+		};
+		372B5A9E9C6CE18DB84AEF27 /* ClaudeWebTests */ = {
+			isa = PBXGroup;
+			children = (
+				6A1FDBA5369B9FB21BC91821 /* ProtocolFixtureTests.swift */,
+			);
+			path = ClaudeWebTests;
 			sourceTree = "<group>";
 		};
 		3BE25D6B07CC3925258BCA3F /* ClaudeWeb */ = {
@@ -174,6 +195,7 @@
 			isa = PBXGroup;
 			children = (
 				7CAC5820B96A0B62BECEA82D /* ClaudeWeb.app */,
+				950F8E2DCA452C46977B3762 /* ClaudeWebTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -192,6 +214,7 @@
 			isa = PBXGroup;
 			children = (
 				3BE25D6B07CC3925258BCA3F /* ClaudeWeb */,
+				372B5A9E9C6CE18DB84AEF27 /* ClaudeWebTests */,
 				A0D0852916E74685EF8CFADB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -207,6 +230,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		271B86341CD3173BC9C3D129 /* ClaudeWebTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D42A4B809B42D2DB4D347D03 /* Build configuration list for PBXNativeTarget "ClaudeWebTests" */;
+			buildPhases = (
+				7F85EECE6F336C1AC92D9245 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				21CCAFE0A398B4AA41367B27 /* PBXTargetDependency */,
+			);
+			name = ClaudeWebTests;
+			packageProductDependencies = (
+			);
+			productName = ClaudeWebTests;
+			productReference = 950F8E2DCA452C46977B3762 /* ClaudeWebTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		59BE935CE7793D344E204498 /* ClaudeWeb */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C2ACC60090096479411F9D21 /* Build configuration list for PBXNativeTarget "ClaudeWeb" */;
@@ -236,6 +277,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					271B86341CD3173BC9C3D129 = {
+						DevelopmentTeam = V84XLAQ28F;
+					};
 					59BE935CE7793D344E204498 = {
 						DevelopmentTeam = V84XLAQ28F;
 					};
@@ -259,6 +303,7 @@
 			projectRoot = "";
 			targets = (
 				59BE935CE7793D344E204498 /* ClaudeWeb */,
+				271B86341CD3173BC9C3D129 /* ClaudeWebTests */,
 			);
 		};
 /* End PBXProject section */
@@ -313,7 +358,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7F85EECE6F336C1AC92D9245 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				577BE076AA69A32AC0F06F12 /* ProtocolFixtureTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		21CCAFE0A398B4AA41367B27 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 59BE935CE7793D344E204498 /* ClaudeWeb */;
+			targetProxy = 0C2EF871824D8014FF8A8643 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		153AAF576A8A01F568EDBFE2 /* Release */ = {
@@ -401,6 +462,24 @@
 			};
 			name = Debug;
 		};
+		7515FD0B8E42E94DE94FE2A3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIDeviceFamily = "[1]";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.albertsun6.claudeweb-native.tests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClaudeWeb.app/ClaudeWeb";
+			};
+			name = Debug;
+		};
 		822B8840AA2FB6586B7F6799 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -479,6 +558,24 @@
 			};
 			name = Debug;
 		};
+		DD76F6B3089EA93A0B7F148F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIDeviceFamily = "[1]";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.albertsun6.claudeweb-native.tests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClaudeWeb.app/ClaudeWeb";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -496,6 +593,15 @@
 			buildConfigurations = (
 				B1EEA0FC4FC93A71A5A65539 /* Debug */,
 				153AAF576A8A01F568EDBFE2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D42A4B809B42D2DB4D347D03 /* Build configuration list for PBXNativeTarget "ClaudeWebTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7515FD0B8E42E94DE94FE2A3 /* Debug */,
+				DD76F6B3089EA93A0B7F148F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
