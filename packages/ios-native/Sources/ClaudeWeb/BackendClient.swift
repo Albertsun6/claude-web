@@ -83,6 +83,7 @@ final class BackendClient {
     var currentMessages: [ChatLine] { store.currentMessages }
     var currentBusy: Bool { store.currentBusy }
     var currentPendingPermission: PermissionRequest? { store.currentPendingPermission }
+    var currentPendingQueue: [QueuedPrompt] { store.currentPendingQueue }
     var activeRunCount: Int { store.activeRunCount }
 
     var onConversationDirty: ((String) -> Void)? {
@@ -279,6 +280,25 @@ final class BackendClient {
         }
     }
 
+    /// Enqueue a prompt to run automatically after the next session_ended(completed).
+    /// If the conversation is idle the item waits in queue until the next completed turn.
+    func enqueuePromptCurrent(
+        _ text: String,
+        model: String = "claude-haiku-4-5",
+        permissionMode: String = "plan",
+        attachments: [ImageAttachment]? = nil
+    ) {
+        guard let convId = store.currentConversationId else { return }
+        let q = QueuedPrompt(text: text, model: model, permissionMode: permissionMode, attachments: attachments)
+        store.enqueuePrompt(q, forConversation: convId)
+        telemetry?.log("queue.enqueue", props: ["textLen": String(text.count), "queueLen": String(store.currentPendingQueue.count)], conversationId: convId)
+    }
+
+    func removeQueuedPrompt(id: String) {
+        guard let convId = store.currentConversationId else { return }
+        store.removeQueuedPrompt(id: id, forConversation: convId)
+    }
+
     /// UI-side convenience: send to the currently-focused conversation,
     /// auto-creating one in `defaultCwdForNew` if none exists yet (typical
     /// first-launch case). Existing conversations keep their original cwd.
@@ -382,6 +402,7 @@ final class BackendClient {
             _ = store.handleSessionEnded(convId: convId, runId: runId, reason: reason)
             router.release(runId: runId)
             forgetRunAllowlist(runId)
+            if reason == "completed" { fireNextQueued(convId: convId) }
         case .error(_, let message):
             store.handleError(convId: convId, runId: runId, message: message)
             // Even on error, drop the run-id mapping to prevent leak.
@@ -420,6 +441,26 @@ final class BackendClient {
             return
         case .unknown:
             return
+        }
+    }
+
+    private func fireNextQueued(convId: String) {
+        // Don't dequeue until we know the WS is up — if we dequeue first and
+        // sendPrompt fails (WS dropped between turns), the item is silently lost
+        // with no retry opportunity.
+        guard webSocket.isOpen else {
+            telemetry?.warn("queue.fire.skipped_no_ws", conversationId: convId)
+            return
+        }
+        guard let next = store.dequeueNextPrompt(forConversation: convId) else { return }
+        telemetry?.log("queue.fire", props: ["textLen": String(next.text.count)], conversationId: convId)
+        // Schedule on the next run-loop tick so session_ended UI changes render
+        // before the new turn begins.
+        Task { [weak self] in
+            self?.sendPrompt(next.text, conversationId: convId,
+                             model: next.model,
+                             permissionMode: next.permissionMode,
+                             attachments: next.attachments)
         }
     }
 

@@ -116,7 +116,7 @@ private struct ToolResultRow: View {
                     }
                     .font(.caption2)
                     .buttonStyle(.plain)
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(Color.accentColor)
                 }
             }
 

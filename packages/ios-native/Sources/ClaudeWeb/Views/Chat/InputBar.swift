@@ -18,6 +18,7 @@ struct InputBar: View {
     let cwd: String
     let busy: Bool
     let onSend: ([ImageAttachment]) -> Void
+    let onQueue: ([ImageAttachment]) -> Void
     let onStop: () -> Void
     let onTranscript: (String) -> Void
 
@@ -84,10 +85,10 @@ struct InputBar: View {
                 ) {
                     Image(systemName: pendingImages.isEmpty ? "photo" : "photo.badge.checkmark")
                         .frame(width: 36, height: 44)
-                        .foregroundStyle(pendingImages.isEmpty ? .secondary : .accentColor)
+                        .foregroundStyle(pendingImages.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.accentColor))
                 }
                 .buttonStyle(.plain)
-                .disabled(busy)
+                .disabled(busy)  // PhotosPicker disabled when busy, so queued attachments are always nil (by design; architecture supports it for future use)
                 .onChange(of: pickerSelection) { _, items in
                     Task { await loadPickedImages(items) }
                 }
@@ -119,6 +120,15 @@ struct InputBar: View {
                 pttButton
 
                 if busy {
+                    if canSend {
+                        Button(action: doQueue) {
+                            Image(systemName: "text.badge.plus")
+                                .frame(width: 36, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityLabel("加入队列")
+                    }
                     Button(role: .destructive, action: onStop) {
                         Image(systemName: "stop.fill")
                             .frame(width: 44, height: 44)
@@ -144,6 +154,15 @@ struct InputBar: View {
             ImageAttachment(mediaType: $0.mediaType, dataBase64: $0.dataBase64)
         }
         onSend(attachments)
+        pendingImages = []
+        pickerSelection = []
+    }
+
+    private func doQueue() {
+        let attachments = pendingImages.map {
+            ImageAttachment(mediaType: $0.mediaType, dataBase64: $0.dataBase64)
+        }
+        onQueue(attachments)
         pendingImages = []
         pickerSelection = []
     }

@@ -111,6 +111,11 @@ final class ConversationStore {
         return stateByConversation[id]?.pendingPermission
     }
 
+    var currentPendingQueue: [QueuedPrompt] {
+        guard let id = currentConversationId else { return [] }
+        return stateByConversation[id]?.pendingQueue ?? []
+    }
+
     /// Total number of in-flight turns across ALL conversations. UI uses this
     /// for the global activity badge on the drawer button.
     var activeRunCount: Int {
@@ -287,6 +292,28 @@ final class ConversationStore {
             : (normCwd as NSString).lastPathComponent
         let next = (conversationCounterByCwd[normCwd] ?? 0) + 1
         return "\(base) \(next)"
+    }
+
+    // MARK: - Prompt queue
+
+    func enqueuePrompt(_ prompt: QueuedPrompt, forConversation convId: String) {
+        guard var s = stateByConversation[convId] else { return }
+        s.pendingQueue.append(prompt)
+        stateByConversation[convId] = s
+    }
+
+    /// Remove and return the first queued prompt, or nil if the queue is empty.
+    func dequeueNextPrompt(forConversation convId: String) -> QueuedPrompt? {
+        guard var s = stateByConversation[convId], !s.pendingQueue.isEmpty else { return nil }
+        let next = s.pendingQueue.removeFirst()
+        stateByConversation[convId] = s
+        return next
+    }
+
+    func removeQueuedPrompt(id: String, forConversation convId: String) {
+        guard var s = stateByConversation[convId] else { return }
+        s.pendingQueue.removeAll { $0.id == id }
+        stateByConversation[convId] = s
     }
 
     // MARK: - Send-side mutations

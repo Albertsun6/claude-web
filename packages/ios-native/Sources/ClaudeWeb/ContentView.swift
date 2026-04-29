@@ -130,11 +130,18 @@ struct ContentView: View {
                 ChatListView(messages: client.currentMessages)
                     .frame(maxHeight: .infinity)
                 Divider()
+                if !client.currentPendingQueue.isEmpty {
+                    QueueStrip(
+                        queue: client.currentPendingQueue,
+                        onRemove: { id in client.removeQueuedPrompt(id: id) }
+                    )
+                }
                 InputBar(
                     draft: $draft,
                     cwd: currentCwd,
                     busy: client.currentBusy,
                     onSend: { attachments in send(attachments) },
+                    onQueue: { attachments in enqueue(attachments) },
                     onStop: client.interrupt,
                     onTranscript: { text in
                         if voice.active {
@@ -373,5 +380,54 @@ private var chipColor: Color {
             attachments: atts
         )
         draft = ""
+    }
+
+    private func enqueue(_ attachments: [ImageAttachment] = []) {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let atts: [ImageAttachment]? = attachments.isEmpty ? nil : attachments
+        guard !text.isEmpty || atts != nil else { return }
+        client.enqueuePromptCurrent(
+            text.isEmpty ? "(图片)" : text,
+            model: settings.model,
+            permissionMode: settings.permissionMode,
+            attachments: atts
+        )
+        draft = ""
+    }
+}
+
+// MARK: - QueueStrip
+
+private struct QueueStrip: View {
+    let queue: [QueuedPrompt]
+    let onRemove: (String) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 12)
+                ForEach(queue) { item in
+                    HStack(spacing: 4) {
+                        Text(String(item.text.prefix(28)) + (item.text.count > 28 ? "…" : ""))
+                            .font(.caption)
+                            .lineLimit(1)
+                        Button { onRemove(item.id) } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.secondary.opacity(0.15), in: .capsule)
+                }
+            }
+            .padding(.trailing, 12)
+            .padding(.vertical, 6)
+        }
+        .background(.bar)
     }
 }

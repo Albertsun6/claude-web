@@ -53,65 +53,62 @@ struct AtFilePicker: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if loading {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let err = errorMsg {
-                    ContentUnavailableView("加载失败", systemImage: "exclamationmark.triangle", description: Text(err))
-                } else if filtered.isEmpty {
-                    ContentUnavailableView("无匹配文件", systemImage: "doc.questionmark", description: Text(query.isEmpty ? "目录为空" : "没有匹配 "\(query)" 的文件"))
-                } else {
-                    List {
-                        // Back button (not at root)
-                        if !path.isEmpty {
-                            Button {
-                                ascend()
-                            } label: {
-                                Label("返回上级", systemImage: "chevron.left")
-                                    .foregroundStyle(.accentColor)
-                            }
-                        }
-                        ForEach(filtered) { entry in
-                            Button {
-                                pick(entry)
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: entry.isDir ? "folder.fill" : fileIcon(entry.name))
-                                        .foregroundStyle(entry.isDir ? .yellow : .secondary)
-                                        .frame(width: 20)
-                                    Text(entry.name)
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    Spacer()
-                                    if entry.isDir {
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption)
-                                            .foregroundStyle(.tertiary)
-                                    } else if let size = entry.size {
-                                        Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
-                                            .font(.caption)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                }
+            fileListContent
+                .navigationTitle(breadcrumbTitle)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { dismiss() }
+                    }
+                    ToolbarItem(placement: .principal) {
+                        breadcrumbView
+                    }
+                }
+        }
+        .task(id: absolutePath) { await load() }
+    }
+
+    @ViewBuilder
+    private var fileListContent: some View {
+        if loading {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let err = errorMsg {
+            ContentUnavailableView("加载失败", systemImage: "exclamationmark.triangle", description: Text(err))
+        } else if filtered.isEmpty {
+            ContentUnavailableView("无匹配文件", systemImage: "doc.questionmark", description: Text(query.isEmpty ? "目录为空" : "没有匹配 \"\(query)\" 的文件"))
+        } else {
+            List {
+                if !path.isEmpty {
+                    Button { ascend() } label: {
+                        Label("返回上级", systemImage: "chevron.left")
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
+                ForEach(filtered) { entry in
+                    Button { pick(entry) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: entry.isDir ? "folder.fill" : fileIcon(entry.name))
+                                .foregroundStyle(entry.isDir ? AnyShapeStyle(.yellow) : AnyShapeStyle(.secondary))
+                                .frame(width: 20)
+                            Text(entry.name)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Spacer()
+                            if entry.isDir {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            } else if let size = entry.size {
+                                Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
                             }
                         }
                     }
-                    .listStyle(.plain)
                 }
             }
-            .navigationTitle(breadcrumbTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                // Breadcrumb trail in the principal slot on wide enough screens
-                ToolbarItem(placement: .principal) {
-                    breadcrumbView
-                }
-            }
+            .listStyle(.plain)
         }
-        .task(id: absolutePath) { await load() }
     }
 
     // MARK: - Breadcrumb
@@ -133,7 +130,7 @@ struct AtFilePicker: View {
                             .lineLimit(1)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(idx == breadcrumbs.count - 1 ? .primary : .accentColor)
+                    .foregroundStyle(idx == breadcrumbs.count - 1 ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor))
                     if idx < breadcrumbs.count - 1 {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 9))

@@ -22,11 +22,30 @@ struct Conversation: Identifiable, Codable, Equatable {
     var lastUsed: Date
 }
 
+struct QueuedPrompt: Identifiable, Equatable {
+    let id: String
+    let text: String
+    let model: String
+    let permissionMode: String
+    let attachments: [ImageAttachment]?
+
+    init(text: String, model: String, permissionMode: String, attachments: [ImageAttachment]? = nil) {
+        self.id = UUID().uuidString
+        self.text = text
+        self.model = model
+        self.permissionMode = permissionMode
+        self.attachments = attachments
+    }
+
+    static func == (lhs: QueuedPrompt, rhs: QueuedPrompt) -> Bool { lhs.id == rhs.id }
+}
+
 struct ConversationChatState: Equatable {
     var messages: [ChatLine] = []
     var pendingPermission: PermissionRequest? = nil
     var currentRunId: String? = nil
     var busy: Bool = false
+    var pendingQueue: [QueuedPrompt] = []
 }
 
 struct ChatLine: Identifiable, Codable, Equatable {
