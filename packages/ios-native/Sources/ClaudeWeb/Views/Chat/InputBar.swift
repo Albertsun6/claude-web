@@ -114,7 +114,7 @@ struct InputBar: View {
                         ToolbarItemGroup(placement: .keyboard) {
                             Button("↑") { traverseHistory(direction: .up) }
                                 .font(.caption2)
-                                .disabled(historyIndex == 0)
+                                .disabled(historyIndex == promptHistory.count - 1)
                             Button("↓") { traverseHistory(direction: .down) }
                                 .font(.caption2)
                                 .disabled(historyIndex < 0)
