@@ -29,16 +29,12 @@
 
 ---
 
-### 1. 图片粘贴 / 拖拽（多模态输入）
-手机 PWA 里截图后直接粘贴到输入框，发给 Claude 做视觉分析。
-
-**实现**:
-- 前端 `paste`/`drop` 事件捕获 image blobs
-- base64 编码后塞进 user_prompt 的 content array：`[{type:"text",text:"..."},{type:"image",source:{...}}]`
-- 后端 cli-runner 透传给 stream-json stdin
-- UI 在输入框上方显示缩略图，可删除
-
-**为什么值得**：手机定位很多场景是"看到一个东西问 Claude"——错误截图、UI 设计、菜单照片。
+### 1. 图片粘贴 / 拖拽（多模态输入）✅ 完成
+- **协议**：[ImageAttachment](packages/shared/src/protocol.ts) 字段在 user_prompt 上，多模态 fixture 见 `packages/shared/fixtures/protocol/client-user-prompt-with-attachment.json`。
+- **后端**：[cli-runner.ts](packages/backend/src/cli-runner.ts) 把 attachments 转为 `[{type:"text"},{type:"image",source:{type:"base64",...}}]` content array 写入 stream-json stdin。
+- **Web 前端**：[InputBox.tsx](packages/frontend/src/components/InputBox.tsx) 的 `onPaste` / `onDrop` 捕获 image blobs，输入框上方显示缩略图，可删除。
+- **iOS 原生**：[InputBar.swift](packages/ios-native/Sources/ClaudeWeb/Views/Chat/InputBar.swift) 用 PhotosPicker（最多 5 张），>1MB 自动 JPEG 压缩，pendingImages 缩略图行可删除。
+- 仍未做：iOS 端 UIPasteboard 直接粘贴（需要单独按钮）、iPad 端 dragDestination。优先级低，PhotoPicker 已够用。
 
 ---
 
