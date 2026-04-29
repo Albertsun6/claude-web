@@ -14,6 +14,14 @@ struct SettingsView: View {
     @State private var showResetConfirm = false
     @State private var showResetDone = false
 
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    }
+
+    private var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+    }
+
     var body: some View {
         @Bindable var s = settings
         NavigationStack {
@@ -165,6 +173,26 @@ struct SettingsView: View {
                     Text("危险操作")
                 } footer: {
                     Text("清除所有本地数据：UserDefaults（backend / cwd / 当前对话焦点 / 设置）+ 缓存对话和消息历史。**后端 jsonl 不删**。重置后请关闭并重新打开 app。")
+                }
+                Section {
+                    HStack {
+                        Text("版本")
+                        Spacer()
+                        Text(appVersion)
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                    HStack {
+                        Text("构建")
+                        Spacer()
+                        Text(buildNumber)
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                } header: {
+                    Text("关于")
+                } footer: {
+                    Text("Seaidea v\(appVersion) (build \(buildNumber))")
                 }
             }
             .alert("确认重置应用数据？", isPresented: $showResetConfirm) {
