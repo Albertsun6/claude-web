@@ -19,7 +19,34 @@ final class ConversationStore {
     var stateByConversation: [String: ConversationChatState] = [:]
 
     /// UI focus. UI binds computed views below to this.
-    var currentConversationId: String?
+    var currentConversationId: String? {
+        didSet {
+            if oldValue != currentConversationId {
+                focusGeneration += 1
+            }
+        }
+    }
+
+    /// Monotonic token for "the user has stayed on the same conversation".
+    /// TTS captures it at completion time and checks it before speaking, so a
+    /// quick switch away and back doesn't accidentally start stale audio.
+    private(set) var focusGeneration: Int = 0
+
+    /// Conversations currently in "follow" mode — receiving live jsonl
+    /// updates from a Claude Code session running in another client. Keyed
+    /// by Conversation.id; value records the session being tailed and the
+    /// last byte offset emitted (so a reconnect can resume cleanly).
+    var followingByConversation: [String: FollowState] = [:]
+
+    struct FollowState: Equatable {
+        let cwd: String
+        let sessionId: String
+        var byteOffset: Int
+    }
+
+    /// Per-run "auto-allow" tools — cleared when run ends. Maps runId → Set of
+    /// toolNames that have been marked "always allow this turn".
+    private var allowedToolsByRun: [String: Set<String>] = [:]
 
     /// Per-cwd auto-increment counter used to label new conversations like
     /// "claude-web 1", "claude-web 2". In-memory only (resets on app launch);
@@ -32,10 +59,34 @@ final class ConversationStore {
     /// binding) so a crash before session_ended doesn't lose the binding.
     var onConversationDirty: ((String) -> Void)?
 
-    /// Invoked once per turn after `session_ended` arrives, but ONLY when the
-    /// finishing run belongs to the currently-focused conversation. App wires
-    /// this to the TTS player. Background conversations completing won't talk.
-    var onTurnComplete: (() -> Void)?
+    /// Structured context for a completed turn. The App uses this for TTS so
+    /// it never has to re-read "current" conversation state after async delay.
+    struct CompletedTurn {
+        enum Source {
+            case liveRun(runId: String)
+            case followedSession(sessionId: String)
+        }
+
+        let conversationId: String
+        let source: Source
+        let spokenText: String
+        let focusGeneration: Int
+
+        var runId: String? {
+            if case .liveRun(let runId) = source { return runId }
+            return nil
+        }
+
+        var sessionId: String? {
+            if case .followedSession(let sessionId) = source { return sessionId }
+            return nil
+        }
+    }
+
+    /// Invoked once per completed turn, for both runs launched by Seaidea and
+    /// followed external jsonl sessions, but ONLY when the finishing turn
+    /// belongs to the currently-focused conversation. App wires this to TTS.
+    var onCompletedTurn: ((CompletedTurn) -> Void)?
 
     private weak var telemetry: Telemetry?
 
@@ -122,6 +173,89 @@ final class ConversationStore {
         Array(conversations.values)
     }
 
+    // MARK: - Follow mode
+
+    /// Mark a conversation as "following" a Claude Code session. The
+    /// caller is responsible for actually wiring the WS subscription (in
+    /// BackendClient) — this just records the metadata so the receive
+    /// pump knows where to route incoming `session_event` frames.
+    func startFollowing(convId: String, cwd: String, sessionId: String, byteOffset: Int) {
+        let normCwd = (cwd as NSString).standardizingPath
+        followingByConversation[convId] = FollowState(
+            cwd: normCwd, sessionId: sessionId, byteOffset: byteOffset
+        )
+    }
+
+    func followedConversation(cwd: String, sessionId: String) -> String? {
+        let normCwd = (cwd as NSString).standardizingPath
+        return followingByConversation.first { _, state in
+            state.cwd == normCwd && state.sessionId == sessionId
+        }?.key
+    }
+
+    /// Stop following. No-op if not currently following.
+    func stopFollowing(convId: String) {
+        followingByConversation.removeValue(forKey: convId)
+    }
+
+    /// Bump the recorded byte offset after emitting a session_event entry,
+    /// so a reconnect can resume from the same place.
+    func updateFollowOffset(convId: String, byteOffset: Int) {
+        guard var st = followingByConversation[convId] else { return }
+        st.byteOffset = byteOffset
+        followingByConversation[convId] = st
+    }
+
+    /// Append a single ChatLine to a conversation's transcript. Used by the
+    /// session-event pump (each jsonl entry parses to 0..N ChatLines).
+    func appendChatLine(convId: String, line: ChatLine) {
+        var s = stateByConversation[convId] ?? ConversationChatState()
+        s.messages.append(line)
+        stateByConversation[convId] = s
+        // Bump lastUsed so the drawer surfaces "actively-followed" sessions.
+        if var conv = conversations[convId] {
+            conv.lastUsed = Date()
+            conversations[convId] = conv
+        }
+    }
+
+    /// A followed external Claude Code session emitted a jsonl `result` row.
+    /// Treat that as the same semantic boundary as `session_ended` for runs we
+    /// launched ourselves, so TTS/telemetry can share one event model.
+    func handleFollowedSessionCompleted(convId: String, sessionId: String) -> Bool {
+        guard let s = stateByConversation[convId] else { return false }
+        onConversationDirty?(convId)
+        guard convId == currentConversationId else { return false }
+        if let spoken = s.messages.reversed().compactMap(\.spokenText).first {
+            let turn = CompletedTurn(
+                conversationId: convId,
+                source: .followedSession(sessionId: sessionId),
+                spokenText: spoken,
+                focusGeneration: focusGeneration
+            )
+            telemetry?.log(
+                "turn.completed.followed_session",
+                props: ["sessionId": sessionId, "textLen": String(spoken.count)],
+                conversationId: convId
+            )
+            onCompletedTurn?(turn)
+            return true
+        }
+        return false
+    }
+
+    /// Rename an existing conversation. No-op if the id is unknown or the
+    /// new title is empty after trimming. Fires onConversationDirty so the
+    /// rename survives a relaunch without waiting for the next session_ended.
+    func renameConversation(_ id: String, to newTitle: String) {
+        guard var conv = conversations[id] else { return }
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        conv.title = trimmed
+        conversations[id] = conv
+        onConversationDirty?(id)
+    }
+
     /// Drop a conversation from memory. Returns the runIds the caller should
     /// interrupt + release through RunRouter so the WS doesn't keep firing
     /// messages routed to a dead key. Does NOT touch the on-disk jsonl.
@@ -133,6 +267,7 @@ final class ConversationStore {
         }
         conversations.removeValue(forKey: id)
         stateByConversation.removeValue(forKey: id)
+        followingByConversation.removeValue(forKey: id)
         return runs
     }
 
@@ -177,13 +312,12 @@ final class ConversationStore {
 
         // Auto-derive title from first user message ONLY if the title is
         // still the auto-generated "<basename> <n>" placeholder. If the user
-        // gave it a custom name at creation, leave it alone.
+        // gave it a custom name at creation, leave it alone. Goes through
+        // TitleHelper so hook-injected XML blocks don't bleed into the title.
         if Self.isAutoNamedTitle(conversation.title, cwd: conversation.cwd) {
-            let snippet = prompt
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .prefix(30)
-            if !snippet.isEmpty {
-                conversation.title = String(snippet)
+            let derived = TitleHelper.makeTitle(from: prompt)
+            if !derived.isEmpty {
+                conversation.title = derived
             }
         }
         conversation.lastUsed = Date()
@@ -269,10 +403,10 @@ final class ConversationStore {
         stateByConversation[convId] = s
     }
 
-    /// Returns true iff the caller should fire `onTurnComplete` (i.e. the
-    /// finishing run belongs to the currently-focused conversation AND the
-    /// reason is "completed"). Caller is also responsible for releasing the
-    /// runId from RunRouter — store no longer touches it on this path.
+    /// Returns true iff the caller fired `onCompletedTurn` (i.e. the finishing
+    /// run belongs to the currently-focused conversation, has speakable text,
+    /// and the reason is "completed"). Caller is also responsible for releasing
+    /// the runId from RunRouter — store no longer touches it on this path.
     func handleSessionEnded(convId: String, runId: String, reason: String) -> Bool {
         guard var s = stateByConversation[convId] else { return false }
         s.busy = false
@@ -289,8 +423,28 @@ final class ConversationStore {
         // TTS only for the focused conversation. Background conversations
         // finishing in another tab shouldn't surprise-talk.
         if reason == "completed" && convId == currentConversationId {
-            onTurnComplete?()
-            return true
+            // Capture the exact text for this completed run now. The App may
+            // delay TTS briefly; reading `currentMessages` later can point at a
+            // different conversation after a user switch.
+            if let spoken = s.messages.reversed().compactMap({ line -> String? in
+                guard line.runId == runId else { return nil }
+                return line.spokenText
+            }).first {
+                let turn = CompletedTurn(
+                    conversationId: convId,
+                    source: .liveRun(runId: runId),
+                    spokenText: spoken,
+                    focusGeneration: focusGeneration
+                )
+                telemetry?.log(
+                    "turn.completed.live_run",
+                    props: ["textLen": String(spoken.count)],
+                    conversationId: convId,
+                    runId: runId
+                )
+                onCompletedTurn?(turn)
+                return true
+            }
         }
         return false
     }
@@ -329,6 +483,22 @@ final class ConversationStore {
             props: ["tool": toolName, "requestId": requestId],
             conversationId: convId, runId: runId
         )
+    }
+
+    // MARK: - Permission management
+
+    func allowToolForRun(_ runId: String, _ toolName: String) {
+        var set = allowedToolsByRun[runId] ?? Set()
+        set.insert(toolName)
+        allowedToolsByRun[runId] = set
+    }
+
+    func isToolAllowedForRun(_ runId: String, _ toolName: String) -> Bool {
+        return allowedToolsByRun[runId]?.contains(toolName) ?? false
+    }
+
+    func forgetRunAllowlist(_ runId: String) {
+        allowedToolsByRun.removeValue(forKey: runId)
     }
 
     // MARK: - Internals

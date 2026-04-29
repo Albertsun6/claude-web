@@ -2,8 +2,10 @@ import SwiftUI
 
 struct PermissionSheet: View {
     let request: PermissionRequest
+    let client: BackendClient
     let onDecision: (PermissionDecision) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var autoAllowThisTurn = false
 
     var body: some View {
         NavigationStack {
@@ -17,6 +19,15 @@ struct PermissionSheet: View {
                         .textSelection(.enabled)
                         .lineLimit(10)
                 }
+                Section("后续处理") {
+                    Toggle(
+                        isOn: $autoAllowThisTurn,
+                        label: {
+                            Text("本轮对话中的 \(request.toolName) 总是允许")
+                                .font(.subheadline)
+                        }
+                    )
+                }
                 Section {
                     Button(role: .destructive) {
                         onDecision(.deny)
@@ -26,6 +37,9 @@ struct PermissionSheet: View {
                             .frame(maxWidth: .infinity)
                     }
                     Button {
+                        if autoAllowThisTurn {
+                            client.allowToolForRun(request.runId, request.toolName)
+                        }
                         onDecision(.allow)
                         dismiss()
                     } label: {

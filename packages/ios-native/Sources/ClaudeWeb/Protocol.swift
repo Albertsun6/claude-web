@@ -12,10 +12,13 @@ import Foundation
 enum ClientMessage: Encodable {
     case userPrompt(runId: String, prompt: String, cwd: String, model: String, permissionMode: String, resumeSessionId: String?)
     case interrupt(runId: String?)
-    case permissionReply(requestId: String, decision: String, runId: String?)
+    case permissionReply(requestId: String, decision: String, runId: String?, toolName: String?)
+    case sessionSubscribe(cwd: String, sessionId: String, fromByteOffset: Int?)
+    case sessionUnsubscribe(cwd: String, sessionId: String)
 
     enum CodingKeys: String, CodingKey {
-        case type, runId, prompt, cwd, model, permissionMode, resumeSessionId, requestId, decision
+        case type, runId, prompt, cwd, model, permissionMode, resumeSessionId,
+             requestId, decision, toolName, sessionId, fromByteOffset
     }
 
     func encode(to encoder: Encoder) throws {
@@ -32,11 +35,21 @@ enum ClientMessage: Encodable {
         case .interrupt(let runId):
             try c.encode("interrupt", forKey: .type)
             try c.encodeIfPresent(runId, forKey: .runId)
-        case .permissionReply(let requestId, let decision, let runId):
+        case .permissionReply(let requestId, let decision, let runId, let toolName):
             try c.encode("permission_reply", forKey: .type)
             try c.encode(requestId, forKey: .requestId)
             try c.encode(decision, forKey: .decision)
             try c.encodeIfPresent(runId, forKey: .runId)
+            try c.encodeIfPresent(toolName, forKey: .toolName)
+        case .sessionSubscribe(let cwd, let sessionId, let fromByteOffset):
+            try c.encode("session_subscribe", forKey: .type)
+            try c.encode(cwd, forKey: .cwd)
+            try c.encode(sessionId, forKey: .sessionId)
+            try c.encodeIfPresent(fromByteOffset, forKey: .fromByteOffset)
+        case .sessionUnsubscribe(let cwd, let sessionId):
+            try c.encode("session_unsubscribe", forKey: .type)
+            try c.encode(cwd, forKey: .cwd)
+            try c.encode(sessionId, forKey: .sessionId)
         }
     }
 }
@@ -49,6 +62,10 @@ enum ServerMessage {
     case error(runId: String?, message: String)
     case clearRunMessages(runId: String)
     case permissionRequest(runId: String, requestId: String, toolName: String, input: [String: Any])
+    /// One incremental jsonl entry from a `session_subscribe`d session.
+    /// `entryJSON` is the raw JSON of one normalized entry; consumer
+    /// decodes it as `TranscriptEntry` and reuses TranscriptParser.
+    case sessionEvent(cwd: String, sessionId: String, byteOffset: Int, entryJSON: Data)
     case unknown(type: String)
 
     /// Used by BackendClient to route a message to the conversation that
@@ -64,7 +81,8 @@ enum ServerMessage {
             return r
         case .error(let r, _):
             return r
-        case .unknown:
+        case .sessionEvent, .unknown:
+            // session_event isn't tied to a runId — routed via (cwd, sessionId).
             return nil
         }
     }
@@ -77,6 +95,7 @@ enum ServerMessage {
         case .error: return "error"
         case .clearRunMessages: return "clear_run_messages"
         case .permissionRequest: return "permission_request"
+        case .sessionEvent: return "session_event"
         case .unknown(let t): return "unknown:\(t)"
         }
     }
@@ -105,6 +124,18 @@ enum ServerMessage {
                 requestId: (json["requestId"] as? String) ?? "",
                 toolName: (json["toolName"] as? String) ?? "?",
                 input: (json["input"] as? [String: Any]) ?? [:]
+            )
+        case "session_event":
+            // Re-serialize the entry dict back to JSON Data so the consumer
+            // can hand it straight to JSONDecoder<TranscriptEntry>.
+            let entry = json["entry"] ?? [:]
+            let entryJSON = (try? JSONSerialization.data(withJSONObject: entry, options: []))
+                ?? Data("{}".utf8)
+            return .sessionEvent(
+                cwd: (json["cwd"] as? String) ?? "",
+                sessionId: (json["sessionId"] as? String) ?? "",
+                byteOffset: (json["byteOffset"] as? Int) ?? 0,
+                entryJSON: entryJSON
             )
         default:
             return .unknown(type: type)

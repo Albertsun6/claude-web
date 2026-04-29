@@ -9,6 +9,7 @@ struct ContentView: View {
     @Environment(VoiceRecorder.self) private var recorder
     @Environment(TTSPlayer.self) private var tts
     @Environment(VoiceSession.self) private var voice
+    @Environment(ProjectRegistry.self) private var registry
     @State private var draft: String = ""
     @State private var showSettings = false
     @State private var showDrawer = false
@@ -87,7 +88,7 @@ struct ContentView: View {
             get: { client.currentPendingPermission },
             set: { _ in /* dismissed by replyPermission */ }
         )) { req in
-            PermissionSheet(request: req) { decision in
+            PermissionSheet(request: req, client: client) { decision in
                 client.replyPermission(req, decision: decision)
             }
             .presentationDetents([.medium])
@@ -110,14 +111,16 @@ struct ContentView: View {
                     .padding(.vertical, 4)
                     .background(.bar)
                 }
-                if let err = voice.lastError {
-                    HStack {
+                if let err = voice.displayError {
+                    HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
-                        Text(err).font(.caption)
-                        Spacer()
+                        Text(err)
+                            .font(.caption)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
                         Button("关闭") {
-                            voice.lastError = nil
+                            voice.dismissError()
                         }
                         .font(.caption)
                     }
@@ -164,7 +167,10 @@ struct ContentView: View {
                 }
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
-                        Text("Seaidea").font(.headline)
+                        Text(currentProjectName)
+                            .font(.headline)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                         if settings.permissionMode == "bypassPermissions" {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.red)
@@ -190,15 +196,17 @@ struct ContentView: View {
                         Button {
                             withAnimation { showDrawer = true }
                         } label: {
-                            HStack(spacing: 3) {
+                            HStack(spacing: 4) {
+                                statusIndicator
+                                followIndicator
                                 Text(currentTitle)
                                     .font(.subheadline)
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor)
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
@@ -233,17 +241,68 @@ struct ContentView: View {
         return "新建"
     }
 
+    /// Project name shown in the toolbar's principal slot. Falls back to
+    /// the cwd's basename if the cwd isn't registered as a server project,
+    /// and to "Seaidea" when there's no current conversation at all.
+    private var currentProjectName: String {
+        guard let id = client.currentConversationId,
+              let conv = client.conversations[id] else {
+            return "Seaidea"
+        }
+        if let project = registry.project(forCwd: conv.cwd) {
+            return project.name
+        }
+        let base = (conv.cwd as NSString).lastPathComponent
+        return base.isEmpty ? "Seaidea" : base
+    }
+
+    /// Indicator shown when the current conversation is mirroring a
+    /// Claude Code session running in another client. Tap-to-switch via
+    /// the chip already opens the drawer; user takes over by typing a
+    /// prompt (BackendClient.sendPrompt unsubscribes automatically).
+    @ViewBuilder
+    private var followIndicator: some View {
+        if client.isFollowing(client.currentConversationId) {
+            Image(systemName: "dot.radiowaves.left.and.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.green)
+                .symbolEffect(.pulse, isActive: true)
+                .accessibilityLabel("正在跟随 Claude Code 会话")
+        }
+    }
+
+    /// Tiny prefix icon inside the conversation chip. Mirrors the most
+    /// load-bearing slice of `voice.state` so the user can tell at a glance
+    /// whether Claude is recording / transcribing / thinking — without
+    /// having to look at the chat list. TTS-playing/paused states are
+    /// intentionally omitted because `ttsControls` already shows them
+    /// explicitly with playback buttons. Errors live in the banner.
+    @ViewBuilder
+    private var statusIndicator: some View {
+        switch voice.state {
+        case .recording:
+            Image(systemName: "mic.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.red)
+        case .transcribing:
+            Image(systemName: "waveform")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.blue)
+                .symbolEffect(.variableColor.iterative, isActive: true)
+        case .thinking:
+            Image(systemName: "ellipsis")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.orange)
+                .symbolEffect(.pulse, isActive: true)
+        case .idle, .playingTTS, .pausedTTS, .error:
+            EmptyView()
+        }
+    }
+
     @ViewBuilder
     private var ttsControls: some View {
-        if voice.state == .error("") || isErrored {
-            Button {
-                voice.dismissError()
-            } label: {
-                Label("清除错误", systemImage: "exclamationmark.triangle.fill")
-                    .labelStyle(.iconOnly)
-                    .foregroundStyle(.orange)
-            }
-        }
+        // Error indicator removed — all voice/TTS errors now surface through
+        // the single banner above ChatListView (driven by voice.displayError).
         switch tts.state {
         case .fetching:
             ProgressView().scaleEffect(0.7)
@@ -275,13 +334,7 @@ struct ContentView: View {
         }
     }
 
-    private var isErrored: Bool {
-        if case .error = recorder.state { return true }
-        if case .error = tts.state { return true }
-        return false
-    }
-
-    private var chipColor: Color {
+private var chipColor: Color {
         switch client.state {
         case .connected: return .green
         case .connecting: return .yellow

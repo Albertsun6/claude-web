@@ -39,6 +39,9 @@ final class BackendClient {
         ws.onMessage = { [weak self] msg in
             self?.handle(msg)
         }
+        ws.onConnected = { [weak self] in
+            self?.resubscribeFollowedSessions()
+        }
     }
 
     func bindTelemetry(_ tel: Telemetry) {
@@ -87,9 +90,11 @@ final class BackendClient {
         set { store.onConversationDirty = newValue }
     }
 
-    var onTurnComplete: (() -> Void)? {
-        get { store.onTurnComplete }
-        set { store.onTurnComplete = newValue }
+    var focusGeneration: Int { store.focusGeneration }
+
+    var onCompletedTurn: ((ConversationStore.CompletedTurn) -> Void)? {
+        get { store.onCompletedTurn }
+        set { store.onCompletedTurn = newValue }
     }
 
     @discardableResult
@@ -113,10 +118,82 @@ final class BackendClient {
         store.peekNextAutoName(forCwd: cwd)
     }
 
+    func renameConversation(_ id: String, to newTitle: String) {
+        store.renameConversation(id, to: newTitle)
+    }
+
+    // MARK: - Follow mode (live jsonl tail of an external Claude Code session)
+
+    var followingByConversation: [String: ConversationStore.FollowState] {
+        store.followingByConversation
+    }
+
+    /// True iff `convId` is currently following an external session.
+    func isFollowing(_ convId: String?) -> Bool {
+        guard let convId else { return false }
+        return store.followingByConversation[convId] != nil
+    }
+
+    /// Start tailing the jsonl for `(cwd, sessionId)` and routing each new
+    /// entry into `convId`. `fromByteOffset` should be the file size at the
+    /// moment the caller fetched the historical transcript, so the stream
+    /// picks up right after that snapshot.
+    func subscribeSession(convId: String, cwd: String, sessionId: String, fromByteOffset: Int) {
+        store.startFollowing(convId: convId, cwd: cwd, sessionId: sessionId, byteOffset: fromByteOffset)
+        Task { [weak self] in
+            try? await self?.webSocket.send(
+                .sessionSubscribe(cwd: cwd, sessionId: sessionId, fromByteOffset: fromByteOffset)
+            )
+        }
+        telemetry?.log("session.follow.start",
+                       props: ["sessionId": sessionId, "offset": String(fromByteOffset)],
+                       conversationId: convId)
+    }
+
+    private func resubscribeFollowedSessions() {
+        let follows = store.followingByConversation
+        guard !follows.isEmpty else { return }
+        telemetry?.log("session.follow.resubscribe", props: ["count": String(follows.count)])
+        for (convId, st) in follows {
+            Task { [weak self] in
+                try? await self?.webSocket.send(
+                    .sessionSubscribe(cwd: st.cwd, sessionId: st.sessionId, fromByteOffset: st.byteOffset)
+                )
+            }
+            telemetry?.log(
+                "session.follow.resubscribe.one",
+                props: ["sessionId": st.sessionId, "offset": String(st.byteOffset)],
+                conversationId: convId
+            )
+        }
+    }
+
+    /// Stop tailing. Idempotent — no-op if not currently following.
+    func unsubscribeSession(convId: String) {
+        guard let st = store.followingByConversation[convId] else { return }
+        store.stopFollowing(convId: convId)
+        Task { [weak self] in
+            try? await self?.webSocket.send(
+                .sessionUnsubscribe(cwd: st.cwd, sessionId: st.sessionId)
+            )
+        }
+        telemetry?.log("session.follow.stop",
+                       props: ["sessionId": st.sessionId],
+                       conversationId: convId)
+    }
+
     /// Drop a conversation. Sends an interrupt for any in-flight run, then
     /// releases the runId from the router and clears the state. Caller is
     /// responsible for picking a new focus if `id == currentConversationId`.
     func closeConversation(_ id: String) {
+        // If we're following an external session for this conversation, tell
+        // backend to release the watcher subscription. Must run BEFORE
+        // store.closeConversation since that clears followingByConversation.
+        if let st = store.followingByConversation[id] {
+            Task { [weak self] in
+                try? await self?.webSocket.send(.sessionUnsubscribe(cwd: st.cwd, sessionId: st.sessionId))
+            }
+        }
         let runs = store.closeConversation(id)
         for runId in runs {
             Task { [weak self] in try? await self?.webSocket.send(.interrupt(runId: runId)) }
@@ -151,6 +228,14 @@ final class BackendClient {
             telemetry?.error("prompt.send.unknown_conversation", conversationId: conversationId)
             store.appendError(toConversation: conversationId, "对话不存在: \(conversationId)")
             return
+        }
+
+        // Auto "take over": if this conversation is currently following an
+        // external Claude Code session, drop the subscription before we fire
+        // a prompt of our own. Otherwise the CLI's --resume on this sid would
+        // race with whatever client is on the other end.
+        if isFollowing(conversationId) {
+            unsubscribeSession(convId: conversationId)
         }
 
         let runId = UUID().uuidString
@@ -224,7 +309,8 @@ final class BackendClient {
             try? await self?.webSocket.send(.permissionReply(
                 requestId: request.requestId,
                 decision: decision.rawValue,
-                runId: request.runId
+                runId: request.runId,
+                toolName: request.toolName
             ))
         }
         if let convId = router.resolve(runId: request.runId) {
@@ -232,9 +318,28 @@ final class BackendClient {
         }
     }
 
+    func allowToolForRun(_ runId: String, _ toolName: String) {
+        store.allowToolForRun(runId, toolName)
+    }
+
+    func isToolAllowedForRun(_ runId: String, _ toolName: String) -> Bool {
+        store.isToolAllowedForRun(runId, toolName)
+    }
+
+    func forgetRunAllowlist(_ runId: String) {
+        store.forgetRunAllowlist(runId)
+    }
+
     // MARK: - Receive routing
 
     private func handle(_ msg: ServerMessage) {
+        // session_event has no runId — route by sessionId directly to the
+        // followed conversation.
+        if case .sessionEvent(let cwd, let sessionId, let byteOffset, let entryJSON) = msg {
+            handleSessionEvent(cwd: cwd, sessionId: sessionId, byteOffset: byteOffset, entryJSON: entryJSON)
+            return
+        }
+
         // Resolve which conversation this message belongs to. Messages whose
         // runId we don't know — orphan reconnect frames, conversations the
         // user already closed, global errors — silently drop. They must NOT
@@ -271,6 +376,7 @@ final class BackendClient {
             // could mis-attribute future runs that happen to recycle the id.
             _ = store.handleSessionEnded(convId: convId, runId: runId, reason: reason)
             router.release(runId: runId)
+            forgetRunAllowlist(runId)
         case .error(_, let message):
             store.handleError(convId: convId, runId: runId, message: message)
             // Even on error, drop the run-id mapping to prevent leak.
@@ -278,6 +384,23 @@ final class BackendClient {
         case .clearRunMessages:
             store.handleClearRunMessages(convId: convId, runId: runId)
         case .permissionRequest(_, let requestId, let toolName, let input):
+            // Auto-allow if user opted in for this run+tool
+            if store.isToolAllowedForRun(runId, toolName) {
+                Task { [weak self] in
+                    try? await self?.webSocket.send(.permissionReply(
+                        requestId: requestId,
+                        decision: "allow",
+                        runId: runId,
+                        toolName: toolName
+                    ))
+                }
+                telemetry?.log(
+                    "permission.auto_allow",
+                    props: ["tool": toolName, "requestId": requestId],
+                    conversationId: convId, runId: runId
+                )
+                return
+            }
             store.handlePermissionRequest(
                 convId: convId,
                 runId: runId,
@@ -285,8 +408,62 @@ final class BackendClient {
                 toolName: toolName,
                 input: input
             )
+        case .sessionEvent:
+            // Already handled at the top of `handle(_:)` — early-return guard
+            // means switch never reaches this case in practice. Listed for
+            // exhaustiveness.
+            return
         case .unknown:
             return
+        }
+    }
+
+    /// Route an incremental jsonl entry into the conversation that's
+    /// currently following this sessionId. The `entryJSON` payload is the
+    /// raw JSON of one normalized entry — same shape as items returned by
+    /// `/api/sessions/transcript`. Decoded into `TranscriptEntry`, run
+    /// through `TranscriptParser`, and any resulting ChatLines are
+    /// appended to the conversation's transcript.
+    private func handleSessionEvent(cwd: String, sessionId: String, byteOffset: Int, entryJSON: Data) {
+        // Find which conversation is following this session. Match against
+        // `followingByConversation` (NOT just `conversation.sessionId`) so
+        // we don't accidentally inject events into a conversation that's
+        // simply a historical load with the same sid but isn't subscribed.
+        guard let convId = store.followedConversation(cwd: cwd, sessionId: sessionId),
+              let follow = store.followingByConversation[convId] else {
+            telemetry?.warn("session_event.no_follower", props: ["cwd": cwd, "sessionId": sessionId])
+            return
+        }
+        guard store.stateByConversation[convId] != nil else {
+            telemetry?.warn("session_event.conversation_missing",
+                            props: ["sessionId": sessionId], conversationId: convId)
+            return
+        }
+        guard byteOffset > follow.byteOffset else {
+            telemetry?.warn(
+                "session_event.duplicate_offset",
+                props: ["sessionId": sessionId, "offset": String(byteOffset), "current": String(follow.byteOffset)],
+                conversationId: convId
+            )
+            return
+        }
+
+        do {
+            let entry = try JSONDecoder().decode(TranscriptEntry.self, from: entryJSON)
+            let lines = TranscriptParser.parse([entry])
+            for line in lines {
+                store.appendChatLine(convId: convId, line: line)
+            }
+            store.updateFollowOffset(convId: convId, byteOffset: byteOffset)
+            if entry.type == "result" {
+                _ = store.handleFollowedSessionCompleted(convId: convId, sessionId: sessionId)
+            }
+            // Persist after each event so a force-quit doesn't lose what we
+            // mirrored from the external session.
+            onConversationDirty?(convId)
+        } catch {
+            telemetry?.error("session_event.decode_failed", error: error,
+                             props: ["sessionId": sessionId], conversationId: convId)
         }
     }
 }
