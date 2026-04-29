@@ -34,6 +34,7 @@ final class AppSettings {
     private static let alwaysExpandThinkingKey = "com.albertsun6.claudeweb-native.alwaysExpandThinking"
     private static let verboseToolsKey = "com.albertsun6.claudeweb-native.verboseTools"
     private static let autoEnterVoiceKey = "com.albertsun6.claudeweb-native.autoEnterVoice"
+    private static let gitGateEnabledKey = "com.albertsun6.claudeweb-native.gitGateEnabled"
 
     var backendURL: URL {
         didSet {
@@ -124,6 +125,13 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(autoEnterVoice, forKey: Self.autoEnterVoiceKey) }
     }
 
+    /// Whether to pop the "out-the-door" git status sheet after each completed
+    /// turn that left a dirty working tree. Reactive; only fires for cwds that
+    /// are git repos. Default ON — see H5 in IDEAS.md.
+    var gitGateEnabled: Bool {
+        didSet { UserDefaults.standard.set(gitGateEnabled, forKey: Self.gitGateEnabledKey) }
+    }
+
     init() {
         // Default: simulator → http://localhost:3030; device → Tailscale URL.
         // We'll prompt the user to pick at first launch in the settings page.
@@ -145,6 +153,7 @@ final class AppSettings {
         self.alwaysExpandThinking = UserDefaults.standard.object(forKey: Self.alwaysExpandThinkingKey) as? Bool ?? false
         self.verboseTools = UserDefaults.standard.object(forKey: Self.verboseToolsKey) as? Bool ?? false
         self.autoEnterVoice = UserDefaults.standard.object(forKey: Self.autoEnterVoiceKey) as? Bool ?? true
+        self.gitGateEnabled = UserDefaults.standard.object(forKey: Self.gitGateEnabledKey) as? Bool ?? true
     }
 
     private static func detectDefaultBackend() -> URL {
@@ -164,6 +173,7 @@ final class AppSettings {
             speakStyleKey, slowTtsKey, authTokenKey, modelKey,
             silentKeepaliveKey, currentConversationIdKey, fontSizeKey,
             alwaysExpandThinkingKey, verboseToolsKey, autoEnterVoiceKey,
+            gitGateEnabledKey,
         ]
         for k in keys {
             UserDefaults.standard.removeObject(forKey: k)

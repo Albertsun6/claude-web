@@ -46,6 +46,11 @@ struct ConversationChatState: Equatable {
     var currentRunId: String? = nil
     var busy: Bool = false
     var pendingQueue: [QueuedPrompt] = []
+    /// Set after a `sessionEnded(reason: completed)` if the conversation's cwd
+    /// has uncommitted git changes and the user enabled `gitGateEnabled`. UI
+    /// renders a sheet when the conversation is focused; cleared when the user
+    /// dismisses it. Survives focus switches by living on per-conversation state.
+    var pendingGitGate: GitStatusReport? = nil
 }
 
 struct ChatLine: Identifiable, Codable, Equatable {

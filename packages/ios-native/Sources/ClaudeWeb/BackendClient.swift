@@ -84,7 +84,22 @@ final class BackendClient {
     var currentBusy: Bool { store.currentBusy }
     var currentPendingPermission: PermissionRequest? { store.currentPendingPermission }
     var currentPendingQueue: [QueuedPrompt] { store.currentPendingQueue }
+    var currentPendingGitGate: GitStatusReport? { store.currentPendingGitGate }
     var activeRunCount: Int { store.activeRunCount }
+
+    func setPendingGitGate(convId: String, report: GitStatusReport) {
+        store.setPendingGitGate(convId: convId, report: report)
+    }
+
+    func clearPendingGitGate(convId: String) {
+        store.clearPendingGitGate(convId: convId)
+    }
+
+    /// Fires after a turn ends with reason "completed", regardless of focus.
+    /// Receives the conversation id and its cwd so the App can run post-turn
+    /// side effects (git gate check, future hooks). Runs AFTER the store has
+    /// processed sessionEnded but before fireNextQueued.
+    var onTurnCompleted: ((_ convId: String, _ cwd: String) -> Void)?
 
     var onConversationDirty: ((String) -> Void)? {
         get { store.onConversationDirty }
@@ -414,7 +429,12 @@ final class BackendClient {
             _ = store.handleSessionEnded(convId: convId, runId: runId, reason: reason)
             router.release(runId: runId)
             forgetRunAllowlist(runId)
-            if reason == "completed" { fireNextQueued(convId: convId) }
+            if reason == "completed" {
+                if let cwd = store.conversations[convId]?.cwd {
+                    onTurnCompleted?(convId, cwd)
+                }
+                fireNextQueued(convId: convId)
+            }
         case .error(_, let message):
             store.handleError(convId: convId, runId: runId, message: message)
             // Even on error, drop the run-id mapping to prevent leak.

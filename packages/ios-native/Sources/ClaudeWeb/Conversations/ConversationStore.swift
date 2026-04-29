@@ -116,6 +116,23 @@ final class ConversationStore {
         return stateByConversation[id]?.pendingQueue ?? []
     }
 
+    var currentPendingGitGate: GitStatusReport? {
+        guard let id = currentConversationId else { return nil }
+        return stateByConversation[id]?.pendingGitGate
+    }
+
+    func setPendingGitGate(convId: String, report: GitStatusReport) {
+        guard var s = stateByConversation[convId] else { return }
+        s.pendingGitGate = report
+        stateByConversation[convId] = s
+    }
+
+    func clearPendingGitGate(convId: String) {
+        guard var s = stateByConversation[convId] else { return }
+        s.pendingGitGate = nil
+        stateByConversation[convId] = s
+    }
+
     /// Total number of in-flight turns across ALL conversations. UI uses this
     /// for the global activity badge on the drawer button.
     var activeRunCount: Int {

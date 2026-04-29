@@ -78,6 +78,13 @@ struct SettingsView: View {
                 } footer: {
                     Text("思考块与工具卡片是否默认展开。关闭时卡片显示标题行，点击可展开。")
                 }
+                Section {
+                    Toggle("完成后弹 Git 检查", isOn: $s.gitGateEnabled)
+                } header: {
+                    Text("Git 安全检查")
+                } footer: {
+                    Text("Claude 跑完一轮后，如果当前对话的 cwd 是 git 仓库且工作区有未提交修改，弹半屏 sheet 显示分支 + 已暂存 / 已修改 / 未跟踪文件清单。出门前快速回顾改了什么。仅监听 `completed` reason，被打断或失败不弹。")
+                }
                 Section("Backend") {
                     TextField("https://mymac.tailcf3ccf.ts.net", text: $draftURL)
                         .textInputAutocapitalization(.never)

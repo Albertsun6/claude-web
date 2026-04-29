@@ -17,6 +17,7 @@ struct ClaudeWebApp: App {
     @State private var sessionsAPI: SessionsAPI
     @State private var registry: ProjectRegistry
     @State private var telemetry: Telemetry
+    @State private var gitAPI: GitAPI
 
     init() {
         let s = AppSettings()
@@ -45,6 +46,7 @@ struct ClaudeWebApp: App {
             sessionsAPI: sessAPI
         ))
         _telemetry = State(initialValue: Telemetry(backend: backendRef, token: tokenRef))
+        _gitAPI = State(initialValue: GitAPI(backend: backendRef, token: tokenRef))
     }
 
     var body: some Scene {
@@ -151,6 +153,38 @@ struct ClaudeWebApp: App {
                 }
                 await tts.speakAssistantTurn(turn.spokenText, conversationId: turn.conversationId)
                 voiceRef?.refresh()
+            }
+        }
+
+        // H5 git safety gate: after every completed turn, if the cwd is a git
+        // repo and dirty, surface a sheet on next focus of that conversation.
+        // Toggle in Settings (gitGateEnabled, default ON).
+        let settingsRef = settings
+        let gitAPIRef = gitAPI
+        let telemetryRef = telemetry
+        client.onTurnCompleted = { [weak clientRef, weak gitAPIRef, weak telemetryRef] convId, cwd in
+            guard settingsRef.gitGateEnabled else { return }
+            guard let c = clientRef, let api = gitAPIRef else { return }
+            Task { @MainActor in
+                do {
+                    if let report = try await api.getStatus(cwd: cwd), report.isDirty {
+                        c.setPendingGitGate(convId: convId, report: report)
+                        telemetryRef?.log(
+                            "git_gate.armed",
+                            props: [
+                                "files": String(report.files.count),
+                                "branch": report.branch ?? "?",
+                            ],
+                            conversationId: convId
+                        )
+                    }
+                } catch {
+                    telemetryRef?.warn(
+                        "git_gate.fetch_failed",
+                        props: ["error": error.localizedDescription],
+                        conversationId: convId
+                    )
+                }
             }
         }
 

@@ -123,6 +123,30 @@ struct ContentView: View {
             }
             .presentationDetents([.medium])
         }
+        .sheet(isPresented: Binding(
+            get: { client.currentPendingGitGate != nil },
+            set: { newValue in
+                if !newValue, let id = client.currentConversationId {
+                    client.clearPendingGitGate(convId: id)
+                }
+            }
+        )) {
+            if let report = client.currentPendingGitGate,
+               let conv = client.currentConversationId.flatMap({ client.conversations[$0] }) {
+                GitGateSheet(
+                    report: report,
+                    cwd: conv.cwd,
+                    onClose: {
+                        client.clearPendingGitGate(convId: conv.id)
+                    },
+                    onCopySummary: {
+                        UIPasteboard.general.string = report.renderSummary(cwd: conv.cwd)
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
     }
 
     private var mainContent: some View {
