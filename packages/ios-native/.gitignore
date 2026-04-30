@@ -1,5 +1,6 @@
 # Build artifacts (sit in ~/Library, not tracked, but be safe)
 build/
+build_sim/
 DerivedData/
 *.xcuserdata*
 xcuserdata/
