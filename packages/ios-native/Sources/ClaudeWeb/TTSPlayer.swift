@@ -1,14 +1,15 @@
 // TTS playback with sentence-level pipelining.
 //
 // Pipeline: assistant text →
-//   (summary mode, > 120 chars) /api/voice/summarize → spoken-style 1-4 sentences →
-//   split into sentences → fetch /api/voice/tts in parallel for each sentence →
+//   (summary mode, > 120 chars) /api/voice/summarize-stream → Haiku streams
+//     sentences one by one → each sentence immediately queued to /api/voice/tts →
 //   AVAudioPlayer plays them in order as soon as each chunk arrives.
 //
-// "Time to first sound" goes from ~30s (one big TTS request for the whole
-// summary) down to ~3-5s (first short sentence is ready first). Subsequent
-// chunks fetch concurrently and queue up so playback never stalls if the
-// network is healthy.
+// "Time to first sound" ~4s: Haiku first token ~1s + edge-tts ~3s. Subsequent
+// sentences fetch concurrently with playback so there's no gap.
+//
+// TurnQueue uses a dynamic total that grows as streaming sentences arrive;
+// isDone marks when the stream ends so finalizeTurn fires at the right time.
 //
 // Why AVAudioPlayer not AVQueuePlayer: AVAudioPlayer plays Data directly with
 // no streaming-buffer headaches. We chain instances ourselves on
@@ -54,7 +55,10 @@ final class TTSPlayer: NSObject {
     private struct TurnQueue {
         let conversationId: String?
         let generation: Int
-        let total: Int
+        /// Grows as streaming sentences arrive. Replays set this upfront.
+        var total: Int
+        /// Set when the sentence stream ends (or all sentences known upfront).
+        var isDone: Bool
         /// True for replays (already-cached buffers); skips re-caching.
         let isReplay: Bool
         var pending: [Int: Data] = [:]
@@ -116,22 +120,16 @@ final class TTSPlayer: NSObject {
             conversationId: conversationId
         )
 
-        // 120-char threshold (was 30): below this, the Haiku roundtrip costs
-        // more time than it saves. Edge TTS handles ~120 chars in 3-5 seconds
-        // anyway and reads them naturally.
-        var toSpeak = cleanedSource
+        // 120-char threshold: below this the Haiku roundtrip costs more than it
+        // saves. Edge TTS handles ~120 chars in 3-5 seconds naturally.
+        let toSpeak: String
         if s.speakStyle == "summary", cleanedSource.count > 120 {
-            if let summary = await fetchSummary(cleanedSource), gen == generation {
-                toSpeak = summary
-                telemetry?.log("tts.summary.ok", props: ["summaryLen": String(summary.count)],
-                               conversationId: conversationId)
-            } else if gen == generation {
-                // Summary failed — read only the first ~120 chars (about 2 sentences) instead of the full text.
-                toSpeak = truncateForFallback(cleanedSource)
-                telemetry?.warn("tts.summary.fallback", props: ["originalLen": String(cleanedSource.count),
-                                                                 "truncatedLen": String(toSpeak.count)],
-                                conversationId: conversationId)
-            }
+            // 方案A: stream summary sentences from Haiku; each sentence goes to
+            // TTS immediately without waiting for the full summary.
+            await streamSummaryAndSpeak(cleanedSource, conversationId: conversationId, gen: gen)
+            return
+        } else {
+            toSpeak = cleanedSource
         }
         if gen != generation { return }
 
@@ -153,6 +151,7 @@ final class TTSPlayer: NSObject {
             conversationId: conversationId,
             generation: gen,
             total: sentences.count,
+            isDone: true,
             isReplay: false
         )
 
@@ -186,6 +185,7 @@ final class TTSPlayer: NSObject {
             conversationId: id,
             generation: gen,
             total: buffers.count,
+            isDone: true,
             isReplay: true
         )
         for (idx, data) in buffers.enumerated() {
@@ -282,9 +282,14 @@ final class TTSPlayer: NSObject {
         while q.nextToPlay < q.total && q.failed.contains(q.nextToPlay) {
             q.nextToPlay += 1
         }
-        if q.nextToPlay >= q.total {
+        if q.isDone && q.nextToPlay >= q.total {
             queue = q
             finalizeTurn()
+            return
+        }
+        // Stream not done yet and next chunk not ready — keep waiting.
+        if !q.isDone && !q.pending.keys.contains(q.nextToPlay) {
+            queue = q
             return
         }
         guard let mp3 = q.pending[q.nextToPlay] else {
@@ -329,6 +334,131 @@ final class TTSPlayer: NSObject {
             player = p
         } catch {
             state = .error("播放失败: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Streaming summary (方案A)
+
+    /// Stream Haiku summary sentences from /api/voice/summarize-stream.
+    /// Each sentence is queued to /api/voice/tts immediately on arrival so
+    /// TTS starts on the first sentence before Haiku finishes the rest.
+    private func streamSummaryAndSpeak(_ text: String, conversationId: String?, gen: Int) async {
+        // Initialise a dynamic queue: total=0, isDone=false.
+        if let id = conversationId {
+            lastSpokenByConversation[id] = text
+            lastAudioByConversation[id] = []
+        }
+        playingConversation = conversationId
+        queue = TurnQueue(
+            conversationId: conversationId,
+            generation: gen,
+            total: 0,
+            isDone: false,
+            isReplay: false
+        )
+
+        var req = URLRequest(url: backendURL().appendingPathComponent("/api/voice/summarize-stream"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        authorize(&req)
+        req.timeoutInterval = 30
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
+
+        do {
+            let (bytes, response) = try await URLSession.shared.bytes(for: req)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                // Fall back to verbatim truncation.
+                await fallbackVerbatim(text, conversationId: conversationId, gen: gen)
+                return
+            }
+
+            var sentenceIndex = 0
+            var lineBuffer = ""
+
+            for try await byte in bytes {
+                guard gen == generation else { return }
+                guard let ch = String(bytes: [byte], encoding: .utf8) else { continue }
+                if ch == "\n" {
+                    let line = lineBuffer
+                    lineBuffer = ""
+                    guard line.hasPrefix("data: ") else { continue }
+                    let payload = String(line.dropFirst(6))
+                    guard let data = payload.data(using: .utf8),
+                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                    else { continue }
+
+                    if let sentence = json["sentence"] as? String, !sentence.isEmpty {
+                        let idx = sentenceIndex
+                        sentenceIndex += 1
+                        // Grow the queue total and fire TTS for this sentence.
+                        if var q = queue, q.generation == gen {
+                            q.total = sentenceIndex
+                            queue = q
+                        }
+                        Task { [weak self] in
+                            guard let self else { return }
+                            let mp3 = await self.fetchTTS(sentence)
+                            await self.handleChunkResult(idx: idx, mp3: mp3, gen: gen)
+                        }
+                        // First sentence: transition to fetching so UI shows activity.
+                        if idx == 0 { state = .fetching }
+                        telemetry?.log(
+                            "tts.stream.sentence",
+                            props: ["idx": String(idx), "len": String(sentence.count)],
+                            conversationId: conversationId
+                        )
+                    } else if (json["done"] as? Bool) == true {
+                        // Mark stream complete so finalizeTurn can fire.
+                        if var q = queue, q.generation == gen {
+                            q.isDone = true
+                            queue = q
+                            advanceQueueIfReady()
+                        }
+                        break
+                    }
+                } else {
+                    lineBuffer += ch
+                }
+            }
+            // If stream ended without explicit done event, close the queue.
+            if var q = queue, q.generation == gen, !q.isDone {
+                q.isDone = true
+                queue = q
+                if sentenceIndex == 0 {
+                    // No sentences received at all — fall back.
+                    await fallbackVerbatim(text, conversationId: conversationId, gen: gen)
+                } else {
+                    advanceQueueIfReady()
+                }
+            }
+        } catch {
+            guard gen == generation else { return }
+            telemetry?.warn("tts.stream.failed", props: ["error": error.localizedDescription],
+                            conversationId: conversationId)
+            await fallbackVerbatim(text, conversationId: conversationId, gen: gen)
+        }
+    }
+
+    /// Fall back to verbatim truncation when streaming fails.
+    private func fallbackVerbatim(_ text: String, conversationId: String?, gen: Int) async {
+        guard gen == generation else { return }
+        let shortened = truncateForFallback(text)
+        let sentences = splitSentencesForTTS(shortened)
+        guard !sentences.isEmpty else { return }
+        if let id = conversationId { lastAudioByConversation[id] = [] }
+        queue = TurnQueue(
+            conversationId: conversationId,
+            generation: gen,
+            total: sentences.count,
+            isDone: true,
+            isReplay: false
+        )
+        for (idx, sentence) in sentences.enumerated() {
+            Task { [weak self] in
+                guard let self else { return }
+                let mp3 = await self.fetchTTS(sentence)
+                await self.handleChunkResult(idx: idx, mp3: mp3, gen: gen)
+            }
         }
     }
 

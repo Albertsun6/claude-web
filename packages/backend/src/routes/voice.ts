@@ -397,3 +397,108 @@ voiceRouter.post("/summarize", async (c) => {
   }
   return c.json({ original: text, summary, durationMs: Date.now() - started });
 });
+
+// POST /api/voice/summarize-stream
+// Streams Haiku summary sentence by sentence as SSE so iOS can start TTS
+// on the first sentence before Haiku finishes the rest.
+// Each event: data: {"sentence":"..."}\n\n
+// End event:  data: {"done":true}\n\n
+voiceRouter.post("/summarize-stream", async (c) => {
+  let body: { text?: unknown };
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: "invalid JSON body" }, 400);
+  }
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text) return c.json({ error: "text required" }, 400);
+  if (text.length > 12_000) return c.json({ error: "text too long" }, 413);
+
+  // Very short text — no summarization needed, return as a single sentence.
+  if (text.length <= 30) {
+    const single = `data: ${JSON.stringify({ sentence: text })}\n\ndata: ${JSON.stringify({ done: true })}\n\n`;
+    return new Response(single, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
+  }
+
+  const args = [
+    "-p",
+    "--model", "claude-haiku-4-5",
+    "--output-format", "stream-json",
+    "--permission-mode", "bypassPermissions",
+    "--system-prompt", SUMMARIZE_SYSTEM_PROMPT,
+    "--setting-sources", "user",
+    text,
+  ];
+
+  const TERMINATORS = new Set(["。", "！", "？", ".", "!", "?"]);
+
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+  const enc = new TextEncoder();
+
+  const emit = async (obj: Record<string, unknown>) => {
+    await writer.write(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+  };
+
+  // Run async in background; response streams immediately.
+  (async () => {
+    const child = spawn(CLAUDE_BIN, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let sentBuf = "";   // text accumulated waiting for sentence boundary
+    let prevLen = 0;    // length of previously-seen cumulative text
+
+    const flushSentences = async (incoming: string) => {
+      sentBuf += incoming;
+      while (true) {
+        let boundary = -1;
+        for (let i = 0; i < sentBuf.length; i++) {
+          if (TERMINATORS.has(sentBuf[i])) { boundary = i; break; }
+        }
+        if (boundary === -1) break;
+        const sentence = sentBuf.slice(0, boundary + 1).trim();
+        sentBuf = sentBuf.slice(boundary + 1).trimStart();
+        if (sentence) await emit({ sentence });
+      }
+    };
+
+    const timer = setTimeout(() => child.kill("SIGKILL"), 20_000);
+    let lineBuf = "";
+
+    child.stdout.on("data", async (chunk: Buffer) => {
+      lineBuf += chunk.toString();
+      const lines = lineBuf.split("\n");
+      lineBuf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const evt = JSON.parse(line) as Record<string, unknown>;
+          // stream-json: each "assistant" event carries cumulative text.
+          const content = (evt.message as any)?.content;
+          if (evt.type === "assistant" && Array.isArray(content)) {
+            let fullText = "";
+            for (const block of content) {
+              if (block.type === "text") fullText += block.text;
+            }
+            const delta = fullText.slice(prevLen);
+            prevLen = fullText.length;
+            if (delta) await flushSentences(delta);
+          }
+        } catch { /* non-JSON line, skip */ }
+      }
+    });
+
+    child.on("close", async () => {
+      clearTimeout(timer);
+      // Flush anything remaining in the buffer.
+      if (sentBuf.trim()) await emit({ sentence: sentBuf.trim() });
+      await emit({ done: true });
+      await writer.close();
+    });
+    child.on("error", async (err) => {
+      clearTimeout(timer);
+      await emit({ done: true, error: err.message });
+      await writer.close().catch(() => {});
+    });
+  })();
+
+  return new Response(readable, {
+    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" },
+  });
+});
