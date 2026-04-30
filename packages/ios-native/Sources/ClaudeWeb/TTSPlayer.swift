@@ -1,13 +1,18 @@
-// TTS playback.
+// TTS playback with sentence-level pipelining.
 //
 // Pipeline: assistant text →
-//   (summary mode) /api/voice/summarize → spoken-style 1-4 sentences →
-//   /api/voice/tts (Edge TTS zh-CN-XiaoxiaoNeural mp3) → AVAudioPlayer.
+//   (summary mode, > 120 chars) /api/voice/summarize → spoken-style 1-4 sentences →
+//   split into sentences → fetch /api/voice/tts in parallel for each sentence →
+//   AVAudioPlayer plays them in order as soon as each chunk arrives.
 //
-// Why AVAudioPlayer not AVPlayer: AVAudioPlayer plays from in-memory Data
-// directly (we already have the mp3 bytes), no streaming buffer headaches,
-// pause/resume/seek all work, simpler to bridge into the audio session
-// configured by VoiceRecorder.
+// "Time to first sound" goes from ~30s (one big TTS request for the whole
+// summary) down to ~3-5s (first short sentence is ready first). Subsequent
+// chunks fetch concurrently and queue up so playback never stalls if the
+// network is healthy.
+//
+// Why AVAudioPlayer not AVQueuePlayer: AVAudioPlayer plays Data directly with
+// no streaming-buffer headaches. We chain instances ourselves on
+// didFinishPlaying. Pause / resume / cancel all stay simple.
 
 import Foundation
 import AVFoundation
@@ -18,20 +23,20 @@ import Observation
 final class TTSPlayer: NSObject {
     enum State: Equatable {
         case idle
-        case fetching   // hitting /summarize and/or /tts
+        case fetching   // hitting /summarize and/or /tts (no chunk played yet)
         case playing
         case paused
         case error(String)
     }
 
     var state: State = .idle
-    /// Per-conversation replay cache. Keyed by conversation id so that
-    /// switching conversations doesn't stomp the previous one's last reply.
-    /// In-memory only; F1c3 caches to disk via Cache layer.
+    /// Per-conversation replay cache. Each value is the ordered list of mp3
+    /// buffers (one per sentence) for that conversation's last spoken turn.
+    /// In-memory only.
     private var lastSpokenByConversation: [String: String] = [:]
-    private var lastAudioByConversation: [String: Data] = [:]
-    /// Which conversation is currently playing (the one whose audio is in
-    /// `player`). Used to refuse cross-conversation replay collisions.
+    private var lastAudioByConversation: [String: [Data]] = [:]
+    /// Which conversation's audio is currently in `player`. Used to refuse
+    /// cross-conversation replay collisions and to attribute the play.
     private var playingConversation: String?
 
     private var player: AVAudioPlayer?
@@ -42,6 +47,20 @@ final class TTSPlayer: NSObject {
 
     /// Bumped on cancel / new turn so in-flight fetches abandon.
     private var generation: Int = 0
+
+    /// Per-turn pipeline state. Reset on every speakAssistantTurn / replay.
+    private var queue: TurnQueue?
+
+    private struct TurnQueue {
+        let conversationId: String?
+        let generation: Int
+        let total: Int
+        /// True for replays (already-cached buffers); skips re-caching.
+        let isReplay: Bool
+        var pending: [Int: Data] = [:]
+        var failed: Set<Int> = []
+        var nextToPlay: Int = 0
+    }
 
     init(
         backendURL: @escaping () -> URL,
@@ -69,14 +88,15 @@ final class TTSPlayer: NSObject {
     /// shows pause/stop instead of replay in that case).
     func hasReplay(for conversationId: String?) -> Bool {
         guard let id = conversationId,
-              lastAudioByConversation[id] != nil else { return false }
+              let buffers = lastAudioByConversation[id],
+              !buffers.isEmpty else { return false }
         if state == .playing && playingConversation == id { return false }
         return true
     }
 
     /// High-level entry point: speak Claude's full response. Goes through
-    /// summarize first (unless settings.speakStyle == "verbatim") and strips
-    /// markdown so the TTS doesn't read "**" as "星号星号".
+    /// summarize first (unless settings.speakStyle == "verbatim" or text is
+    /// short) and strips markdown so the TTS doesn't read "**" as "星号星号".
     func speakAssistantTurn(_ raw: String, conversationId: String?) async {
         let s = settings()
         guard s.ttsEnabled else { return }
@@ -96,14 +116,17 @@ final class TTSPlayer: NSObject {
             conversationId: conversationId
         )
 
+        // 120-char threshold (was 30): below this, the Haiku roundtrip costs
+        // more time than it saves. Edge TTS handles ~120 chars in 3-5 seconds
+        // anyway and reads them naturally.
         var toSpeak = cleanedSource
-        if s.speakStyle == "summary", cleanedSource.count > 30 {
+        if s.speakStyle == "summary", cleanedSource.count > 120 {
             if let summary = await fetchSummary(cleanedSource), gen == generation {
                 toSpeak = summary
                 telemetry?.log("tts.summary.ok", props: ["summaryLen": String(summary.count)],
                                conversationId: conversationId)
             } else if gen == generation {
-                // Summary failed — read only the first ~120 chars (2-3 sentences) instead of the full text.
+                // Summary failed — read only the first ~120 chars (about 2 sentences) instead of the full text.
                 toSpeak = truncateForFallback(cleanedSource)
                 telemetry?.warn("tts.summary.fallback", props: ["originalLen": String(cleanedSource.count),
                                                                  "truncatedLen": String(toSpeak.count)],
@@ -112,32 +135,65 @@ final class TTSPlayer: NSObject {
         }
         if gen != generation { return }
 
-        guard let mp3 = await fetchTTS(toSpeak), gen == generation else {
+        let sentences = splitSentencesForTTS(toSpeak)
+        guard !sentences.isEmpty else {
             if state == .fetching { state = .idle }
             return
         }
 
+        // Set up the queue and clear the previous turn's cache for this
+        // conversation. We cache buffers as they play (first-play path), so
+        // start empty.
         if let id = conversationId {
             lastSpokenByConversation[id] = toSpeak
-            lastAudioByConversation[id] = mp3
+            lastAudioByConversation[id] = []
         }
         playingConversation = conversationId
-        await play(mp3)
+        queue = TurnQueue(
+            conversationId: conversationId,
+            generation: gen,
+            total: sentences.count,
+            isReplay: false
+        )
+
         telemetry?.log(
-            "tts.play.start",
-            props: ["spokenLen": String(toSpeak.count), "bytes": String(mp3.count)],
+            "tts.pipeline.start",
+            props: ["chunks": String(sentences.count), "spokenLen": String(toSpeak.count)],
             conversationId: conversationId
         )
+
+        // Fan out: kick off all sentence TTS fetches in parallel. As each
+        // returns, handleChunkResult stores it and tries to advance the queue.
+        for (idx, sentence) in sentences.enumerated() {
+            Task { [weak self] in
+                guard let self else { return }
+                let mp3 = await self.fetchTTS(sentence)
+                await self.handleChunkResult(idx: idx, mp3: mp3, gen: gen)
+            }
+        }
     }
 
-    /// Replay this conversation's last spoken clip without re-fetching. No-op
-    /// if there's no cache for that conversation.
+    /// Replay this conversation's last spoken clip without re-fetching. Plays
+    /// the cached buffers sequentially via the same queue mechanism.
     func replay(for conversationId: String?) async {
         guard let id = conversationId,
-              let data = lastAudioByConversation[id] else { return }
+              let buffers = lastAudioByConversation[id],
+              !buffers.isEmpty else { return }
         cancel()
+        let gen = generation
         playingConversation = id
-        await play(data)
+        var q = TurnQueue(
+            conversationId: id,
+            generation: gen,
+            total: buffers.count,
+            isReplay: true
+        )
+        for (idx, data) in buffers.enumerated() {
+            q.pending[idx] = data
+        }
+        queue = q
+        state = .fetching
+        advanceQueueIfReady()
     }
 
     /// Drop the per-conversation audio cache (e.g. when the conversation is
@@ -171,6 +227,7 @@ final class TTSPlayer: NSObject {
         player?.stop()
         player = nil
         playingConversation = nil
+        queue = nil
         if state == .playing || state == .paused || state == .fetching {
             state = .idle
         }
@@ -182,12 +239,83 @@ final class TTSPlayer: NSObject {
         player?.stop()
         player = nil
         playingConversation = nil
+        queue = nil
         state = .idle
     }
 
-    // MARK: - Private
+    // MARK: - Pipeline internals
 
-    private func play(_ mp3: Data) async {
+    private func handleChunkResult(idx: Int, mp3: Data?, gen: Int) {
+        guard gen == generation, var q = queue else { return }
+        if let mp3, !mp3.isEmpty {
+            q.pending[idx] = mp3
+            // Cache as we go (first-play path only).
+            if !q.isReplay, let id = q.conversationId {
+                var arr = lastAudioByConversation[id] ?? []
+                // Index might be out of order; pad with empty if needed.
+                while arr.count < idx { arr.append(Data()) }
+                if arr.count == idx {
+                    arr.append(mp3)
+                } else {
+                    arr[idx] = mp3
+                }
+                lastAudioByConversation[id] = arr
+            }
+        } else {
+            q.failed.insert(idx)
+            telemetry?.warn(
+                "tts.chunk.failed",
+                props: ["idx": String(idx), "total": String(q.total)],
+                conversationId: q.conversationId
+            )
+        }
+        queue = q
+        advanceQueueIfReady()
+    }
+
+    private func advanceQueueIfReady() {
+        guard var q = queue else { return }
+        // Already playing? wait for didFinishPlaying to advance.
+        if state == .playing || state == .paused { return }
+
+        // Skip any failed chunks at the head.
+        while q.nextToPlay < q.total && q.failed.contains(q.nextToPlay) {
+            q.nextToPlay += 1
+        }
+        if q.nextToPlay >= q.total {
+            queue = q
+            finalizeTurn()
+            return
+        }
+        guard let mp3 = q.pending[q.nextToPlay] else {
+            // Next chunk not ready yet — keep waiting in .fetching.
+            queue = q
+            return
+        }
+        queue = q
+        // Reserve the playing slot synchronously so subsequent
+        // advanceQueueIfReady calls won't re-enter while we set up.
+        state = .playing
+        play(mp3)
+    }
+
+    private func finalizeTurn() {
+        let gen = queue?.generation ?? generation
+        let conversationId = queue?.conversationId
+        queue = nil
+        let isError: Bool
+        if case .error = state { isError = true } else { isError = false }
+        if !isError && gen == generation {
+            state = .idle
+        }
+        telemetry?.log("tts.pipeline.done", conversationId: conversationId)
+    }
+
+    // MARK: - Audio session + play
+
+    private func play(_ mp3: Data) {
+        // state is already .playing — reserved by advanceQueueIfReady. We
+        // just install the player synchronously on the main actor.
         do {
             // Re-arm audio session for playback (user may have just released PTT).
             let s = AVAudioSession.sharedInstance()
@@ -199,7 +327,6 @@ final class TTSPlayer: NSObject {
             p.prepareToPlay()
             p.play()
             player = p
-            state = .playing
         } catch {
             state = .error("播放失败: \(error.localizedDescription)")
         }
@@ -255,8 +382,7 @@ final class TTSPlayer: NSObject {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         authorize(&req)
         // 45s: backend's edge-tts subprocess has a 30s timeout, plus we
-        // need headroom for the mp3 transfer back over cellular. Anything
-        // tighter and a slow Microsoft TTS endpoint + weak signal both fail.
+        // need headroom for the mp3 transfer back over cellular.
         req.timeoutInterval = 45
         let body: [String: Any] = settings().slowTts
             ? ["text": text, "rate": "-15%"]
@@ -265,16 +391,14 @@ final class TTSPlayer: NSObject {
         do {
             let (data, response) = try await URLSession.shared.data(for: req)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                state = .error("TTS HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
-                telemetry?.error(
-                    "tts.http.failed",
-                    props: ["status": String((response as? HTTPURLResponse)?.statusCode ?? -1)]
-                )
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                telemetry?.error("tts.http.failed", props: ["status": String(code)])
                 return nil
             }
             return data
         } catch {
-            state = .error("TTS 请求失败: \(error.localizedDescription)")
+            // Don't surface chunk-level errors as a global .error state — the
+            // pipeline will skip the failed chunk and keep playing.
             telemetry?.error("tts.request.failed", error: error)
             return nil
         }
@@ -284,17 +408,84 @@ final class TTSPlayer: NSObject {
 extension TTSPlayer: AVAudioPlayerDelegate {
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
-            self.state = .idle
             self.player = nil
-            self.telemetry?.log("tts.play.finished", props: ["success": String(flag)])
+            self.telemetry?.log("tts.chunk.finished", props: ["success": String(flag)])
+            // Advance the queue regardless of success — a decode failure for
+            // one chunk shouldn't strand the rest.
+            if var q = self.queue {
+                q.nextToPlay += 1
+                self.queue = q
+                if self.state == .playing { self.state = .fetching }
+                self.advanceQueueIfReady()
+            } else {
+                self.state = .idle
+            }
         }
     }
     nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         Task { @MainActor in
-            self.state = .error(error?.localizedDescription ?? "解码失败")
             self.player = nil
+            self.telemetry?.error("tts.decode.failed", error: error)
+            // Skip and continue.
+            if var q = self.queue {
+                q.nextToPlay += 1
+                self.queue = q
+                self.state = .fetching
+                self.advanceQueueIfReady()
+            } else {
+                self.state = .error(error?.localizedDescription ?? "解码失败")
+            }
         }
     }
+}
+
+// MARK: - Sentence splitter
+
+/// Split TTS text into chunks suitable for parallel synthesis. Targets
+/// 1 sentence per chunk where possible; coalesces very short fragments
+/// (≤ 8 chars) with the previous chunk so we don't ship "好。" alone to TTS,
+/// and caps each chunk at 200 chars to keep individual requests fast.
+func splitSentencesForTTS(_ text: String) -> [String] {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return [] }
+
+    // Sentence terminators: ! ? . 。！？
+    let terminators: Set<Character> = ["。", "！", "？", ".", "!", "?", "\n"]
+    var raw: [String] = []
+    var current = ""
+    for ch in trimmed {
+        current.append(ch)
+        if terminators.contains(ch) {
+            let s = current.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !s.isEmpty { raw.append(s) }
+            current = ""
+        }
+    }
+    let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !tail.isEmpty { raw.append(tail) }
+
+    // Coalesce short fragments + cap long ones.
+    var result: [String] = []
+    let minChunkLen = 8
+    let maxChunkLen = 200
+    for s in raw {
+        if let last = result.last, last.count < minChunkLen {
+            result[result.count - 1] = last + s
+        } else if s.count > maxChunkLen {
+            // Soft-split a long sentence at character boundaries to keep
+            // single-request latency bounded. Rare: usually a giant comma-
+            // separated list with no terminator.
+            var idx = s.startIndex
+            while idx < s.endIndex {
+                let end = s.index(idx, offsetBy: maxChunkLen, limitedBy: s.endIndex) ?? s.endIndex
+                result.append(String(s[idx..<end]))
+                idx = end
+            }
+        } else {
+            result.append(s)
+        }
+    }
+    return result
 }
 
 // MARK: - Markdown stripping
