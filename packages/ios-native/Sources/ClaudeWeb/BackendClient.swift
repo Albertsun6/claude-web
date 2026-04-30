@@ -28,6 +28,9 @@ final class BackendClient {
 
     private weak var telemetry: Telemetry?
 
+    // Handles both watchdog (kill runs >8 min) and periodic cache flush.
+    private var watchdogTimer: Timer?
+
     init(backendBase: URL, authToken: @escaping () -> String = { "" }) {
         let ws = WebSocketClient(backendBase: backendBase, authToken: authToken)
         self.webSocket = ws
@@ -40,8 +43,13 @@ final class BackendClient {
             self?.handle(msg)
         }
         ws.onConnected = { [weak self] in
+            // Backend kills all in-flight CLI processes on WS close. The
+            // session_ended messages are sent to the dead connection and lost.
+            // On reconnect we synthesize them so busy state always clears.
+            self?.clearStuckRunsAfterReconnect()
             self?.resubscribeFollowedSessions()
         }
+        startWatchdog()
     }
 
     func bindTelemetry(_ tel: Telemetry) {
@@ -349,14 +357,24 @@ final class BackendClient {
     func interrupt() {
         guard let convId = store.currentConversationId,
               let runId = store.stateByConversation[convId]?.currentRunId else { return }
-        Task { [weak self] in try? await self?.webSocket.send(.interrupt(runId: runId)) }
+        if webSocket.isOpen {
+            Task { [weak self] in try? await self?.webSocket.send(.interrupt(runId: runId)) }
+        } else {
+            // WS down → backend already aborted the process when the connection
+            // closed. Clear local state immediately so the UI unblocks.
+            forceClearRun(convId: convId, runId: runId)
+        }
     }
 
     /// Interrupt a specific conversation's in-flight run. Used by the H1 run
     /// dashboard to stop background runs without switching focus.
     func interrupt(convId: String) {
         guard let runId = store.stateByConversation[convId]?.currentRunId else { return }
-        Task { [weak self] in try? await self?.webSocket.send(.interrupt(runId: runId)) }
+        if webSocket.isOpen {
+            Task { [weak self] in try? await self?.webSocket.send(.interrupt(runId: runId)) }
+        } else {
+            forceClearRun(convId: convId, runId: runId)
+        }
     }
 
     func replyPermission(_ request: PermissionRequest, decision: PermissionDecision) {
@@ -480,6 +498,66 @@ final class BackendClient {
             return
         case .unknown:
             return
+        }
+    }
+
+    // MARK: - Stuck-run recovery
+
+    /// Synthesise a sessionEnded(interrupted) for every busy conversation on
+    /// WS reconnect. The backend kills all CLI processes when the connection
+    /// drops, so they will never send session_ended on the new connection.
+    private func clearStuckRunsAfterReconnect() {
+        let stuck = store.stateByConversation.filter { $0.value.busy }
+        guard !stuck.isEmpty else { return }
+        telemetry?.warn("stuck_run.reconnect_clearing", props: ["count": String(stuck.count)])
+        for (convId, state) in stuck {
+            guard let runId = state.currentRunId else { continue }
+            forceClearRun(convId: convId, runId: runId)
+        }
+    }
+
+    /// Clear a single stuck run and persist the change.
+    private func forceClearRun(convId: String, runId: String) {
+        _ = store.handleSessionEnded(convId: convId, runId: runId, reason: "interrupted")
+        router.release(runId: runId)
+        forgetRunAllowlist(runId)
+        store.appendError(toConversation: convId, "连接中断，操作已停止")
+        onConversationDirty?(convId)
+        telemetry?.warn("stuck_run.force_cleared",
+                        props: ["runId": runId], conversationId: convId)
+    }
+
+    /// Start a 30-second repeating timer that:
+    ///   1. Flushes cache for any currently-busy conversation (Fix 4: prevents
+    ///      content loss on force-quit — store has messages but dirty not fired).
+    ///   2. Kills runs running > 8 minutes (Fix 2: last-resort watchdog for edge
+    ///      cases where reconnect-clear didn't fire, e.g. silent WS failure).
+    private func startWatchdog() {
+        watchdogTimer?.invalidate()
+        watchdogTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.tickWatchdog() }
+        }
+    }
+
+    private func tickWatchdog() {
+        let threshold: TimeInterval = 8 * 60
+        let now = Date()
+        for (convId, state) in store.stateByConversation where state.busy {
+            // Periodic flush: persist in-progress messages every 30 s.
+            onConversationDirty?(convId)
+            // Watchdog: force-clear runs that have been alive too long.
+            guard let startedAt = state.runStartedAt,
+                  now.timeIntervalSince(startedAt) > threshold,
+                  let runId = state.currentRunId else { continue }
+            let ageSec = Int(now.timeIntervalSince(startedAt))
+            _ = store.handleSessionEnded(convId: convId, runId: runId, reason: "interrupted")
+            router.release(runId: runId)
+            forgetRunAllowlist(runId)
+            store.appendError(toConversation: convId, "运行超时（8分钟），已自动停止")
+            onConversationDirty?(convId)
+            telemetry?.warn("stuck_run.watchdog",
+                            props: ["runId": runId, "ageSec": String(ageSec)],
+                            conversationId: convId)
         }
     }
 

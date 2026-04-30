@@ -337,32 +337,8 @@ voiceRouter.post("/cleanup", async (c) => {
   });
 });
 
-function stripMarkdownFromSummary(text: string): string {
-  return text
-    .replace(/\*{1,3}([^*\n]*)\*{1,3}/g, "$1")
-    .replace(/_{1,2}([^_\n]*)_{1,2}/g, "$1")
-    .replace(/`{1,3}[^`]*`{1,3}/g, "")
-    .replace(/^#{1,6}\s*/gm, "")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/[|\\`#*_]/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
 
-const SUMMARIZE_SYSTEM_PROMPT = `你的任务是把输入文字改写成一段适合朗读的口语总结。直接输出最终文字本身，不要任何前缀、不要自我介绍、不要说"好的"或"以下是总结"，不要任何解释。
-
-禁止规则（违反即为失败）：
-不得输出星号、井号、反引号、方括号、竖线、下划线等任何标点符号或格式字符。
-不得以角色身份开头，例如"我是口播助手"。
-不得加"总结："、"概括："等前缀。
-不得说"以下"、"如下"、"请参考屏幕"。
-不得照搬代码、命令、文件路径、表格、长列表。
-
-输出要求：
-1 到 4 句话，最长 80 个汉字。
-只说要点：发生了什么、修复了什么、接下来做什么。
-用陈述句，自然口语，避免"此外"、"综上"等书面词。`;
+const SUMMARIZE_SYSTEM_PROMPT = `把下面的内容改写成一两句适合朗读的口语，直接输出结果。`;
 
 voiceRouter.post("/summarize", async (c) => {
   let body: { text?: unknown };
@@ -416,8 +392,6 @@ voiceRouter.post("/summarize", async (c) => {
   if (!summary) {
     return c.json({ original: text, summary: text, fallback: true, error: "empty result" });
   }
-  summary = stripMarkdownFromSummary(summary);
-  // If the "summary" is barely shorter than the original, Haiku didn't actually summarize.
   if (summary.length > text.length * 0.85) {
     return c.json({ original: text, summary: text, fallback: true, error: "no compression" });
   }
