@@ -37,10 +37,11 @@ struct SettingsView: View {
                     .disabled(!s.ttsEnabled)
                     Toggle("慢速朗读（-15%）", isOn: $s.slowTts)
                         .disabled(!s.ttsEnabled)
+                    Toggle("完成提示音", isOn: $s.completionChimeEnabled)
                 } header: {
                     Text("朗读")
                 } footer: {
-                    Text("Claude 回复后是否自动 TTS 播放。**独立于「语音对话」开关**——你可以仅看着屏幕打字、让回答念出来。")
+                    Text("Claude 回复后是否自动 TTS 播放。**独立于「语音对话」开关**——你可以仅看着屏幕打字、让回答念出来。\n完成提示音：任务结束时播放短音效，不打扰、即时通知，适合手机放一边时。")
                 }
                 Section {
                     Button {

@@ -35,6 +35,7 @@ final class AppSettings {
     private static let verboseToolsKey = "com.albertsun6.claudeweb-native.verboseTools"
     private static let autoEnterVoiceKey = "com.albertsun6.claudeweb-native.autoEnterVoice"
     private static let gitGateEnabledKey = "com.albertsun6.claudeweb-native.gitGateEnabled"
+    private static let completionChimeEnabledKey = "com.albertsun6.claudeweb-native.completionChimeEnabled"
 
     var backendURL: URL {
         didSet {
@@ -132,6 +133,13 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(gitGateEnabled, forKey: Self.gitGateEnabledKey) }
     }
 
+    /// Play a short system chime when any conversation's turn completes.
+    /// Fires for both foreground and background conversations, so the user
+    /// hears it even when the phone is on the table. Independent of TTS.
+    var completionChimeEnabled: Bool {
+        didSet { UserDefaults.standard.set(completionChimeEnabled, forKey: Self.completionChimeEnabledKey) }
+    }
+
     init() {
         // Default: simulator → http://localhost:3030; device → Tailscale URL.
         // We'll prompt the user to pick at first launch in the settings page.
@@ -154,6 +162,7 @@ final class AppSettings {
         self.verboseTools = UserDefaults.standard.object(forKey: Self.verboseToolsKey) as? Bool ?? false
         self.autoEnterVoice = UserDefaults.standard.object(forKey: Self.autoEnterVoiceKey) as? Bool ?? true
         self.gitGateEnabled = UserDefaults.standard.object(forKey: Self.gitGateEnabledKey) as? Bool ?? true
+        self.completionChimeEnabled = UserDefaults.standard.object(forKey: Self.completionChimeEnabledKey) as? Bool ?? true
     }
 
     private static func detectDefaultBackend() -> URL {
@@ -174,6 +183,7 @@ final class AppSettings {
             silentKeepaliveKey, currentConversationIdKey, fontSizeKey,
             alwaysExpandThinkingKey, verboseToolsKey, autoEnterVoiceKey,
             gitGateEnabledKey,
+            completionChimeEnabledKey,
         ]
         for k in keys {
             UserDefaults.standard.removeObject(forKey: k)

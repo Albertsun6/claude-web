@@ -4,6 +4,7 @@
 // so every state-changing event flushes to disk.
 
 import SwiftUI
+import AudioToolbox
 
 @main
 struct ClaudeWebApp: App {
@@ -163,6 +164,11 @@ struct ClaudeWebApp: App {
         let gitAPIRef = gitAPI
         let telemetryRef = telemetry
         client.onTurnCompleted = { [weak clientRef, weak gitAPIRef, weak telemetryRef] convId, cwd in
+            // A2: chime — fires immediately on completion, before TTS kicks in.
+            // Sound 1057 ("Tweet") is short and distinctive. Respects silent mode.
+            if settingsRef.completionChimeEnabled {
+                AudioServicesPlaySystemSound(1057)
+            }
             guard settingsRef.gitGateEnabled else { return }
             guard let c = clientRef, let api = gitAPIRef else { return }
             Task { @MainActor in
