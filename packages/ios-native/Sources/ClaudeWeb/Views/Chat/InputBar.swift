@@ -34,9 +34,17 @@ struct InputBar: View {
     @State private var showSlashCommands = false
     @State private var slashQuery: String? = nil
     @State private var showContextSheet = false
+    @State private var showPhotosPicker = false
 
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
+    }
+
+    /// Icon for the combined attach menu. Filled "+" when there are pending
+    /// images, plain "+" otherwise — matches the way send/photo buttons
+    /// signal "you have something staged."
+    private var attachIconName: String {
+        pendingImages.isEmpty ? "plus.circle" : "plus.circle.fill"
     }
 
     var body: some View {
@@ -82,32 +90,40 @@ struct InputBar: View {
 
             // Input row
             HStack(alignment: .bottom, spacing: 6) {
-                // Photo picker button
-                PhotosPicker(
-                    selection: $pickerSelection,
-                    maxSelectionCount: 5,
-                    matching: .images
-                ) {
-                    Image(systemName: pendingImages.isEmpty ? "photo" : "photo.badge.checkmark")
+                // Combined attach menu: photos + context. Replaces two separate
+                // buttons (PhotoPicker + paperclip) that were squeezing the
+                // text field on smaller screens.
+                Menu {
+                    Button {
+                        showPhotosPicker = true
+                    } label: {
+                        Label(
+                            pendingImages.isEmpty ? "添加图片" : "添加图片（已 \(pendingImages.count) 张）",
+                            systemImage: "photo"
+                        )
+                    }
+                    .disabled(busy)
+
+                    Button {
+                        showContextSheet = true
+                    } label: {
+                        Label("附加 git diff / 剪贴板", systemImage: "paperclip")
+                    }
+                } label: {
+                    Image(systemName: attachIconName)
                         .frame(width: 36, height: 44)
                         .foregroundStyle(pendingImages.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.accentColor))
                 }
-                .buttonStyle(.plain)
-                .disabled(busy)  // PhotosPicker disabled when busy, so queued attachments are always nil (by design; architecture supports it for future use)
+                .accessibilityLabel("附加")
+                .photosPicker(
+                    isPresented: $showPhotosPicker,
+                    selection: $pickerSelection,
+                    maxSelectionCount: 5,
+                    matching: .images
+                )
                 .onChange(of: pickerSelection) { _, items in
                     Task { await loadPickedImages(items) }
                 }
-
-                // H4 context attachment — paperclip
-                Button {
-                    showContextSheet = true
-                } label: {
-                    Image(systemName: "paperclip")
-                        .frame(width: 32, height: 44)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("附加上下文")
 
                 TextField("输入指令，或按住麦克风说话…", text: $draft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
