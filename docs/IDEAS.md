@@ -628,6 +628,70 @@ Settings 加 Toggle，控制 thinking block 默认展开/折叠。当前 thinkin
 
 ---
 
+### A1. 模型自动选择：Opus 复杂度路由 ⭐⭐⭐
+用户不用手动选模型。发送 prompt 前先用 Opus 做一次轻量复杂度判断，输出选用哪个模型（haiku / sonnet / opus）及理由，再用选出的模型跑实际任务。
+
+**触发场景**：
+- 设置页开启"自动选模型"后，InputBar 里的 model picker 变成"自动"。
+- 每次 sendPrompt 前调用 `/api/model-router`（单独轻量端点）：把 prompt 前 500 chars 发给 Opus，返回 `{ model, reason }`，再走正常 sendPrompt 流程。
+
+**实现草案**：
+- 后端新增 `POST /api/model-router`：spawn claude --model opus，system prompt："根据任务复杂度选择模型：haiku（问答/翻译/简单生成）/ sonnet（代码/分析/多步骤）/ opus（架构设计/复杂推理/大型重构）。只输出 JSON `{model, reason}`"。
+- iOS：`BackendClient.sendPrompt` 增加 `autoSelectModel` 路径，先 await router，然后用返回的 model 跑任务；UI 在 bubble 旁显示"自动选 sonnet"标签。
+- 超时兜底：router 调用超过 3s 则直接用 sonnet。
+
+**适用性**：
+- 用户价值：4，省去手动切模型心智负担
+- 架构贴合：4，sendPrompt 已有 model 参数
+- 实现复杂度：3
+- 风险：2，多一次 LLM 调用增加约 1-2s 延迟
+- 优先级：P2
+
+---
+
+### A2. 完成时发声提示 ⭐⭐
+任务跑完（`session_ended completed`）时播放一个短提示音（非语音摘要，而是一个 UI chime），告知用户可以回来看结果——适合手机放到一边、戴耳机干别的时。
+
+**与现有 TTS 的区别**：TTS 读摘要需要 10-15s 延迟；chime 是立刻的、不打扰的 0.5s 提示音。两者可以共存：先 chime → 再 TTS 摘要。
+
+**实现草案**：
+- iOS：在 `onTurnCompleted` 回调里，用 `AudioServicesPlaySystemSound` 播放系统音效（如 `1057` Tweet 或自定义短 mp3），不需要任何后端改动。
+- 设置页加开关：完成提示音（开/关），和语音摘要开关独立。
+- 后台完成（非当前对话）也发声，当前对话完成用不同音色区分。
+
+**适用性**：
+- 用户价值：4
+- 架构贴合：5，onTurnCompleted 已有
+- 实现复杂度：1
+- 风险：1
+- 优先级：P1
+
+---
+
+### A3. PR 驱动 Agent 调度 ⭐⭐⭐
+用户只写 PR 描述（或 issue），app 自动调度 agent 去实现、测试、提 PR——无需盯着对话。核心理念：从"对话驱动"升级为"任务驱动"。
+
+**工作流**：
+1. 用户在 iOS 输入框贴 GitHub issue URL 或直接写需求描述。
+2. App 解析出任务目标，用 Worktree 隔离（P1）开一个新对话，后台静默跑。
+3. Agent 完成后自动用 `gh pr create` 提 PR，把 PR URL 推送给用户（通知/消息）。
+4. 用户点链接在 GitHub 上 review，按需 approve 或追加 comment 继续迭代。
+
+**实现草案**：
+- 依赖 A1（自动选模型）、P1（Worktree 隔离）、P2（GitHub 集成）。
+- iOS 新增"调度任务"入口：InputBar 长按/菜单 → "后台完成后通知我"。
+- 后端：`POST /api/schedule-task`，接收 `{cwd, description, notifyOnDone: true}`，在 worktree 里 spawn agent，完成后推送 iOS 通知 + PR URL。
+- 通知：`UNUserNotificationCenter` 本地通知，内容是"任务完成，PR #123 已提"。
+
+**适用性**：
+- 用户价值：5，真正的异步 agentic 工作流
+- 架构贴合：3，需要 A1 + P1 + P2 先就位
+- 实现复杂度：5
+- 风险：4，无人监督的 agent 需要安全边界
+- 优先级：P2/P3，先做依赖项
+
+---
+
 ## 已完成（参考）
 
 详见 git log，主要里程碑：
