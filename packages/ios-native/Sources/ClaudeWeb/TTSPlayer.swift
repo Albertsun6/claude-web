@@ -254,7 +254,10 @@ final class TTSPlayer: NSObject {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         authorize(&req)
-        req.timeoutInterval = 25
+        // 45s: backend's edge-tts subprocess has a 30s timeout, plus we
+        // need headroom for the mp3 transfer back over cellular. Anything
+        // tighter and a slow Microsoft TTS endpoint + weak signal both fail.
+        req.timeoutInterval = 45
         let body: [String: Any] = settings().slowTts
             ? ["text": text, "rate": "-15%"]
             : ["text": text]
