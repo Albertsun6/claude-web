@@ -64,6 +64,30 @@ tRPC 适合 TypeScript 前后端共享 HTTP API 类型，但这个项目还有 S
 
 建议：优先做 JSON Schema 或 fixture 契约测试。等协议稳定后，再考虑是否从 schema 生成 TS/Swift 类型。
 
+### iOS 前端技术路线：继续使用 SwiftUI 原生
+
+Seaidea 的 iOS 前端继续以 `packages/ios-native/` 的 SwiftUI 原生 app 为主线。这个决策不是因为 SwiftUI “更流行”，而是因为当前产品形态需要可靠地调用 iOS 系统能力：WebSocket 长连接、麦克风录音、TTS 播放、音频会话、权限弹窗、本地缓存、后台音频实验、断线恢复和未来更深的系统集成。
+
+不建议回到 `packages/frontend/ios/` 的 Capacitor wrapper，也不建议现在迁到 React Native / Flutter：
+
+- Capacitor / PWA 的优势是 Web 代码复用和更新快，但 Seaidea 的核心难点正好在 WebView 较弱的系统能力上：录音、后台音频、锁屏控制、权限生命周期和长期连接。
+- React Native / Flutter 会引入额外运行时和桥接复杂度。当前只服务 iPhone，SwiftUI 能更直接地处理系统能力。
+- 锁屏和 Now Playing 等能力即使在原生 app 里也受 iOS 平台限制，换成 WebView 或跨平台框架不会让这些限制消失。
+
+这个路线的主要代价是：Swift 代码变更后需要重新安装 app。长期策略不是换技术栈，而是减少必须发版的变更：
+
+- 日常真机开发优先使用 Xcode 无线调试：第一次 USB 配对后，在 Xcode 的 Devices and Simulators 里勾选 “Connect via network”，之后同一 Wi‑Fi 下可无线构建安装。
+- 稳定版本或给别人测试时使用 TestFlight，而不是让每台手机都连开发机。
+- 能由后端配置控制的内容不要写死到 iOS 二进制里，例如模型列表、常用 profile、feature flag、权限模式说明、health check 展示项、onboarding 文案。
+- iOS app 保持“可靠遥控器”定位：负责交互、系统能力、本地缓存和状态展示；Claude CLI、文件系统、Git、语音转写、TTS 生成继续放在 backend。
+
+维护规则：
+
+- 新移动端功能默认进 `packages/ios-native/`。除非明确是旧 PWA 兼容修复，不要在 `packages/frontend/ios/` 增加功能。
+- 改 `packages/shared/src/protocol.ts` 时，必须同步检查 `packages/ios-native/Sources/ClaudeWeb/Protocol.swift` 和协议 fixture。
+- 改语音、后台、锁屏、权限、缓存、会话恢复这类系统能力时，必须更新或复核 `docs/IOS_NATIVE_DEVICE_TEST.md`。
+- 只有真正面向用户的使用方式变化，才更新 `docs/USER_MANUAL.md`；工程路线和技术取舍继续维护在本文档。
+
 ---
 
 ## 建议引入的轻量工程约束

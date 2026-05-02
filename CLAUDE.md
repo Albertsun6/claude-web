@@ -28,6 +28,11 @@ Vite dev (`pnpm dev:frontend`) proxies to backend at 3030.
 **iOS path policy**: any new mobile feature / fix goes into `packages/ios-native/`.
 The Capacitor wrapper at `packages/frontend/ios/` is preserved as fallback but
 unmaintained (see `packages/frontend/ios/DEPRECATED.md`).
+SwiftUI native is the confirmed long-term iOS frontend strategy. Do not migrate
+mobile work back to Capacitor/PWA or to React Native/Flutter unless the user
+explicitly reopens the architecture decision. Prefer server-driven config for
+copy, model lists, feature flags, profiles, and health-check display so routine
+changes do not require reinstalling the iOS app.
 
 ## Backend
 
@@ -144,6 +149,13 @@ When in doubt: ask the user "要更新手册吗？" rather than assume.
 | `docs/USER_MANUAL.md` | **What the app does today** — user-facing reference |
 | `docs/IDEAS.md` | Deferred features (yes-but-not-now) |
 | `docs/IMPROVEMENTS.md` | Historic audit (mostly closed) |
+| `docs/HARNESS_INDEX.md` | **harness 文档总入口** — 推荐阅读顺序、所有 harness 文件清单、跨文档关键约束（5 条贯穿）、维护规则。第一次进 harness 话题先看这个。 |
+| `docs/HARNESS_ARCHITECTURE.md` | **harness 完整分层架构** — 6 层（L1 Presentation / L2 API / L3 Orchestration / L4 Runtime / L5 Persistence / L6 Subject Project）+ L7 横切，鸟瞰图、每层职责、跨层数据流、20 条关键不变量速查 |
+| `docs/HARNESS_ROADMAP.md` | **harness 演进路线图（待办）** — Context、20 条原则、里程碑（M-1 → M6）、Open Questions、§16 进化体系、§18 评审 skill 草案、评审辩论流水。M-1 未启动。 |
+| `docs/HARNESS_DATA_MODEL.md` | **harness 数据模型** — 13 个核心实体（Project / Initiative / Issue / Stage / Task / Run / Artifact / ContextBundle / Methodology / ReviewVerdict / Decision / Retrospective / IdeaCapture）+ DDL + ADR-0010 / ADR-0015 schema 迁移策略 |
+| `docs/HARNESS_AGENTS.md` | **harness Agent 角色 + 模型策略 + 评审矩阵** — 12 个默认 Profile、Coder 复杂度自适应、双 reviewer risk-triggered、评审独立性约束、工具白名单 |
+| `docs/HARNESS_RISKS.md` | **harness 风险清单** — 18 条按 6 主题分组（Agent 行为 / 流程节奏 / 多 Agent / 不可逆 / 演化垂直 / 运维），按里程碑分布 |
+| `docs/HARNESS_LANDSCAPE.md` | **harness 竞品/参考全景图** — hapi / Paseo / Multica / OpenHands 等同类工具横向对比，按 L1-L7 分层；战略含义（L1/L2 不卷、L3+L7 集中投入）；代码搬运规则（个人自用情形：AGPL 项目可直接搬运 + 保留版权声明）。每次外部评审前必喂给评审 AI。 |
 | `docs/ENGINEERING_GOVERNANCE.md` | Engineering constraints plan: framework choices, CI, protocol tests, ADRs |
 | `docs/MOBILE_VOICE.md` | Mobile voice strategy doc |
 | `docs/ENTERPRISE_INTERNAL.md` | Speculative multi-user migration plan |
