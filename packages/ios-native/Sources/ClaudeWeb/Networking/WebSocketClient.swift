@@ -45,6 +45,13 @@ final class WebSocketClient {
     private var reconnectTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
 
+    /// Heartbeat: detect half-dead connections (backend gone but TCP not yet
+    /// torn down) faster than waiting for the next receive() to error.
+    /// Without this, a stuck run can hang for minutes (observed: 9min) before
+    /// reconnect fires and clearStuckRunsAfterReconnect cleans it up.
+    private var pingTimer: Timer?
+    private var lastPongAt: Date = .distantPast
+
     private weak var telemetry: Telemetry?
 
     func bindTelemetry(_ tel: Telemetry) {
@@ -85,12 +92,16 @@ final class WebSocketClient {
         task = t
         t.resume()
         state = .connected
+        lastPongAt = Date()
         telemetry?.log("ws.connect.ok")
         onConnected?()
         receiveTask = Task { [weak self] in await self?.receiveLoop() }
+        startPingTimer()
     }
 
     func disconnect() {
+        pingTimer?.invalidate()
+        pingTimer = nil
         receiveTask?.cancel()
         receiveTask = nil
         reconnectTask?.cancel()
@@ -142,6 +153,37 @@ final class WebSocketClient {
                 telemetry?.error("ws.receive.failed", error: error)
                 scheduleReconnect()
                 return
+            }
+        }
+    }
+
+    private func startPingTimer() {
+        pingTimer?.invalidate()
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.tickPing() }
+        }
+    }
+
+    /// Send a WS ping. If the pong handler errors OR no pong has come back in
+    /// 50 s, the connection is half-dead — force a reconnect, which then
+    /// triggers `clearStuckRunsAfterReconnect` upstream to clear stuck runs.
+    private func tickPing() {
+        guard let t = task else { return }
+        if Date().timeIntervalSince(lastPongAt) > 50 {
+            telemetry?.warn("ws.ping.timeout",
+                            props: ["sinceLastPongSec": String(Int(Date().timeIntervalSince(lastPongAt)))])
+            scheduleReconnect()
+            return
+        }
+        t.sendPing { [weak self] error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error = error {
+                    self.telemetry?.warn("ws.ping.failed", props: ["error": error.localizedDescription])
+                    self.scheduleReconnect()
+                } else {
+                    self.lastPongAt = Date()
+                }
             }
         }
     }

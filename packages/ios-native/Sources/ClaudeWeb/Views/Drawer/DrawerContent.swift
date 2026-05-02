@@ -16,6 +16,7 @@ struct DrawerContent: View {
     @Environment(Telemetry.self) private var telemetry
 
     @State private var showQuickPicker = false
+    @State private var showInboxList = false
     @State private var missingProjects: [ProjectDTO] = []
     @State private var showCleanupConfirm = false
     @State private var cleanupRunning = false
@@ -41,6 +42,10 @@ struct DrawerContent: View {
                 conversationList
                 Divider()
                 footer
+            }
+            .sheet(isPresented: $showInboxList) {
+                InboxListView()
+                    .presentationDragIndicator(.visible)
             }
             .navigationDestination(isPresented: $showQuickPicker) {
                 DirectoryPicker(initialPath: settings.cwd) { picked in
@@ -121,6 +126,9 @@ struct DrawerContent: View {
                 tint: voice.active ? .green : .accentColor
             ) {
                 if voice.active { voice.exit() } else { voice.enter() }
+            }
+            DrawerRow(icon: "lightbulb", label: "碎想 Inbox", tint: .yellow) {
+                showInboxList = true
             }
             DrawerRow(icon: "gearshape", label: "设置", tint: .secondary) {
                 closeDrawer()

@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(Telemetry.self) private var telemetry
     @Environment(TTSPlayer.self) private var tts
     @Environment(Cache.self) private var cache
+    @Environment(HeartbeatMonitor.self) private var heartbeat
     @Environment(\.dismiss) private var dismiss
     @State private var draftURL: String = ""
     @State private var draftCwd: String = ""
@@ -26,6 +27,13 @@ struct SettingsView: View {
         @Bindable var s = settings
         NavigationStack {
             Form {
+                Section {
+                    MacHeartbeatRow(monitor: heartbeat)
+                } header: {
+                    Text("Mac 状态")
+                } footer: {
+                    Text("移动办公时知道远程 Mac 是否在线、是否在跑任务、通知通道是否启用。背景每 5 秒轮询一次，下拉箭头可手动刷新。")
+                }
                 Section {
                     Toggle("自动朗读回答", isOn: $s.ttsEnabled)
                     Picker("风格", selection: $s.speakStyle) {
@@ -158,6 +166,21 @@ struct SettingsView: View {
                 }
                 Section {
                     NavigationLink {
+                        HelpView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "book.fill")
+                                .foregroundStyle(Color.accentColor)
+                            Text("使用手册")
+                        }
+                    }
+                } header: {
+                    Text("帮助")
+                } footer: {
+                    Text("离线查看功能说明和快捷键，会自动更新到最新版本。")
+                }
+                Section {
+                    NavigationLink {
                         HealthCheckView()
                     } label: {
                         HStack {
@@ -210,21 +233,53 @@ struct SettingsView: View {
                     HStack {
                         Text("版本")
                         Spacer()
-                        Text(appVersion)
+                        Text("v\(BuildInfo.marketingVersion) (build \(BuildInfo.buildNumber))")
                             .foregroundStyle(.secondary)
-                            .font(.caption)
+                            .font(.caption.monospacedDigit())
                     }
                     HStack {
-                        Text("构建")
+                        Text("Git")
                         Spacer()
-                        Text(buildNumber)
+                        Text(BuildInfo.gitSha)
+                            .foregroundStyle(BuildInfo.gitSha.contains("dirty") ? .orange : .secondary)
+                            .font(.caption.monospaced())
+                    }
+                    HStack(alignment: .top) {
+                        Text("最后提交")
+                        Spacer()
+                        Text(formatGitTime(BuildInfo.gitCommitTime))
+                            .foregroundStyle(.secondary)
+                            .font(.caption.monospacedDigit())
+                    }
+                    HStack(alignment: .top) {
+                        Text("提交说明")
+                        Spacer()
+                        Text(BuildInfo.gitCommitSubject)
                             .foregroundStyle(.secondary)
                             .font(.caption)
+                            .multilineTextAlignment(.trailing)
+                            .lineLimit(2)
+                    }
+                    HStack {
+                        Text("构建于")
+                        Spacer()
+                        Text(formatBuildTime(BuildInfo.buildTime))
+                            .foregroundStyle(.secondary)
+                            .font(.caption.monospacedDigit())
+                    }
+                    Button {
+                        UIPasteboard.general.string = BuildInfo.summary
+                    } label: {
+                        HStack {
+                            Image(systemName: "doc.on.doc")
+                            Text("复制完整版本信息")
+                        }
+                        .font(.caption)
                     }
                 } header: {
                     Text("关于")
                 } footer: {
-                    Text("Seaidea v\(appVersion) (build \(buildNumber))")
+                    Text(BuildInfo.summary).font(.caption.monospaced())
                 }
             }
             .alert("确认重置应用数据？", isPresented: $showResetConfirm) {
@@ -259,6 +314,27 @@ struct SettingsView: View {
                 draftMode = settings.permissionMode
             }
         }
+    }
+
+    /// Format ISO 8601 commit time as "MM-dd HH:mm" for compact display.
+    private func formatGitTime(_ iso: String) -> String {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = parser.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+        guard let d = date else { return iso }
+        let f = DateFormatter()
+        f.dateFormat = "MM-dd HH:mm"
+        return f.string(from: d)
+    }
+
+    /// Same as formatGitTime but for buildTime (always Z UTC; show local).
+    private func formatBuildTime(_ iso: String) -> String {
+        let parser = ISO8601DateFormatter()
+        let date = parser.date(from: iso)
+        guard let d = date else { return iso }
+        let f = DateFormatter()
+        f.dateFormat = "MM-dd HH:mm"
+        return f.string(from: d)
     }
 
     /// Wipe all client-side state. Intentionally does NOT touch backend

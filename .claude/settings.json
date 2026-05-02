@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(~/.claude/skills/feature-fullstack/**)",
+      "Bash(touch ~/.claude/skills/feature-fullstack/log.jsonl)",
+      "Bash(echo '{\"date\":\"2026-05-02\",\"featureCount\":4,\"backendLOC\":700,\"iosLOC\":400,\"phasesPassed\":\"1-7\",\"regressions\":[],\"biggestPitfall\":\"tsx watch reload chain killing backend during multi-file edits — solved by Phase 3 launchctl kickstart recipe\"}')",
+      "WebFetch(domain:docs.anthropic.com)"
+    ]
+  }
+}

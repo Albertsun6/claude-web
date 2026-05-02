@@ -220,8 +220,15 @@ final class ProjectRegistry {
         let lines = TranscriptParser.parse(resp.messages)
         // Use sessionId as the conversation id for historical loads — stable
         // across app restarts, and dedup just works.
+        // Title preference: backend's first-prompt preview (works for both
+        // iOS-driven and Claude Code Desktop-driven sessions) → makeTitle
+        // truncates / cleans. Fallback to date-based "MMdd-N" if jsonl had
+        // no readable user message (rare).
         let existingTitles = Array(client.conversations.values.map { $0.title })
-        let derivedTitle = ConversationNamer.title(for: session.modifiedAt, existingTitles: existingTitles)
+        let previewBased = TitleHelper.makeTitle(from: session.preview)
+        let derivedTitle = previewBased.isEmpty
+            ? ConversationNamer.title(for: session.modifiedAt, existingTitles: existingTitles)
+            : previewBased
         let conv = Conversation(
             id: session.sessionId,
             cwd: project.cwd,

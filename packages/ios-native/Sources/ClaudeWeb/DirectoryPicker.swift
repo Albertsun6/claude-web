@@ -59,6 +59,16 @@ struct DirectoryPicker: View {
             }
         }
         .task(id: path) {
+            // First-launch case: empty initialPath → fetch /api/fs/home so we
+            // start at the user's Mac home dir instead of a hardcoded Desktop.
+            if path.isEmpty {
+                if let home = try? await fs.home().home {
+                    path = home
+                    return
+                }
+                path = "/"
+                return
+            }
             await load()
         }
         .onAppear {

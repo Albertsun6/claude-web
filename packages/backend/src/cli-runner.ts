@@ -155,6 +155,11 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
 }
 
 const STALE_SESSION_RE = /No conversation found with session ID/i;
+// CLI prints "Prompt is too long" to stderr when context window is exceeded.
+// This happens most often when iOS / Web shares a sessionId with Claude Code
+// running on the Mac — both append to the same jsonl until the model can't
+// fit it all anymore. Recovery: spawn /compact in the same session, then retry.
+const TOO_LONG_RE = /Prompt is too long/i;
 
 export async function runSession(p: RunSessionParams): Promise<void> {
   // Defense in depth: cli-runner enforces the path allowlist too.
@@ -176,6 +181,46 @@ export async function runSession(p: RunSessionParams): Promise<void> {
     });
     res = await runOnce(p, undefined);
     if (res.signaled) return;
+  }
+
+  // Prompt too long — context window exceeded. Try /compact in same session,
+  // then retry original prompt. If /compact also fails, fall back to a fresh
+  // session (clearing UI), preserving the original prompt.
+  if (res.code !== 0 && p.resumeSessionId && TOO_LONG_RE.test(res.stderr)) {
+    p.onMessage({
+      type: "system",
+      subtype: "too_long_recovering",
+      message: "上下文超限，正在自动 /compact 压缩历史…",
+    });
+
+    // Spawn /compact in the same session. Suppress sub-run sdk_message stream
+    // (the user already sees a "compacting" status; the noisy output of
+    // /compact would confuse them).
+    const compactRes = await runOnce(
+      { ...p, prompt: "/compact", attachments: undefined, onMessage: () => {} },
+      p.resumeSessionId,
+    );
+    if (compactRes.signaled) return;
+
+    if (compactRes.code === 0) {
+      p.onMessage({
+        type: "system",
+        subtype: "too_long_recovered",
+        message: "压缩完成，重发指令",
+      });
+      res = await runOnce(p, p.resumeSessionId);
+      if (res.signaled) return;
+    } else {
+      // /compact failed — fall back to a brand-new session.
+      p.onClearRunMessages?.();
+      p.onMessage({
+        type: "system",
+        subtype: "too_long_fallback_new_session",
+        message: "压缩失败，已开新会话重试（旧 transcript 保留在 jsonl 中）",
+      });
+      res = await runOnce(p, undefined);
+      if (res.signaled) return;
+    }
   }
 
   if (res.code !== 0) {

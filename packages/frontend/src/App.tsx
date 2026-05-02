@@ -6,6 +6,7 @@ import { ProjectPicker } from "./components/ProjectPicker";
 import { MessageStream } from "./components/MessageStream";
 import { InputBox } from "./components/InputBox";
 import { PermissionModal } from "./components/PermissionModal";
+import { HelpModal } from "./components/HelpModal";
 import { VoiceBar } from "./components/VoiceBar";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionList } from "./components/SessionList";
@@ -91,6 +92,7 @@ function AppInner() {
   const setRightTab = useStore((s) => s.setRightTab);
   const [drawer, setDrawer] = useState<DrawerSide>(null);
   const [callMode, setCallMode] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const voice = useVoiceCtx();
   // keep screen awake during a hands-free conversation
   useWakeLock(voice.conversationMode || callMode);
@@ -307,6 +309,9 @@ function AppInner() {
         <button className="icon-btn" onClick={() => setDrawer(drawer === "right" ? null : "right")} aria-label="files">
           📁
         </button>
+        <button className="icon-btn" onClick={() => setShowHelp(true)} aria-label="help" title="帮助">
+          ❓
+        </button>
       </div>
 
       <aside className="sidebar">{sidebar}</aside>
@@ -353,6 +358,7 @@ function AppInner() {
       )}
 
       <PermissionModal />
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       <OfflineBanner />
       <AuthGate />
       <CallMode active={callMode} onClose={() => setCallMode(false)} />

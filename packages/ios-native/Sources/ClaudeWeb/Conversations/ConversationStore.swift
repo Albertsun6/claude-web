@@ -369,6 +369,16 @@ final class ConversationStore {
         s.messages.append(ChatLine(role: .user, text: prompt, runId: runId))
         stateByConversation[convId] = s
 
+        // If the title is still auto-generated (e.g. "0502-3"), rewrite it
+        // to the prompt's first ~30 chars so the conversation list shows
+        // something meaningful. User-customized titles are left alone.
+        if Self.isAutoNamedTitle(conversation.title, cwd: cwd) {
+            let derived = TitleHelper.makeTitle(from: prompt)
+            if !derived.isEmpty {
+                conversation.title = derived
+            }
+        }
+
         conversation.lastUsed = Date()
         conversations[convId] = conversation
         return StartedTurn(cwd: cwd, resumeSessionId: conversation.sessionId)

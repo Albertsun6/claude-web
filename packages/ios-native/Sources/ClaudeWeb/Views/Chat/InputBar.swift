@@ -23,6 +23,7 @@ struct InputBar: View {
     let onTranscript: (String) -> Void
 
     @Environment(VoiceRecorder.self) private var recorder
+    @Environment(InboxAPI.self) private var inboxAPI
     @FocusState private var inputFocused: Bool
 
     @State private var pendingImages: [PendingImage] = []
@@ -35,6 +36,7 @@ struct InputBar: View {
     @State private var slashQuery: String? = nil
     @State private var showContextSheet = false
     @State private var showPhotosPicker = false
+    @State private var showInboxSheet = false
 
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
@@ -49,6 +51,11 @@ struct InputBar: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Keyboard tools row (history nav + 完成) — shown only while focused.
+            // Sits at the very top of InputBar so it lives above any other rows.
+            keyboardToolsRow
+                .animation(.easeInOut(duration: 0.15), value: inputFocused)
+
             // Recorder hint
             if recorder.state != .idle {
                 HStack(spacing: 6) {
@@ -109,6 +116,14 @@ struct InputBar: View {
                     } label: {
                         Label("附加 git diff / 剪贴板", systemImage: "paperclip")
                     }
+
+                    Divider()
+
+                    Button {
+                        showInboxSheet = true
+                    } label: {
+                        Label("碎想 Inbox（不发送，先存）", systemImage: "lightbulb")
+                    }
                 } label: {
                     Image(systemName: attachIconName)
                         .frame(width: 36, height: 44)
@@ -138,18 +153,6 @@ struct InputBar: View {
                         atQuery = extractAtQuery(newValue)
                         if atQuery != nil && slashQuery == nil { showFilePicker = true }
                     }
-                    .toolbar {
-                        ToolbarItemGroup(placement: .keyboard) {
-                            Button("↑") { traverseHistory(direction: .up) }
-                                .font(.caption2)
-                                .disabled(historyIndex == promptHistory.count - 1)
-                            Button("↓") { traverseHistory(direction: .down) }
-                                .font(.caption2)
-                                .disabled(historyIndex < 0)
-                            Spacer()
-                            Button("完成") { inputFocused = false }
-                        }
-                    }
                     .sheet(isPresented: $showSlashCommands) {
                         SlashCommandPicker { selected in
                             draft = selected + " "
@@ -173,18 +176,31 @@ struct InputBar: View {
                         .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
                     }
+                    .sheet(isPresented: $showInboxSheet) {
+                        InboxCaptureSheet(api: inboxAPI) {
+                            showInboxSheet = false
+                        }
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                    }
 
                 pttButton
 
                 if busy {
                     if canSend {
                         Button(action: doQueue) {
-                            Image(systemName: "text.badge.plus")
-                                .frame(width: 36, height: 44)
+                            HStack(spacing: 3) {
+                                Image(systemName: "text.badge.plus")
+                                Text("排队")
+                                    .font(.caption.bold())
+                            }
+                            .padding(.horizontal, 8)
+                            .frame(height: 32)
+                            .background(Color.accentColor.opacity(0.15), in: .capsule)
+                            .foregroundStyle(Color.accentColor)
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        .accessibilityLabel("加入队列")
+                        .accessibilityLabel("加入队列：claude 跑完当前会自动发出")
                     }
                     Button(role: .destructive, action: onStop) {
                         Image(systemName: "stop.fill")
@@ -203,6 +219,49 @@ struct InputBar: View {
         }
         .background(.bar)
         .onAppear { loadPromptHistory() }
+    }
+
+    // MARK: - Keyboard tools row
+    //
+    // Replaces SwiftUI's `.toolbar { ToolbarItemGroup(placement: .keyboard) }`
+    // because that placement renders inconsistently on physical devices
+    // (observed 2026-05-02: works in simulator, overlaps the input row on
+    // iPhone 15 Pro Max). Drawing the row inside InputBar's own VStack means
+    // iOS pushes the whole bar up with the keyboard automatically — no
+    // dependency on inputAccessoryView timing.
+    @ViewBuilder
+    private var keyboardToolsRow: some View {
+        if inputFocused {
+            HStack(spacing: 16) {
+                Button {
+                    traverseHistory(direction: .up)
+                } label: {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .disabled(historyIndex >= promptHistory.count - 1)
+                Button {
+                    traverseHistory(direction: .down)
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .disabled(historyIndex < 0)
+                Spacer()
+                Button("完成") { inputFocused = false }
+                    .font(.callout.weight(.medium))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(Color(.secondarySystemBackground))
+            .overlay(alignment: .top) {
+                Divider()
+            }
+            .overlay(alignment: .bottom) {
+                Divider()
+            }
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
     }
 
     // MARK: - Send
@@ -271,6 +330,11 @@ struct InputBar: View {
 
     // MARK: - PTT
 
+    /// Drag distance (pt) above the button at which we arm "release to cancel".
+    /// 80pt matches WeChat / Telegram's feel — far enough that a stray jitter
+    /// won't trigger, close enough that the gesture stays in thumb-reach.
+    private static let cancelThreshold: CGFloat = 80
+
     private var pttButton: some View {
         Button {
             Task { await togglePTT() }
@@ -283,13 +347,25 @@ struct InputBar: View {
         .buttonStyle(.plain)
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
-                .onChanged { _ in
+                .onChanged { value in
                     if recorder.state == .idle {
                         Task { await recorder.start() }
                     }
+                    // Translation.height < 0 means dragged upward.
+                    let armed = value.translation.height <= -Self.cancelThreshold
+                    if armed != recorder.cancelArmed {
+                        recorder.cancelArmed = armed
+                        // Tactile feedback on entering / leaving the cancel
+                        // zone — lets the user blind-confirm without looking.
+                        let style: UIImpactFeedbackGenerator.FeedbackStyle = armed ? .medium : .light
+                        UIImpactFeedbackGenerator(style: style).impactOccurred()
+                    }
                 }
                 .onEnded { _ in
-                    if recorder.state == .recording {
+                    guard recorder.state == .recording else { return }
+                    if recorder.cancelArmed {
+                        recorder.cancel()
+                    } else {
                         Task {
                             if let text = await recorder.stopAndTranscribe(), !text.isEmpty {
                                 onTranscript(text)

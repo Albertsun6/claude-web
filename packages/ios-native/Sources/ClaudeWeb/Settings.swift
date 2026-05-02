@@ -146,8 +146,11 @@ final class AppSettings {
         let saved = UserDefaults.standard.string(forKey: Self.backendKey)
         let defaultURL = Self.detectDefaultBackend()
         self.backendURL = (saved.flatMap(URL.init(string:))) ?? defaultURL
-        self.cwd = UserDefaults.standard.string(forKey: Self.cwdKey)
-            ?? "/Users/yongqian/Desktop"
+        // First launch: leave cwd empty so the user picks a folder explicitly
+        // (used to default to ~/Desktop, which felt like "the app pre-opened a
+        // random place"). DirectoryPicker handles empty initialPath by
+        // fetching /api/fs/home as a neutral starting point.
+        self.cwd = UserDefaults.standard.string(forKey: Self.cwdKey) ?? ""
         self.permissionMode = UserDefaults.standard.string(forKey: Self.permissionModeKey)
             ?? "plan"
         self.ttsEnabled = UserDefaults.standard.object(forKey: Self.ttsEnabledKey) as? Bool ?? true

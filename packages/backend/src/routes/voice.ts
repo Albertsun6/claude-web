@@ -398,6 +398,88 @@ voiceRouter.post("/summarize", async (c) => {
   return c.json({ original: text, summary, durationMs: Date.now() - started });
 });
 
+// POST /api/voice/notes-summary
+//   body: { text: string }   accumulated meeting / brainstorm transcript
+//   returns: { original, summary: string (markdown), durationMs }
+//
+// Different from /summarize: that one rewrites a single Claude reply into a
+// short TTS-friendly blurb. This one structures a long messy monologue
+// (requirements gathering, brainstorming) into headed sections.
+const NOTES_SUMMARY_SYSTEM_PROMPT = `你是会议/需求/头脑风暴的整理助手。下面是用户口述、由 STT 转写出来的原始文字（多段拼接，可能有重复、口语化、错别字、岔题）。请整理成一份结构化的中文 Markdown 总结，要求：
+
+输出格式（按需省略空小节，不要硬凑）：
+## 核心需求 / 主题
+- 用 1-3 句话概括用户最想表达的事
+
+## 关键点
+- 把分散在不同段落里的同一主题合并到一起，去掉重复
+- 用简短的要点列出（每条 ≤ 30 字）
+
+## 决策 / 结论
+- 用户已经明确表态的选择、放弃的方案
+
+## 待办 / 行动项
+- 需要后续做的事，一条一行，能分配到具体行为
+
+## 待澄清的问题
+- 用户提到但没说清楚、或自相矛盾的地方
+
+要求：
+- 保持原意，不要发明用户没说的内容
+- 去掉嗯/啊/那个/就是/这个就是 等填充词
+- 修复明显的同音错字（联系上下文判断）
+- 直接输出 Markdown，不要任何额外解释或前缀`;
+
+voiceRouter.post("/notes-summary", async (c) => {
+  let body: { text?: unknown };
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: "invalid JSON body" }, 400);
+  }
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text) return c.json({ error: "text required" }, 400);
+  if (text.length > 60_000) return c.json({ error: "text too long" }, 413);
+
+  const started = Date.now();
+  const args = [
+    "-p",
+    "--model", "claude-sonnet-4-6",
+    "--output-format", "json",
+    "--permission-mode", "bypassPermissions",
+    "--system-prompt", NOTES_SUMMARY_SYSTEM_PROMPT,
+    "--setting-sources", "user",
+    text,
+  ];
+  const r = await new Promise<{ stdout: string; stderr: string; code: number }>(
+    (resolve, reject) => {
+      const child = spawn(CLAUDE_BIN, args, { stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "", stderr = "";
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(new Error("claude notes-summary timed out"));
+      }, 90_000);
+      child.stdout.on("data", (d) => (stdout += d.toString()));
+      child.stderr.on("data", (d) => (stderr += d.toString()));
+      child.on("error", (err) => { clearTimeout(timer); reject(err); });
+      child.on("close", (code) => { clearTimeout(timer); resolve({ stdout, stderr, code: code ?? 0 }); });
+    },
+  ).catch((err: Error) => ({ stdout: "", stderr: err.message ?? String(err), code: -1 }));
+
+  if (r.code !== 0) {
+    return c.json({ error: `notes-summary failed: ${r.stderr.slice(0, 200)}` }, 500);
+  }
+  let summary = "";
+  try {
+    const parsed = JSON.parse(r.stdout);
+    if (typeof parsed.result === "string" && parsed.result.trim()) summary = parsed.result.trim();
+  } catch {
+    return c.json({ error: "unparseable result" }, 500);
+  }
+  if (!summary) {
+    return c.json({ error: "empty result" }, 500);
+  }
+  return c.json({ original: text, summary, durationMs: Date.now() - started });
+});
+
 // POST /api/voice/summarize-stream
 // Streams Haiku summary sentence by sentence as SSE so iOS can start TTS
 // on the first sentence before Haiku finishes the rest.

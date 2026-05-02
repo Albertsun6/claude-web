@@ -14,6 +14,7 @@ import {
   isAuthEnabled,
   isPathAllowlistEnabled,
 } from "../auth.js";
+import { snapshot as heartbeatSnapshot } from "../heartbeat.js";
 
 const CLAUDE_BIN = process.env.CLAUDE_CLI ?? "claude";
 const WHISPER_BIN = process.env.WHISPER_BIN ?? "whisper-cli";
@@ -247,6 +248,13 @@ function checkAllowedRoots(): HealthItem {
   };
 }
 
+// GET /api/health/heartbeat
+// Lightweight: no external probes. Designed for iOS settings-page polling
+// every few seconds to render "Mac is alive" badge. Returns in <5ms.
+healthRouter.get("/heartbeat", (c) => {
+  return c.json(heartbeatSnapshot());
+});
+
 healthRouter.get("/full", async (c) => {
   const started = Date.now();
   const items = await Promise.all([
@@ -275,6 +283,7 @@ healthRouter.get("/full", async (c) => {
       pid: process.pid,
       uptimeSec: Math.round(process.uptime()),
     },
+    heartbeat: heartbeatSnapshot(),
     durationMs: Date.now() - started,
   });
 });

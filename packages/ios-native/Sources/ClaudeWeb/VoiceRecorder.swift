@@ -26,6 +26,11 @@ final class VoiceRecorder {
     var state: State = .idle
     var lastTranscript: String = ""
 
+    /// True when the user is dragging the PTT button up past the cancel
+    /// threshold. UI uses this to switch HUD style; release while armed
+    /// triggers cancel() instead of stopAndTranscribe().
+    var cancelArmed: Bool = false
+
     private var recorder: AVAudioRecorder?
     private let backendURL: () -> URL
     private let authToken: () -> String
@@ -126,6 +131,7 @@ final class VoiceRecorder {
         if let url = fileURL { try? FileManager.default.removeItem(at: url) }
         fileURL = nil
         state = .idle
+        cancelArmed = false
     }
 
     /// Force back to idle from any state. Used by VoiceSession to recover

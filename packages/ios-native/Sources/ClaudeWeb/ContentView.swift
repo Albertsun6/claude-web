@@ -15,7 +15,12 @@ struct ContentView: View {
     @State private var showDrawer = false
     @State private var showFilePanel = false
     @State private var showRunsDashboard = false
+    @State private var showNotes = false
     @State private var selectedFile: (cwd: String, relativePath: String, entry: FsEntry)? = nil
+    @State private var showInterruptCurrentConfirm = false
+    @State private var showInterruptAllConfirm = false
+    @State private var interruptError: String?
+    @State private var showConversationsSheet = false
 
     var body: some View {
         GeometryReader { geo in
@@ -107,18 +112,67 @@ struct ContentView: View {
                     }
                     .transition(.move(edge: .trailing))
                 }
+                // Recording HUD — sits above all other layers so the
+                // floating "上滑取消" card stays visible regardless of
+                // drawer / sheet state. Only renders during .recording.
+                if recorder.state == .recording {
+                    RecordingHUD(cancelArmed: recorder.cancelArmed)
+                        .ignoresSafeArea()
+                        .animation(.easeInOut(duration: 0.15), value: recorder.cancelArmed)
+                        .transition(.opacity)
+                }
             }
             .animation(.easeInOut(duration: 0.25), value: showDrawer)
             .animation(.easeInOut(duration: 0.25), value: showFilePanel)
+            .animation(.easeInOut(duration: 0.2), value: recorder.state)
         }
         .dynamicTypeSize(settings.dynamicTypeSize)
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
+        .sheet(isPresented: $showNotes) {
+            NotesView()
+        }
         .sheet(isPresented: $showRunsDashboard) {
             RunsDashboardSheet()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showConversationsSheet) {
+            // Show conversations under the currently focused project's cwd.
+            // If no current conversation (first-launch edge), use settings.cwd.
+            let cwd = client.conversations[client.currentConversationId ?? ""]?.cwd ?? settings.cwd
+            ConversationsSheet(cwd: cwd)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "强制中止当前对话？",
+            isPresented: $showInterruptCurrentConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("强制中止", role: .destructive) { performInterruptCurrent() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("会向后台发 SIGTERM 中止当前 run。已收到的部分输出会保留。")
+        }
+        .confirmationDialog(
+            "强制中止全部 \(client.activeRunCount) 个对话？",
+            isPresented: $showInterruptAllConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("全部中止", role: .destructive) { performInterruptAll() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("跑歪 / 卡死时用。所有正在跑的对话都会被 SIGTERM。")
+        }
+        .alert("中止失败", isPresented: Binding(
+            get: { interruptError != nil },
+            set: { if !$0 { interruptError = nil } }
+        )) {
+            Button("OK") { interruptError = nil }
+        } message: {
+            Text(interruptError ?? "")
         }
         .sheet(item: Binding(
             get: { client.currentPendingPermission },
@@ -254,6 +308,11 @@ struct ContentView: View {
                                     .font(.headline)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        showConversationsSheet = true
+                                    }
+                                    .accessibilityHint("点击查看本项目所有对话")
                                 if settings.permissionMode == "bypassPermissions" {
                                     Image(systemName: "exclamationmark.triangle.fill")
                                         .foregroundStyle(.red)
@@ -272,7 +331,19 @@ struct ContentView: View {
                                             .background(.orange, in: .capsule)
                                     }
                                     .buttonStyle(.plain)
-                                    .accessibilityLabel("\(client.activeRunCount) 个对话进行中，点击查看")
+                                    .accessibilityLabel("\(client.activeRunCount) 个对话进行中，点击查看；长按强制中止")
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            showInterruptCurrentConfirm = true
+                                        } label: {
+                                            Label("强制中止当前对话", systemImage: "stop.circle")
+                                        }
+                                        Button(role: .destructive) {
+                                            showInterruptAllConfirm = true
+                                        } label: {
+                                            Label("强制中止全部 (\(client.activeRunCount))", systemImage: "stop.fill")
+                                        }
+                                    }
                                 }
                             }
                             HStack(spacing: 3) {
@@ -288,6 +359,13 @@ struct ContentView: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         HStack(spacing: 8) {
                             ttsControls
+                            Button {
+                                showNotes = true
+                            } label: {
+                                Image(systemName: "text.bubble")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityLabel("打开摘要模式")
                             Button {
                                 withAnimation(.easeInOut(duration: 0.25)) { showFilePanel.toggle() }
                             } label: {
@@ -466,6 +544,41 @@ private var chipColor: Color {
             attachments: atts
         )
         draft = ""
+    }
+
+    // MARK: - Force interrupt (M0.5 #5)
+
+    /// Reusable: SIGTERM via WS first, fall back to HTTP /api/runs/:id/interrupt
+    /// when the WS link is unreliable. Matches the dual-path mentioned in
+    /// docs/HARNESS_LANDSCAPE.md (hapi permissions.ts pattern, defense in depth).
+    private func interruptOne(convId: String, runId: String) {
+        client.interrupt(convId: convId)
+        // HTTP fallback in case WS is iffy: use run-registry endpoint.
+        let baseURL = settings.backendURL
+        Task { @MainActor in
+            do {
+                try await interruptRun(baseURL: baseURL, runId: runId)
+            } catch {
+                // 404 means the run already ended via WS interrupt — that's fine.
+                if (error as NSError).code != 404 {
+                    self.interruptError = "中止 \(runId) 失败: \((error as NSError).localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func performInterruptCurrent() {
+        guard let convId = client.currentConversationId,
+              let runId = client.stateByConversation[convId]?.currentRunId else { return }
+        interruptOne(convId: convId, runId: runId)
+    }
+
+    private func performInterruptAll() {
+        for (convId, state) in client.stateByConversation {
+            if let runId = state.currentRunId {
+                interruptOne(convId: convId, runId: runId)
+            }
+        }
     }
 }
 

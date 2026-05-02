@@ -24,6 +24,17 @@ import {
   registerPermissionChannel,
   resolvePermission,
 } from "./routes/permission.js";
+import { inboxRouter } from "./routes/inbox.js";
+import { runsRouter } from "./routes/runs.js";
+import { helpRouter } from "./routes/help.js";
+import { buildNotificationHub, type NotificationContext, type SessionEndReason } from "./notifications/index.js";
+import {
+  recordSpawn as heartbeatRecordSpawn,
+  recordCompletion as heartbeatRecordCompletion,
+  setActiveRunCountFn as heartbeatSetActiveRunCountFn,
+  setNotificationChannelCount as heartbeatSetNotificationChannelCount,
+} from "./heartbeat.js";
+import { register as registerRun, unregister as unregisterRun, activeCount as runRegistryActiveCount } from "./run-registry.js";
 import {
   authMiddleware,
   checkWsAuth,
@@ -77,9 +88,19 @@ app.route("/api/sessions", sessionsRouter);
 app.route("/api/projects", projectsRouter);
 app.route("/api/telemetry", telemetryRouter);
 app.route("/api/permission", permissionRouter);
+app.route("/api/inbox", inboxRouter);
+app.route("/api/runs", runsRouter);
+app.route("/api/help", helpRouter);
+
+// Notification hub: builds Server酱 / future channels from settings.
+// Returns NoOpHub if no channels configured.
+const notifyHub = buildNotificationHub();
+heartbeatSetNotificationChannelCount(notifyHub.channelCount);
 
 // Track active runs across all WS clients so /health can report.
 const allConnections = new Set<{ runs: Map<string, RunHandle> }>();
+// Make active-run count visible to heartbeat snapshot.
+heartbeatSetActiveRunCountFn(() => runRegistryActiveCount());
 function globalActiveRuns(): number {
   let n = 0;
   for (const c of allConnections) n += c.runs.size;
@@ -323,14 +344,25 @@ wss.on("connection", (ws) => {
         return;
       }
 
+      const notifyCtx: NotificationContext = {
+        runId,
+        cwd: msg.cwd,
+        promptPreview: msg.prompt.slice(0, 80),
+        agentName: "Claude",
+      };
+
       const abort = new AbortController();
       const permissionToken = randomUUID();
 
       // wrap permission channel send so each permission_request carries this runId
+      // AND fires a notification (Telegram / Server酱) so the user knows claude
+      // has paused waiting for approval — they can decide whether to reach for
+      // the iOS app right now or let it sit.
       const channelSend = (m: unknown) => {
-        const obj = m as { type?: string };
+        const obj = m as { type?: string; toolName?: string };
         if (obj?.type === "permission_request") {
           send({ ...(m as any), runId });
+          void notifyHub.publishPermissionPending(notifyCtx, obj.toolName ?? "(unknown tool)");
         } else {
           send(m as ServerMessage);
         }
@@ -338,6 +370,8 @@ wss.on("connection", (ws) => {
       const unregisterPermission = registerPermissionChannel(permissionToken, channelSend);
 
       runs.set(runId, { abort, permissionToken, unregisterPermission });
+      registerRun(runId, { abort, cwd: msg.cwd, prompt: msg.prompt, startedAt: Date.now() });
+      heartbeatRecordSpawn();
 
       void (async () => {
         try {
@@ -352,18 +386,32 @@ wss.on("connection", (ws) => {
             backendBase: BACKEND_BASE,
             authToken: process.env.CLAUDE_WEB_TOKEN,
             signal: abort.signal,
-            onMessage: (cliMsg) => send({ type: "sdk_message", runId, message: cliMsg }),
+            onMessage: (cliMsg) => {
+              send({ type: "sdk_message", runId, message: cliMsg });
+              const m = cliMsg as { type?: string; subtype?: string; sessionId?: string; session_id?: string };
+              if (m?.type === "system" && m?.subtype === "init") {
+                const sid = m.sessionId ?? m.session_id;
+                if (sid) notifyCtx.sessionId = sid;
+              }
+            },
             onClearRunMessages: () => send({ type: "clear_run_messages", runId }),
           });
-          send({ type: "session_ended", runId, reason: abort.signal.aborted ? "interrupted" : "completed" });
+          const reason: SessionEndReason = abort.signal.aborted ? "interrupted" : "completed";
+          send({ type: "session_ended", runId, reason });
+          heartbeatRecordCompletion(reason);
+          void notifyHub.publishSessionCompletion(notifyCtx, reason);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.error("[session error]", err);
           send({ type: "error", runId, error: message });
           send({ type: "session_ended", runId, reason: "error" });
+          heartbeatRecordCompletion("error");
+          void notifyHub.publishSessionCompletion(notifyCtx, "error");
         } finally {
           unregisterPermission();
           runs.delete(runId);
+          unregisterRun(runId);
+          notifyHub.forgetRun(runId);
         }
       })();
     }

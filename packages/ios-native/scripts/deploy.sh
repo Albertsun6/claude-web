@@ -22,6 +22,10 @@ BUILD_DIR="$HOME/Library/Developer/Xcode/DerivedData/claude-web-native"
 
 cd "$PROJECT_DIR"
 
+# Generate BuildInfo.swift + bump build number BEFORE xcodegen so the new
+# .swift file is picked up and project.yml's CURRENT_PROJECT_VERSION is fresh.
+bash "$PROJECT_DIR/scripts/buildinfo.sh"
+
 # Regenerate Xcode project from yml in case sources / settings changed.
 xcodegen generate > /dev/null
 
@@ -86,4 +90,7 @@ xcrun devicectl device process launch --device "$DEVICE_ID" "$BUNDLE_ID" --termi
   echo "launch failed:"; tail -20 /tmp/_launch.log; exit 1;
 }
 
-echo "[3/3] ✓ deployed + launched on $DEVICE_ID"
+MV=$(grep marketingVersion "$PROJECT_DIR/Sources/ClaudeWeb/BuildInfo.swift" | sed -E 's/.*"([^"]+)".*/\1/')
+BN=$(grep 'static let buildNumber' "$PROJECT_DIR/Sources/ClaudeWeb/BuildInfo.swift" | sed -E 's/.*"([^"]+)".*/\1/')
+SHA=$(grep gitSha "$PROJECT_DIR/Sources/ClaudeWeb/BuildInfo.swift" | sed -E 's/.*"([^"]+)".*/\1/')
+echo "[3/3] ✓ deployed Seaidea v${MV} (build ${BN}) · ${SHA} on $DEVICE_ID"

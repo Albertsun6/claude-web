@@ -13,12 +13,15 @@ struct ClaudeWebApp: App {
     @State private var recorder: VoiceRecorder
     @State private var tts: TTSPlayer
     @State private var voice: VoiceSession
+    @State private var notes: NotesSession
     @State private var cache: Cache
     @State private var projectsAPI: ProjectsAPI
     @State private var sessionsAPI: SessionsAPI
     @State private var registry: ProjectRegistry
     @State private var telemetry: Telemetry
     @State private var gitAPI: GitAPI
+    @State private var heartbeat: HeartbeatMonitor
+    @State private var inboxAPI: InboxAPI
 
     init() {
         let s = AppSettings()
@@ -34,6 +37,7 @@ struct ClaudeWebApp: App {
             settings: { s }
         ))
         _voice = State(initialValue: VoiceSession())
+        _notes = State(initialValue: NotesSession(backendURL: backendRef, authToken: tokenRef))
 
         let cacheInst = Cache()
         _cache = State(initialValue: cacheInst)
@@ -48,6 +52,8 @@ struct ClaudeWebApp: App {
         ))
         _telemetry = State(initialValue: Telemetry(backend: backendRef, token: tokenRef))
         _gitAPI = State(initialValue: GitAPI(backend: backendRef, token: tokenRef))
+        _heartbeat = State(initialValue: HeartbeatMonitor(baseURL: backendRef))
+        _inboxAPI = State(initialValue: InboxAPI(baseURL: backendRef))
     }
 
     var body: some Scene {
@@ -58,11 +64,15 @@ struct ClaudeWebApp: App {
                 .environment(recorder)
                 .environment(tts)
                 .environment(voice)
+                .environment(notes)
                 .environment(registry)
                 .environment(telemetry)
                 .environment(cache)
+                .environment(heartbeat)
+                .environment(inboxAPI)
                 .onAppear {
                     bootstrap()
+                    Task { @MainActor in heartbeat.start() }
                 }
                 .onChange(of: client.currentConversationId) { _, newId in
                     // Switching conversations cuts off TTS from the previous
@@ -102,12 +112,18 @@ struct ClaudeWebApp: App {
     ///   5. Run registry.bootstrap (cache → fetch → reconcile)
     ///   6. Restore currentConversationId from last session
     private func bootstrap() {
-        telemetry.log("app.launch")
+        telemetry.log("app.launch", props: [
+            "version": BuildInfo.marketingVersion,
+            "build": BuildInfo.buildNumber,
+            "sha": BuildInfo.gitSha,
+            "buildTime": BuildInfo.buildTime,
+        ])
         cache.bindTelemetry(telemetry)
         registry.bindTelemetry(telemetry)
         registry.bind(client: client)
         client.bindTelemetry(telemetry)
         tts.bindTelemetry(telemetry)
+        notes.bindTelemetry(telemetry)
 
         // Persist to disk on every dirty signal. Two writes per signal:
         //   sessions/<convId>.json — full ChatLine[] for this conversation
