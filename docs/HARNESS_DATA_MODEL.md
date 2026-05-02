@@ -1,10 +1,12 @@
 # Harness Data Model
 
-> **状态**：M-1 第 1 项核心契约首版（v0.1，2026-05-01）。详细 DDL 待 M-1 真正动手时补全。
+> **状态**：M-1 第 1 项核心契约 v1.0（2026-05-03）。完整 DDL + audit log + FTS5 触发器；与 [packages/backend/src/migrations/0001_initial.sql](../packages/backend/src/migrations/0001_initial.sql) 同源。
 >
 > **导航**：[索引](HARNESS_INDEX.md) · [Architecture](HARNESS_ARCHITECTURE.md) · [Roadmap](HARNESS_ROADMAP.md)
 >
-> **同源**：本文是 [HARNESS_ROADMAP.md §1](HARNESS_ROADMAP.md) 的扩展版，加入了 DDL 占位与索引设计。
+> **同源**：本文是 [HARNESS_ROADMAP.md §1](HARNESS_ROADMAP.md) 的扩展版，附完整 DDL、索引、约束、FTS5 触发器、audit log 格式。
+>
+> **配套 ADR**：[ADR-0010](adr/ADR-0010-sqlite-fts5.md)（SQLite + FTS5）· [ADR-0015](adr/ADR-0015-schema-migration.md)（schema 迁移策略）
 
 ---
 
@@ -90,8 +92,19 @@ CREATE TABLE issue (
 CREATE INDEX idx_issue_project_status ON issue(project_id, status);
 CREATE INDEX idx_issue_initiative ON issue(initiative_id);
 
--- FTS5 全文索引
+-- FTS5 external-content 模式（content='issue' → FTS 不复制内容，靠触发器同步索引）
 CREATE VIRTUAL TABLE issue_fts USING fts5(title, body, content='issue', content_rowid='rowid');
+
+CREATE TRIGGER issue_fts_ai AFTER INSERT ON issue BEGIN
+  INSERT INTO issue_fts(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;
+CREATE TRIGGER issue_fts_ad AFTER DELETE ON issue BEGIN
+  INSERT INTO issue_fts(issue_fts, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+END;
+CREATE TRIGGER issue_fts_au AFTER UPDATE ON issue BEGIN
+  INSERT INTO issue_fts(issue_fts, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+  INSERT INTO issue_fts(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;
 ```
 
 `status` 包含 `inbox`——碎想未分类状态（[HARNESS_ROADMAP.md §0 #14](HARNESS_ROADMAP.md)）。
@@ -230,15 +243,42 @@ CREATE TABLE artifact (
   kind              TEXT NOT NULL,    -- methodology|spec|design_doc|architecture_doc|adr|patch|pr_url|test_report|coverage_report|review_notes|review_verdict|decision_note|metric_snapshot|retrospective|changelog_entry
   ref               TEXT,              -- URL / PR # / commit hash 等外部引用
   hash              TEXT NOT NULL,     -- SHA-256 content hash（content-addressed）
-  content_ref       TEXT,              -- 内容 inline (短) 或 ~/.claude-web/artifacts/<hash>.md (>8KB)
-  superseded_by     TEXT REFERENCES artifact(id),  -- 修改产生 superseded link，永不修改原内容
-  created_at        INTEGER NOT NULL
+  storage           TEXT NOT NULL,     -- 'inline' (内容在 content_text) | 'file' (内容在 ~/.claude-web/artifacts/<hash>.md)
+  content_text      TEXT,              -- inline 模式下保存内容（≤ 8KB）；同时被 FTS5 索引
+  content_path      TEXT,              -- file 模式下绝对路径
+  size_bytes        INTEGER NOT NULL,  -- 原始内容字节数（用于 8KB 阈值判断 + 报表）
+  metadata_json     TEXT NOT NULL DEFAULT '{}',         -- 企业字段等可选 typed metadata（Round 1 arch 垂直#8 部分接受）；结构由 methodologies/<stage>.md 约定
+  superseded_by     TEXT REFERENCES artifact(id),       -- 旧 row.superseded_by = 新 row.id（"我被谁替代"，Round 1 cross M4 修正方向）
+  created_at        INTEGER NOT NULL,
+  CHECK (
+    (storage = 'inline' AND content_text IS NOT NULL AND content_path IS NULL) OR
+    (storage = 'file'   AND content_path IS NOT NULL AND content_text IS NULL)
+  )
 );
 CREATE INDEX idx_artifact_stage ON artifact(stage_id, kind);
+CREATE INDEX idx_artifact_hash  ON artifact(hash);  -- **非 UNIQUE**：多 row 可指向同 hash（同源内容跨 stage 共享文件存储）
 
--- FTS5 索引 Artifact 内容
+-- FTS5 external-content 模式覆盖 inline 内容；file 模式的 Artifact 通过 hash 在 ~/.claude-web/artifacts/ 检索
 CREATE VIRTUAL TABLE artifact_fts USING fts5(content_text, content='artifact', content_rowid='rowid');
+
+CREATE TRIGGER artifact_fts_ai AFTER INSERT ON artifact WHEN new.content_text IS NOT NULL BEGIN
+  INSERT INTO artifact_fts(rowid, content_text) VALUES (new.rowid, new.content_text);
+END;
+CREATE TRIGGER artifact_fts_ad AFTER DELETE ON artifact WHEN old.content_text IS NOT NULL BEGIN
+  INSERT INTO artifact_fts(artifact_fts, rowid, content_text) VALUES ('delete', old.rowid, old.content_text);
+END;
+-- Artifact 是 immutable，理论上不会 UPDATE；为保险加 UPDATE 触发器
+CREATE TRIGGER artifact_fts_au AFTER UPDATE ON artifact BEGIN
+  INSERT INTO artifact_fts(artifact_fts, rowid, content_text) VALUES ('delete', old.rowid, old.content_text);
+  INSERT INTO artifact_fts(rowid, content_text) SELECT new.rowid, new.content_text WHERE new.content_text IS NOT NULL;
+END;
 ```
+
+**存储规则**（≤ 8KB inline，> 8KB 落文件）：
+- 写 Artifact 时计算 `size_bytes`：≤ 8192 → `storage='inline'` 直接落 `content_text`；否则 `storage='file'` 写 `~/.claude-web/artifacts/<hash>.md`。
+- `hash` 用 SHA-256：标识 **file content 的存储 key**，**不是 row dedupe 的 key**。多个 stage 写同一段长内容时，文件只写一份（按 hash 命中复用），但 **row 不去重，每个 stage 一行**（保留 stage_id NOT NULL）。
+- Artifact **永不修改**——内容变了产生新 row。**superseded_by 方向**：旧 row.superseded_by = 新 row.id（"我被谁替代"，与字段名自然语义一致）；新 row.superseded_by = NULL。
+- `metadata_json` 字段 M-1 加列但不约束 schema；spec/design 类 Artifact 由 methodologies/01-spec.md 等约定塞 `{businessEntities, permissionMatrix, approvalSteps, reportSchemas}`。
 
 ### 1.11 ReviewVerdict ★ 新增
 
@@ -289,6 +329,42 @@ CREATE TABLE retrospective (
   created_at               INTEGER NOT NULL
 );
 ```
+
+### 1.14 Audit Log（系统表，非业务实体）
+
+审计日志走 **JSONL append-only**（`~/.claude-web/harness-audit.jsonl`），**不进 SQLite**。
+
+**写入语义：fail-open**（Round 1 arch 风险#11 / cross M7 修复）——audit append 失败时，业务事务**不阻塞**，仅 `console.warn` 一条。理由：
+- 与 [`packages/backend/scripts/permission-hook.mjs`](../packages/backend/scripts/permission-hook.mjs) 的 fail-open 一致
+- audit 是事后查询用，断电 / 磁盘满时业务可用性优先
+- 真正的强一致审计需求（如合规审计）当前不存在（个人自用）
+
+理由（不进 SQLite）：
+- append-only 写入用 `fs.appendFile` 比 DB 事务快、无锁竞争
+- 审计需求是 grep / jq / tail，jsonl 工具链更顺
+- DB 损坏时审计日志可独立救活
+- 个人自用规模下 10MB 轮转一次（同 telemetry-store.ts 现有机制）即可
+
+每条 audit entry 字段固定（[harness-protocol.ts](../packages/shared/src/harness-protocol.ts) 同源 Zod 定义）：
+
+```jsonc
+{
+  "ts": 1746151234567,                  // epoch ms
+  "actor": "user|agent:<profileId>|system|migration",
+  "op": "insert|update|delete|migrate", // 写操作类型
+  "table": "issue|stage|task|run|...",  // 受影响的表
+  "id": "<entity-id>",
+  "before": null | { /* row 修改前 */ },
+  "after":  null | { /* row 修改后 */ },
+  "rationale": "可选人审注释（Decision 通过时填）"
+}
+```
+
+**写入规则**：
+- 所有 INSERT / UPDATE / DELETE 经 `harness-store.ts` 时同步 append 一条 entry
+- migration 也写一条 `op="migrate"` 标记 schema 跳变
+- 文件 ≥ 10MB 时滚到 `harness-audit.jsonl.1`（保留 1 份历史）
+- 个人自用规模下永不归档到云
 
 ---
 
@@ -356,52 +432,45 @@ packages/backend/src/migrations/
 
 ### 3.3 兼容性检查
 
-CI 应该跑：
+**M-1 阶段**（手动验）：
+- `pnpm --filter @claude-web/backend test:harness-schema` — DDL 跑通 + 重启回归
+- `node scripts/verify-m1-deliverables.mjs` — 文件存在性自动守门
+
+**M1+ 引入 CI**（Round 1 arch 里程碑#7 修正措辞）：
 - `pnpm --filter @claude-web/shared build`：Zod 编译
 - iOS Xcode build：Swift 协议编译
 - fixtures round-trip：TS encode → Swift decode → Swift encode → TS decode 不丢字段
+- enum 字符串完全匹配测试（防语义漂移，arch 风险#14）
 
 ---
 
-## 4. ADR
+## 4. 配套 ADR
 
-### ADR-0010 — SQLite + FTS5 作为 harness 持久层
+ADR 抽到 [docs/adr/](adr/) 单独维护：
 
-**状态**：Accepted（M-1 启动前敲定）
-
-**Context**：harness 引入 13 个核心实体，引用密集；现有 `~/.claude-web/projects.json` 单文件无法承担。
-
-**Decision**：用 better-sqlite3 + FTS5 在 `~/.claude-web/harness.db`；保留旧 `projects.json` 兼容。
-
-**Consequences**：
-- ✅ 引用密集查询性能好
-- ✅ 全文搜索内置
-- ✅ 同步零网络依赖适合 Tailscale 单 Mac 部署
-- ❌ 不支持高并发写（个人自用足够；本项目永不商业化、永不团队化，详见 [HARNESS_ROADMAP.md §Context #13](HARNESS_ROADMAP.md)）
-- ❌ 永不需要迁移到 Postgres（个人自用规模 SQLite 足够）
-
-### ADR-0015 — Schema 迁移策略
-
-**状态**：Accepted（M-1 启动前敲定）
-
-**Decision**：四端（SQLite / Artifact 文件 / Swift / TS Zod）同步迁移；major / minor / patch 三档；老版本 + 兼容窗口 1 个 minor。
-
-**Consequences**：
-- ✅ 协议演化可控
-- ✅ 老 iOS 装包不至于一夜炸（fallback config 兜底）
-- ❌ 迁移流程繁琐（4 端必须手动同步，CI 强制 round-trip 检查）
-- ❌ 大改时所有端同时升级，难以分批
+- [ADR-0010 — SQLite + FTS5 作为 harness 持久层](adr/ADR-0010-sqlite-fts5.md)
+- [ADR-0015 — Schema 迁移策略](adr/ADR-0015-schema-migration.md)
 
 ---
 
-## 5. 待 M-1 真正动手时补的内容
+## 5. M-1 完工状态
 
-- [ ] 完整 DDL（所有表的 CREATE 语句 + 索引 + 约束 + 外键）
-- [ ] 0001_initial.sql 迁移文件
-- [ ] `packages/shared/src/harness-protocol.ts` 完整 Zod schema
-- [ ] `packages/shared/fixtures/harness/*.json` 每实体的样例
-- [ ] `packages/ios-native/Sources/ClaudeWeb/Protocol.swift` 加 harness 协议骨架
-- [ ] FTS5 触发器（INSERT/UPDATE/DELETE 同步内容到 FTS 表）
-- [ ] audit log 写入封装（在 harness-store.ts 内）
-- [ ] Artifact 内容寻址：>8KB 落 `~/.claude-web/artifacts/<hash>.md`，去重逻辑
-- [ ] ContextBundle markdown snapshot 写入封装
+**v1.0（本文）已交付**：
+- [x] 完整 DDL（13 业务表 + audit log JSONL + FTS5 虚拟表 + 触发器 + 约束 + 外键）
+- [x] [packages/backend/src/migrations/0001_initial.sql](../packages/backend/src/migrations/0001_initial.sql) 迁移文件（与本文 DDL 同源）
+- [x] FTS5 触发器（issue / artifact 各 3 个）
+- [x] Artifact 内容寻址规则（≤ 8KB inline / > 8KB 落 `~/.claude-web/artifacts/<hash>.md`）
+- [x] audit log JSONL 格式定义（[harness-protocol.ts](../packages/shared/src/harness-protocol.ts) Zod 同源）
+- [x] ADR-0010 + ADR-0015 抽到 [docs/adr/](adr/)
+
+**留给 M1+**（不进 M-1 准入）：
+- [ ] `harness-store.ts` 真业务封装（CRUD / audit append / Artifact storage 路由）—— M-1 只验证 DDL 能跑
+- [ ] ContextBundle markdown snapshot 写入封装 —— M1
+- [ ] `harness-protocol.ts` 完整 Zod —— **本契约下游**，由"契约 #2 协议"产出
+- [ ] `Protocol.swift` 加 harness 骨架 —— **本契约下游**，由"契约 #2 协议"产出
+- [ ] fixtures round-trip 测试 —— **本契约下游**，由"契约 #2 协议"产出
+
+**Round 1 评审挂起项**（[HARNESS_REVIEW_LOG.md](HARNESS_REVIEW_LOG.md)）：
+- [ ] FTS5 大批写入性能（M2 Retrospective 加观察项；M3 视情况换 `content` 内嵌）
+- [ ] `stage_artifact` 中间表（替代 `stage.{input,output,review_verdict}_artifact_ids_json` 三 JSON 列）—— M2 dogfood 报表查询频率信号决定
+- [ ] `Artifact.metadata_json` 是否升级为 typed schema —— M2 dogfood toy 企业仓库后再敲

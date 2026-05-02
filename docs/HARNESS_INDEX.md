@@ -36,16 +36,20 @@
 | [HARNESS_AGENTS.md](HARNESS_AGENTS.md) | Agent 角色（12 个 Profile）+ 模型策略（复杂度自适应）+ 多 AI 交叉评审矩阵 + 评审独立性约束 | 拆分自 §2 | §2 |
 | [HARNESS_RISKS.md](HARNESS_RISKS.md) | 18 条完整风险清单与缓解策略，按重要性分组 | 拆分自 §7 | §7 |
 
-### 待 M-1 创建（核心契约文档）
+### M-1 4 个核心契约（分阶段产出）
 
-按 plan v4 §6.1 的窄腰策略，M-1 必产 4 个核心契约：
+按 plan v4 §6.1 的窄腰策略，M-1 必产 4 个核心契约。Round 1 评审采纳 "M-1 分阶段"：每契约自己的 ritual gate，不一次性 lock-step。
 
-| 文件 | 用途 | 状态 |
-|---|---|---|
-| `docs/HARNESS_DATA_MODEL.md` | DDL + 索引 + 迁移策略 + audit log 格式（含 ADR-0010 + ADR-0015） | 已建首版（拆分自 plan），待 M-1 补 DDL |
-| `docs/HARNESS_PROTOCOL.md` | TS 类型 + Zod schema + JSON fixture（含 ADR-0011） | 待建 |
-| `docs/HARNESS_CONTEXT_PROTOCOL.md` | Context Manager 输入挑选规则（含 ADR-0014） | 待建 |
-| `docs/HARNESS_PR_GUIDE.md` | PR 模板 + branch 命名 + commit 规范 + merge 规则（含 ADR-0013） | 待建 |
+| # | 文件 | 状态（2026-05-03，Round 1 后） | 守门 |
+|---|---|---|---|
+| #1 | [`HARNESS_DATA_MODEL.md`](HARNESS_DATA_MODEL.md) + [`adr/ADR-0010`](adr/ADR-0010-sqlite-fts5.md) + [`adr/ADR-0015`](adr/ADR-0015-schema-migration.md) + `migrations/0001_initial.sql` + `harness-store.ts` + `test-harness-schema.ts` | **Round 1 评审完成，正在落 fix**（B1+B2 + 12 MAJOR/MINOR） | `pnpm --filter @claude-web/backend test:harness-schema` |
+| #2 | [`HARNESS_PROTOCOL.md`](HARNESS_PROTOCOL.md) + [`adr/ADR-0011`](adr/ADR-0011-server-driven-thin-shell.md) + `harness-protocol.ts` + `fixtures/harness/` + `HarnessProtocol.swift` + 测试 | **doc only**（contract #1 修复完成后开工） | `node scripts/verify-m1-deliverables.mjs` |
+| #3 | `HARNESS_CONTEXT_PROTOCOL.md` + ADR-0014 | 未起步 | 同上 |
+| #4 | `HARNESS_PR_GUIDE.md` + ADR-0013 + `.github/PULL_REQUEST_TEMPLATE.md`（已有，需 harness 段补充）+ `COMMIT_CONVENTION.md` + `branch-naming.md` + `git-guard.mjs` + `prod-guard.mjs` | 未起步 | 同上 + git-guard dev 拒绝场景测试 |
+
+**M-1 验收**（脚本驱动，非自报）：
+- `node scripts/verify-m1-deliverables.mjs` 必须 0 missing
+- 所有 contract 通过 Round N 评审（每契约至少一轮 arch + cross verdict）
 
 ### 待相应 Stage 进入时再写（占位）
 

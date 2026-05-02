@@ -10,17 +10,20 @@
     "test:e2e": "tsx src/test-e2e.ts",
     "test:auth": "tsx src/test-auth.ts",
     "test:strip": "tsx src/test-strip-speech.ts",
-    "test:convo": "tsx src/test-convo-commands.ts"
+    "test:convo": "tsx src/test-convo-commands.ts",
+    "test:harness-schema": "tsx src/test-harness-schema.ts"
   },
   "dependencies": {
     "@claude-web/shared": "workspace:*",
     "@hono/node-server": "^1.13.0",
+    "better-sqlite3": "^11.3.0",
     "chokidar": "^5.0.0",
     "dotenv": "^16.4.5",
     "hono": "^4.6.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.12",
     "tsx": "^4.19.0",

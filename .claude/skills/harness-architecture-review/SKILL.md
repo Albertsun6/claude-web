@@ -9,13 +9,58 @@ description: Review claude-web / Seaidea direction, architecture, milestone, SDL
 
 ## Activation
 
-用户要求“评审 / review / 挑战 / 审架构 / 审方向 / 看这个 plan”时：
+用户要求"评审 / review / 挑战 / 审架构 / 审方向 / 看这个 plan"时：
 
 1. 先读本技能。
 2. 再读 [LEARNINGS.md](LEARNINGS.md)。
 3. 读用户给的 plan / diff / 设计文档。
 4. 按下面流程输出评审。
 5. 评审后把新发现的、可复用的判断规则追加到 `LEARNINGS.md`。不要记录一次性的个人偏好。
+
+## Independence Constraints (HARD)
+
+为防止评审被作者推理污染（参见 [HARNESS_ROADMAP.md §0 #18 集体盲区防护](../../../docs/HARNESS_ROADMAP.md)），调用本 skill 时必须满足：
+
+1. **不读 author 的 transcript / 思考流 / 工具调用历史**——只读最终 artifact 文件。
+2. **不读 `reviewer-cross` 的 verdict**——直到 debate-review 阶段才合并。
+3. **不修改任何文件**——纯读 + 出 verdict markdown（用 plan 模式或 read-only Agent）。
+4. **fresh context**——上层应在独立 sub-agent / 子进程里跑，不复用作者的对话历史。
+
+违反任一条 → verdict 失效，需要重新跑。
+
+实操：
+- Claude 端通过 Agent tool（`subagent_type=general-purpose`）spawn fresh context 跑本 skill
+- 与 `reviewer-cross` 配对时，两位 reviewer 必须并行启动且互不可见（启动时间相同 / verdict 文件分别落盘）
+
+## Verdict Output Format
+
+输出写到 `docs/reviews/<artifact>-arch-<YYYY-MM-DD-HHmm>.md`，顶部标头固定：
+
+```markdown
+# Architecture Review — <artifact name>
+
+**Reviewer**: harness-architecture-review
+**Model**: <claude-opus-4-7 | claude-sonnet-4-6 | ...>
+**Date**: <YYYY-MM-DD HH:MM>
+**Files reviewed**:
+- path/to/file1
+- path/to/file2
+
+## Summary
+- Blockers: N
+- Majors: M
+- Minors: K
+- 总体判断：建议合并 / 建议小改后合并 / 必须先修 / 必须重做
+```
+
+每条 finding 用以下层级（与 `reviewer-cross` 对齐，便于 debate-review 合并）：
+- **[BLOCKER]**：必须先修；rebuttal 需用户显式 approve
+- **[MAJOR]**：明确缺陷，建议修
+- **[MINOR]**：观察项
+
+每条必须含：Where（文件:行 / 段号）、Lens（4 维之一）、Issue、Why blocker（仅 BLOCKER 必填）、Suggested fix。
+
+末尾必须有 `## What I Did Not Look At` 段，明列本次未覆盖范围。
 
 ## Review Stance
 
