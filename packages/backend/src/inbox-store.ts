@@ -1,11 +1,24 @@
 // Inbox store: append-only JSONL of "碎想" captured from iOS / Web.
 // Path: ~/.claude-web/inbox.jsonl
 // Reads buffered into a small in-memory cache for /list endpoint.
+//
+// NOTE on write throughput: setTriage / markProcessed do an O(N) full-file
+// rewrite (line 90+ markProcessed pattern). Fine at current scale; expect
+// noticeable lag past ~10k items — switch to sqlite or per-id index then.
 
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
+
+export type InboxStatus = "open" | "archived";
+export type TriageDestination = "ideas" | "archive";
+
+export interface InboxTriage {
+  destination: TriageDestination;
+  note?: string;
+  triagedAt: number;
+}
 
 export interface InboxItem {
   id: string;
@@ -14,6 +27,14 @@ export interface InboxItem {
   capturedAt: number;
   /** When set, this item was already converted into a real Issue/conversation. */
   processedIntoConversationId?: string;
+  /**
+   * Lifecycle: "open" (default, includes both fresh + triaged-to-ideas)
+   * or "archived". Absent on legacy records — readers MUST treat undefined
+   * as "open" for backward compat.
+   */
+  status?: InboxStatus;
+  /** Triage decision metadata. Set by setTriage; never written by clients. */
+  triage?: InboxTriage;
   /** Free-form metadata (audio path, transcript confidence, location, etc). */
   meta?: Record<string, unknown>;
 }
@@ -73,6 +94,8 @@ export function appendInbox(input: AppendInput): InboxItem {
 export interface ListOptions {
   /** Only items whose processedIntoConversationId is null. Default false. */
   unprocessedOnly?: boolean;
+  /** Include archived items. Default false (archived hidden by default). */
+  includeArchived?: boolean;
   /** Max items to return; latest first. Default 50. */
   limit?: number;
 }
@@ -80,8 +103,11 @@ export interface ListOptions {
 export function listInbox(opts: ListOptions = {}): InboxItem[] {
   const all = loadAll();
   let filtered = all;
+  if (!opts.includeArchived) {
+    filtered = filtered.filter((it) => it.status !== "archived");
+  }
   if (opts.unprocessedOnly) {
-    filtered = all.filter((it) => !it.processedIntoConversationId);
+    filtered = filtered.filter((it) => !it.processedIntoConversationId);
   }
   // newest first
   return filtered.slice().reverse().slice(0, opts.limit ?? 50);
@@ -94,6 +120,45 @@ export function markProcessed(id: string, conversationId: string): InboxItem | n
   const updated = { ...all[idx], processedIntoConversationId: conversationId };
   all[idx] = updated;
   // rewrite the file (~ once per triage; not hot path)
+  ensureDir();
+  fs.writeFileSync(
+    STORE_PATH,
+    all.map((it) => JSON.stringify(it)).join("\n") + "\n",
+    "utf8",
+  );
+  return updated;
+}
+
+export interface SetTriageInput {
+  destination: TriageDestination;
+  note?: string;
+}
+
+/**
+ * Apply a triage decision to an inbox item. Backend is the only writer of
+ * `status` / `triage` — clients never supply these on POST /api/inbox.
+ *   destination=archive → status="archived" + triage block
+ *   destination=ideas   → status stays "open" (item still surfaces); triage
+ *                         block records the routing intent. UI copies body
+ *                         to clipboard so the user manually pastes into
+ *                         docs/IDEAS.md or docs/HARNESS_ROADMAP §17.
+ *                         Backend never writes those docs (§16.3 #1).
+ */
+export function setTriage(id: string, input: SetTriageInput): InboxItem | null {
+  const all = loadAll();
+  const idx = all.findIndex((it) => it.id === id);
+  if (idx < 0) return null;
+  const triage: InboxTriage = {
+    destination: input.destination,
+    note: input.note,
+    triagedAt: Date.now(),
+  };
+  const updated: InboxItem = {
+    ...all[idx],
+    status: input.destination === "archive" ? "archived" : "open",
+    triage,
+  };
+  all[idx] = updated;
   ensureDir();
   fs.writeFileSync(
     STORE_PATH,
