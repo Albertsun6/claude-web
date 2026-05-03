@@ -17,6 +17,7 @@ struct DrawerContent: View {
 
     @State private var showQuickPicker = false
     @State private var showInboxList = false
+    @State private var showHarnessBoard = false
     @State private var missingProjects: [ProjectDTO] = []
     @State private var showCleanupConfirm = false
     @State private var cleanupRunning = false
@@ -46,6 +47,13 @@ struct DrawerContent: View {
             .sheet(isPresented: $showInboxList) {
                 InboxListView()
                     .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showHarnessBoard) {
+                HarnessBoardView(
+                    projectId: settings.cwd,
+                    cwd: settings.cwd
+                )
+                .presentationDragIndicator(.visible)
             }
             .navigationDestination(isPresented: $showQuickPicker) {
                 DirectoryPicker(initialPath: settings.cwd) { picked in
@@ -129,6 +137,9 @@ struct DrawerContent: View {
             }
             DrawerRow(icon: "lightbulb", label: "碎想 Inbox", tint: .yellow) {
                 showInboxList = true
+            }
+            DrawerRow(icon: "flask", label: "Harness 看板", tint: .purple) {
+                showHarnessBoard = true
             }
             DrawerRow(icon: "gearshape", label: "设置", tint: .secondary) {
                 closeDrawer()
@@ -467,6 +478,9 @@ struct DrawerContent: View {
                 )
             }
             .sorted { lhs, rhs in
+                let lhsSticky = lhs.project?.sticky == true
+                let rhsSticky = rhs.project?.sticky == true
+                if lhsSticky != rhsSticky { return lhsSticky }
                 let lhsLatest = lhs.items.first?.sortDate ?? .distantPast
                 let rhsLatest = rhs.items.first?.sortDate ?? .distantPast
                 return lhsLatest > rhsLatest

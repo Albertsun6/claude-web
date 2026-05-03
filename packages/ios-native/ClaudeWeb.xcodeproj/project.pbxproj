@@ -21,6 +21,7 @@
 		2EFE065198E9ECF3647CA798 /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */; };
 		302B643809131259B4682595 /* HistorySessionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1513F54E80C419639B1D1705 /* HistorySessionRow.swift */; };
 		332F0397A49A158E100D98B5 /* ProjectRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 592C33B52949B8FC89528D76 /* ProjectRegistry.swift */; };
+		380C63B931153650A3CB1D04 /* HarnessAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE3EEC0142822EB5A7B4CB9 /* HarnessAPI.swift */; };
 		40497E1A0488B176FCBA6241 /* InboxListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD365A3F2F9395126084AC4 /* InboxListView.swift */; };
 		458552BC134B372A7B368750 /* InputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42AA631E277EDCEFDF480163 /* InputBar.swift */; };
 		4AA49DDD76AE150CB43E459F /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BC150255A000C4B594FB34 /* Telemetry.swift */; };
@@ -29,6 +30,7 @@
 		577BE076AA69A32AC0F06F12 /* ProtocolFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1FDBA5369B9FB21BC91821 /* ProtocolFixtureTests.swift */; };
 		57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA416505AC735C06A084E7EE /* ContentView.swift */; };
 		593A7592AA50BE3915A9627C /* RunsDashboardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481612632594972A31DFC674 /* RunsDashboardSheet.swift */; };
+		5FAABE3C23512413A97898E1 /* HarnessBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD3BC95C5C8D78000F492EB /* HarnessBoardView.swift */; };
 		69F0714A317BB99738DC18A9 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C189285FD2BC25E599008F0 /* ChatListView.swift */; };
 		6AD512C6C3EBFF3A522035BF /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7869FC7E7224F973A25D5A07 /* ConversationModels.swift */; };
 		6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */; };
@@ -117,6 +119,7 @@
 		7E5A6AE07ADB47297221AE57 /* FileBrowserPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserPanel.swift; sourceTree = "<group>"; };
 		7FD365A3F2F9395126084AC4 /* InboxListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxListView.swift; sourceTree = "<group>"; };
 		8E1FACCED35C3A770740F004 /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
+		8FD3BC95C5C8D78000F492EB /* HarnessBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessBoardView.swift; sourceTree = "<group>"; };
 		91E969E6EF45B01A0C9B392A /* MacHeartbeatRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacHeartbeatRow.swift; sourceTree = "<group>"; };
 		950F8E2DCA452C46977B3762 /* ClaudeWebTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ClaudeWebTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		989ACA299187F4EE9220555C /* FsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsAPI.swift; sourceTree = "<group>"; };
@@ -129,6 +132,7 @@
 		BB87B81434281D40E047F081 /* TitleHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleHelper.swift; sourceTree = "<group>"; };
 		BDC54C524ACD7548486C9F64 /* InboxAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxAPI.swift; sourceTree = "<group>"; };
 		BDD24330D2EB3BF5B5938822 /* WebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketClient.swift; sourceTree = "<group>"; };
+		BDE3EEC0142822EB5A7B4CB9 /* HarnessAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessAPI.swift; sourceTree = "<group>"; };
 		C686BBF22FF0FA13BF0020D7 /* ProjectsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsAPI.swift; sourceTree = "<group>"; };
 		CA416505AC735C06A084E7EE /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		CDD352FD80813ED082C66DE1 /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
@@ -239,6 +243,7 @@
 		66EBF22C00E110E80CE3BABA /* Harness */ = {
 			isa = PBXGroup;
 			children = (
+				BDE3EEC0142822EB5A7B4CB9 /* HarnessAPI.swift */,
 				40791FB6FE738D6C9A4F7B81 /* HarnessStore.swift */,
 			);
 			path = Harness;
@@ -249,6 +254,7 @@
 			children = (
 				D1E3B38375A4390DE63C796C /* Chat */,
 				2798789DA8FDEFC459E5E862 /* Drawer */,
+				96D4F2487618BA26492EBBFF /* Harness */,
 				97E2EB9F4948B2230A07743F /* Settings */,
 				ABDC43410FF4DEACC7918356 /* ContextAttachSheet.swift */,
 				3E624BC3A86F193896A4424A /* ConversationsSheet.swift */,
@@ -266,6 +272,14 @@
 				7C13D24EEBC5D76849C99436 /* WorktreeFinalizeSheet.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		96D4F2487618BA26492EBBFF /* Harness */ = {
+			isa = PBXGroup;
+			children = (
+				8FD3BC95C5C8D78000F492EB /* HarnessBoardView.swift */,
+			);
+			path = Harness;
 			sourceTree = "<group>";
 		};
 		97E2EB9F4948B2230A07743F /* Settings */ = {
@@ -444,6 +458,8 @@
 				767A29E33E102EBAAB5F03FB /* GitAPI.swift in Sources */,
 				951378A0506A5A38CDB9F26D /* GitGateSheet.swift in Sources */,
 				0502184B06DB8D77B2EB28BF /* GitModels.swift in Sources */,
+				380C63B931153650A3CB1D04 /* HarnessAPI.swift in Sources */,
+				5FAABE3C23512413A97898E1 /* HarnessBoardView.swift in Sources */,
 				F26EC5ED09ECD1519DA8A3A3 /* HarnessConfigAPI.swift in Sources */,
 				A1FB9C60B4A929E71527F7DA /* HarnessProtocol.swift in Sources */,
 				ECD2B428AD8FF6405850B49B /* HarnessStore.swift in Sources */,
@@ -553,7 +569,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 43;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = V84XLAQ28F;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -639,7 +655,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 43;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = V84XLAQ28F;
 				ENABLE_NS_ASSERTIONS = NO;

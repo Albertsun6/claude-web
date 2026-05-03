@@ -25,6 +25,7 @@ struct ClaudeWebApp: App {
     @State private var worktreeAPI: WorktreeAPI
     @State private var harnessConfigAPI: HarnessConfigAPI
     @State private var harnessStore: HarnessStore
+    @State private var harnessAPI: HarnessAPI
 
     init() {
         let s = AppSettings()
@@ -61,6 +62,7 @@ struct ClaudeWebApp: App {
         let harnessAPIInst = HarnessConfigAPI(backend: backendRef, token: tokenRef)
         _harnessConfigAPI = State(initialValue: harnessAPIInst)
         _harnessStore = State(initialValue: HarnessStore(cache: cacheInst, api: harnessAPIInst))
+        _harnessAPI = State(initialValue: HarnessAPI(baseURL: backendRef, authToken: tokenRef))
     }
 
     var body: some Scene {
@@ -79,6 +81,7 @@ struct ClaudeWebApp: App {
                 .environment(inboxAPI)
                 .environment(worktreeAPI)
                 .environment(harnessStore)
+                .environment(harnessAPI)
                 .onAppear {
                     bootstrap()
                     Task { @MainActor in heartbeat.start() }
