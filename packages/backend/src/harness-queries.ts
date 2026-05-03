@@ -21,6 +21,21 @@ function audit(db: Database.Database, action: string, entity: string, id: string
 }
 
 // ---------------------------------------------------------------------------
+// Project sync (harness_project mirrors projects.json via upsert on demand)
+// ---------------------------------------------------------------------------
+
+export function ensureHarnessProject(db: Database.Database, projectId: string, cwd?: string): void {
+  const effectiveCwd = cwd ?? projectId;
+  const name = effectiveCwd.split("/").pop() ?? effectiveCwd;
+  const worktreeRoot = effectiveCwd + "/.claude-worktrees";
+  db.prepare(`
+    INSERT INTO harness_project(id, cwd, name, worktree_root, harness_enabled, created_at)
+    VALUES(?, ?, ?, ?, 1, ?)
+    ON CONFLICT(id) DO NOTHING
+  `).run(projectId, effectiveCwd, name, worktreeRoot, Date.now());
+}
+
+// ---------------------------------------------------------------------------
 // Initiative
 // ---------------------------------------------------------------------------
 
@@ -39,12 +54,15 @@ export interface InitiativeRow {
 
 export interface CreateInitiativeInput {
   projectId: string;
+  cwd?: string;
   title: string;
   intent?: string;
   ownerHuman?: string;
 }
 
 export function createInitiative(db: Database.Database, input: CreateInitiativeInput): InitiativeRow {
+  // Upsert the harness_project row so the FK constraint passes.
+  ensureHarnessProject(db, input.projectId, input.cwd);
   const id = randomUUID();
   const now = Date.now();
   const row: InitiativeRow = {

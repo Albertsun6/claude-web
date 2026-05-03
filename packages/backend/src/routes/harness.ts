@@ -43,10 +43,10 @@ export function buildHarnessRouter(db: Database.Database): Hono {
   });
 
   app.post("/initiatives", async (c) => {
-    let body: { projectId?: string; title?: string; intent?: string; ownerHuman?: string };
+    let body: { projectId?: string; cwd?: string; title?: string; intent?: string; ownerHuman?: string };
     try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "invalid JSON" }, 400); }
     if (!body.projectId || !body.title) return c.json({ ok: false, error: "projectId + title required" }, 400);
-    const row = createInitiative(db, { projectId: body.projectId, title: body.title, intent: body.intent, ownerHuman: body.ownerHuman });
+    const row = createInitiative(db, { projectId: body.projectId, cwd: body.cwd, title: body.title, intent: body.intent, ownerHuman: body.ownerHuman });
     return c.json({ ok: true, data: row }, 201);
   });
 

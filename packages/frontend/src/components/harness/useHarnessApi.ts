@@ -61,11 +61,11 @@ export const harnessApi = {
   listInitiatives: (projectId: string) =>
     api<Initiative[]>(`/api/harness/initiatives?projectId=${encodeURIComponent(projectId)}`),
 
-  createInitiative: (projectId: string, title: string, intent?: string) =>
+  createInitiative: (projectId: string, title: string, intent?: string, cwd?: string) =>
     api<Initiative>("/api/harness/initiatives", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId, title, intent }),
+      body: JSON.stringify({ projectId, cwd: cwd ?? projectId, title, intent }),
     }),
 
   // Issue

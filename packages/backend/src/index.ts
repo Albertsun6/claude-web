@@ -111,6 +111,10 @@ if (!process.env.HARNESS_DISABLED) {
     console.log(`[harness] SQLite ready (schema v${harnessDb.schemaVersion})`);
   } catch (err) {
     console.error("[harness] DB init failed — harness routes unavailable:", err);
+    // Mount a 503 so clients get a clear error instead of a frontend 404.
+    app.all("/api/harness/*", (c) =>
+      c.json({ ok: false, error: "harness unavailable (DB init failed)" }, 503)
+    );
   }
 } else {
   app.all("/api/harness/*", (c) => {
