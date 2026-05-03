@@ -309,8 +309,8 @@ iOS 六个核心 flow（schema-driven）：
 | M | 准入条件 | 退出条件（必须全部满足才能进下一 M） | 重装 iOS | kill switch |
 |---|---|---|---|---|
 | **M-1 架构与方法论奠基** | 用户对 plan v3 拍板 | §6.1 全部交付物 + 4 个核心 ADR 三方审过 + protocol fixture 双端 round-trip 通过 + discovery & spec 方法论用户拍板 | 否 | 不需要（仅文档 + schema） |
-| **M0 server-driven 底座 + Inbox** | M-1 退出条件全部满足 | iOS 装新版后老聊天功能零回归 + 离线 fallback 验证通过 + 后端改 config 后 iOS 不重装能热更 + 硬编码列表全部迁移到 server + **Inbox 端点上线 + iOS 💡 按钮可用 + 30 秒内能存一条想法** | **是（一次性）** | 删 `/api/harness/config`，iOS 走 fallback；Inbox 表清空 |
-| **M1 骨架** | M0 退出条件满足 | Web `/harness` 三栏 IA 跑通 + 单 Issue 走 discovery → spec → awaiting_review → approve → 后续 stub 跳过 + SQLite audit log 完整 + iOS 不重装可见 Board + kill switch 验证通过 | 否 | `HARNESS_DISABLED=1` |
+| **M0 server-driven 底座 + Inbox** | M-1 退出条件全部满足 | iOS 装新版后老聊天功能零回归 + 离线 fallback 验证通过 + 后端改 config 后 iOS 不重装能热更 + 硬编码列表全部迁移到 server + **Inbox 端点上线 + iOS 💡 按钮可用 + 30 秒内能存一条想法** + **Review Mechanism v2 期所有 review 决策接受 author single-arbitration bias 作为显式妥协项**（[REVIEW_MECHANISM_V2.md](proposals/REVIEW_MECHANISM_V2.md) §6 OQ3） | **是（一次性）** | 删 `/api/harness/config`，iOS 走 fallback；Inbox 表清空 |
+| **M1 骨架** | M0 退出条件满足 | Web `/harness` 三栏 IA 跑通 + 单 Issue 走 discovery → spec → awaiting_review → approve → 后续 stub 跳过 + SQLite audit log 完整 + iOS 不重装可见 Board + kill switch 验证通过 + **Review Mechanism v2 期 author solo phase 3 决策不视为 final-irreversible，M3+ Synthesizer 上线后允许 retro re-arbitrate（加 audit trail 字段）** | 否 | `HARNESS_DISABLED=1` |
 | **M2 真 agent + dogfood** | M1 退出条件满足 + 已选定固定 dogfood 任务集（5 个 Issue 分难度 S/M/L/XL/XXL）+ 已选定一个独立 toy 企业后台仓库（评审反馈：避免纯 self-reflective 验证） | 固定任务集端到端全跑：S/M 难度成功率 ≥ 90% + L/XL 难度 ≥ 70% + XXL 至少跑通一次 + **每个 Issue 返工次数 ≤ 2** + 平均人审决议 ≤ 3 + risk-triggered 双 reviewer 在 high-risk 项启用率 100% + cost 落库可分析（**不设硬上限**，作观察阈值） + transcript/Verdict/Decision 全可回溯 + Retrospective 自动产出 + toy 企业后台仓库至少 1 条全链路跑通 | 否 | 同 M1 |
 | **M3 质量与可观测** | M2 ship 后 Retrospective 显示 ≥ 5 条改进项已收敛 | A1 模型自动选择上线 + Reviewer-compliance 在所有 spec 自动评 + Observer 已反向产至少 3 个真 Issue + 全文搜索可用 + iOS push 通知打通 | 否 | Observer cron 关停 |
 | **M4 方法论沉淀** | M3 跑过至少 10 个 dogfood Issue | 10 个 SDLC Stage 方法论全部到 v2 + 至少 1 套 Initiative 模板（企业后台从 0 开始）落库 + 成本/质量报表 UI 可用 | 否 | 切回 v1 方法论 |
@@ -692,6 +692,10 @@ approvedAt: <ISO>
 
 ### 16.2 三条进化路径
 
+**触发分类（不是新组件，只是给已有触发起名）**
+
+下面三条路径在被触发时分两种来源——**用户拍板式**（用户主动开口"Stage 5 方法论太重，简化"，相当于人手把 ritual 跑一遍）和**累积式**（retrospective 自动累积到阈值起评审）。两种来源**走同一套评审矩阵**（reviewer-cross + reviewer-architecture 双审 + 用户拍板）+ **同一冻结开关**（`Initiative.methodologyVersion` 一键回滚 + `HARNESS_EVOLUTION_FROZEN=1` 全局停 ritual，参考 §16.3）。**不存在独立的"主动进化引擎" / "evolution scheduler"**——用户拍板只是 §16.2 三路径的人工触发版，对应 §0 第 15 条 Invariant。任何"自动 / 累积式"措辞默认隐含 reviewer-cross + 用户拍板必经环节，agent 不允许自改方法论 / skill 库（§16.3 第 1 条）。
+
 **路径 1：Retrospective → Methodology v2**
 
 - 触发：每 Issue 完结自动产 retrospective.md。
@@ -749,6 +753,8 @@ approvedAt: <ISO>
 | Q11 | Inbox 图片/链接附件何时上 | — | 🟡 留给 M3 一并设计 |
 | Q12 | toy 企业后台仓库选哪个 | — | 🟡 待用户敲定（自建一个最小 CRUD repo？还是借用既有开源后台模板？） |
 | Q13 | M3 推 Documentor 是否需要专属审计 ritual | — | 🟡 留给 M3 入口讨论 |
+| Q14 | 用户主动触发进化的 UI 入口挂哪 | — | 🟡 候选：iOS 设置页"进化"入口 / `/evolve <stage>` slash command / harness CLI 子命令；涉及 [packages/ios-native/Sources/ClaudeWeb/](packages/ios-native/Sources/ClaudeWeb/) 与 [.claude/skills/](.claude/skills/) 联动，留 M-3 决 |
+| Q15 | 结构化审视 skill (`architecture-audit`) 自动 fire 准入条件 | — | 🟡 候选：`.claude/skills/` ≥ 10 个 **且** methodology v1→v2 至少升过 1 次 → 每月最多 1 次自动审视。**强约束**：自动 fire 需先给 `Retrospective` schema 加 `antiPatternLabel` 字段（[HARNESS_DATA_MODEL.md](HARNESS_DATA_MODEL.md) Retrospective 实体扩展），未做前不可启用，仅 manual `/architecture-audit` 触发 |
 
 ---
 

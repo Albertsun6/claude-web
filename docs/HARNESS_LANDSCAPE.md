@@ -79,6 +79,11 @@
 - **HashiCorp Sentinel** — 策略即代码，prod-guard 可借鉴思路
 - **GitHub Actions / branch protection** — PR 流程基线
 
+**进化路径竞品参照**（仅供参照、不要照搬：他们走"独立 evolution engine"路线，与我们 §0 第 15 条 Invariant"进化是副产物而非独立组件"路线相反；我们抄机制不抄架构）：
+- **Agentic Harness Engineering** ([arxiv 2604.25850](https://arxiv.org/abs/2604.25850)) — 三 observability pillar（component / experience / decision），**self-declared predictions verified against next-round outcomes** 这一点值得借鉴到 §16 ritual 验证环节
+- **Self-Evolving Agents Survey** ([arxiv 2508.07407](https://arxiv.org/abs/2508.07407) / [2507.21046](https://arxiv.org/abs/2507.21046)) — what / when / how / where to evolve 四维分类，可作我们触发分类（用户拍板式 / 累积式）的二次校对参照
+- **SkillX / EvoSkill / CoEvoSkills** — automatic skill discovery from execution traces，与我们 §16.2 路径 2 相同方向；他们做自动构建 + 自动迭代，我们走"双 reviewer + 用户拍板"通过率门——**不要把他们的 closed-loop 自动迭代抄进 harness**
+
 ---
 
 ## 2. 战略含义（落到 plan v4）
