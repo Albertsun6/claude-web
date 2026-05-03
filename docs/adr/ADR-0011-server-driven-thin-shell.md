@@ -1,8 +1,10 @@
 # ADR-0011 — Server-driven Thin-shell iOS Configuration
 
-**状态**：**Proposed**（2026-05-03，M-1 立项 placeholder；决定推到 M0 升级为 Accepted）
+**状态**：**Accepted**（2026-05-03，M0 4 mini-milestone 全 ship + 2 次 minor bump v1.0 → v1.1 → v1.2 真测全绿 + v2 Review Mechanism 2 完整三层用例 0 still-disagree 后正式升级）
 
-**Decider（pending）**：用户 + reviewer-cross + reviewer-architecture（M0 验收 ritual）
+**升级证据链**：[retrospectives/M0.md](../retrospectives/M0.md) §2 退出条件全 ✅ + §4.1 ADR-0011 活进化轨迹 + §6 数字总结（84/84 测试 + iOS Build 33 真机验证）
+
+**Decider**：用户（拍板）+ phase 1+2+3 三层评审（M0-A modelList Round 18 finding 1 轮收敛 + M0-B permissionModes Round 13 finding 全 ✅ 0 still-disagree）
 
 **关联**：[ADR-0015](ADR-0015-schema-migration.md) · [HARNESS_PROTOCOL.md](../HARNESS_PROTOCOL.md) · [HARNESS_ROADMAP.md §0 #1](../HARNESS_ROADMAP.md)（iOS thin shell 原则）· [CLAUDE.md "iOS path policy"](../../CLAUDE.md)
 

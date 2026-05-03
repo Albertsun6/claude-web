@@ -79,9 +79,11 @@
 | 里程碑 | 文件 | 状态 |
 |---|---|---|
 | M-1 架构与方法论奠基 | [retrospectives/M-1.md](retrospectives/M-1.md) | ✅ 完成（2026-05-03） |
-| M0 server-driven 底座 + Inbox | retrospectives/M0.md（汇总）| 部分完成 |
+| **M0 server-driven 底座 + Inbox（汇总）** | **[retrospectives/M0.md](retrospectives/M0.md)** | **✅ 完成（2026-05-03，4 mini-milestone 全 ship + 2 次 minor bump 真测 + v2 Review 4 用例）** |
 | M0 mini: Inbox（M0.5 路径） | (M-1 retrospective §10 提及；Inbox 端点 + iOS 💡 已 ship) | ✅ |
 | M0 mini: modelList 试点 | [retrospectives/M0-modellist.md](retrospectives/M0-modellist.md) | ✅ 完成（2026-05-03，v2 Review 第一个真用例） |
+| M0 mini: permissionModes 试点 | (M0 retro §3 + commit `d037438`) | ✅ 完成（2026-05-03，第一次 minor bump v1.0 → v1.1 真测） |
+| M0 mini: agentProfiles 试点 | (M0 retro §3 + commit `3aabde1`) | ✅ 完成（2026-05-03，第二次 minor bump v1.1 → v1.2 + 三件套补齐） |
 | M1 骨架 | retrospectives/M1.md | — |
 | M2 真 agent + dogfood | retrospectives/M2.md | — |
 | M3 质量与可观测 | retrospectives/M3.md | — |
