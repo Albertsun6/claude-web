@@ -16,6 +16,7 @@
 		15D7109C5F5E41C50324FE88 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE64375A8CB52018CBDAFF42 /* NotesView.swift */; };
 		192A2008297FE17F8C99BCFE /* HeartbeatMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D56E3A8DF4DCA98024F7B77 /* HeartbeatMonitor.swift */; };
 		2107FA880BBCCF5BBB1CE131 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDD352FD80813ED082C66DE1 /* HelpView.swift */; };
+		295C46D5D61283494FAC7EA4 /* HarnessDumpUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22737382F26C87E2494BD10 /* HarnessDumpUITests.swift */; };
 		29E377D9A943083DCBE89AF4 /* ConversationNamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55DF4DA3445654EBE1E3F69B /* ConversationNamer.swift */; };
 		2EC250307F7B7C08E9DAFA61 /* FilePreviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D069A882FF3EC3C4B44097 /* FilePreviewSheet.swift */; };
 		2EFE065198E9ECF3647CA798 /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */; };
@@ -37,6 +38,7 @@
 		767A29E33E102EBAAB5F03FB /* GitAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1938FAC36CF48013C9205F2 /* GitAPI.swift */; };
 		7777D446E5D1F743A234FCCB /* FileBrowserPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5A6AE07ADB47297221AE57 /* FileBrowserPanel.swift */; };
 		7A6541E53EADD7F1FC45BBC7 /* ContextAttachSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDC43410FF4DEACC7918356 /* ContextAttachSheet.swift */; };
+		7BAB4A70C3AA5D3D307A00A0 /* HarnessBoardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F21F1BACF0FC4CC27298FDC /* HarnessBoardUITests.swift */; };
 		8F34AD14FC08A306E5D74124 /* InboxCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A8B576D16DDD305D721AA33 /* InboxCaptureSheet.swift */; };
 		951378A0506A5A38CDB9F26D /* GitGateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141B19D309812F72DC751591 /* GitGateSheet.swift */; };
 		9BB9D18E1BB7379CA41042D0 /* WorktreeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 167A463D9C01BC07C5F7E615 /* WorktreeAPI.swift */; };
@@ -80,6 +82,13 @@
 			remoteGlobalIDString = 59BE935CE7793D344E204498;
 			remoteInfo = ClaudeWeb;
 		};
+		FAA5F6FD993B829866CDD1B3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 717DA13FF387E84EC9EB94E8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 59BE935CE7793D344E204498;
+			remoteInfo = ClaudeWeb;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -90,6 +99,7 @@
 		1513F54E80C419639B1D1705 /* HistorySessionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySessionRow.swift; sourceTree = "<group>"; };
 		167A463D9C01BC07C5F7E615 /* WorktreeAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeAPI.swift; sourceTree = "<group>"; };
 		1DEC4A1A093B16C45CCFA574 /* HarnessConfigAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessConfigAPI.swift; sourceTree = "<group>"; };
+		1F21F1BACF0FC4CC27298FDC /* HarnessBoardUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessBoardUITests.swift; sourceTree = "<group>"; };
 		1F8B9B0AC6F920A2B9E8A240 /* Cache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cache.swift; sourceTree = "<group>"; };
 		214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
 		283735CE8528E94F44599D41 /* TTSPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSPlayer.swift; sourceTree = "<group>"; };
@@ -139,9 +149,11 @@
 		CF24044B9AC2AAF0F0243B11 /* DrawerContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawerContent.swift; sourceTree = "<group>"; };
 		D07DACBE8944013C0DE7EE79 /* NotesSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesSession.swift; sourceTree = "<group>"; };
 		D2CF08EE066963DF8D4E840B /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
+		DE43F559BA34C1AD1EB4A918 /* ClaudeWebUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ClaudeWebUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DE64375A8CB52018CBDAFF42 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
 		E02CBF7C84A20380B2383AD1 /* SessionsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsAPI.swift; sourceTree = "<group>"; };
 		E1D069A882FF3EC3C4B44097 /* FilePreviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewSheet.swift; sourceTree = "<group>"; };
+		E22737382F26C87E2494BD10 /* HarnessDumpUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessDumpUITests.swift; sourceTree = "<group>"; };
 		E431C062B9438869B8D6E399 /* ClaudeWebApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeWebApp.swift; sourceTree = "<group>"; };
 		E67AEC4B21826DE8E273887E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E90163FEB077BB408157C916 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocol.swift; sourceTree = "<group>"; };
@@ -186,6 +198,15 @@
 				6A1FDBA5369B9FB21BC91821 /* ProtocolFixtureTests.swift */,
 			);
 			path = ClaudeWebTests;
+			sourceTree = "<group>";
+		};
+		3A6460C3E59DE6B11001E818 /* ClaudeWebUITests */ = {
+			isa = PBXGroup;
+			children = (
+				1F21F1BACF0FC4CC27298FDC /* HarnessBoardUITests.swift */,
+				E22737382F26C87E2494BD10 /* HarnessDumpUITests.swift */,
+			);
+			path = ClaudeWebUITests;
 			sourceTree = "<group>";
 		};
 		3BE25D6B07CC3925258BCA3F /* ClaudeWeb */ = {
@@ -297,6 +318,7 @@
 			children = (
 				7CAC5820B96A0B62BECEA82D /* ClaudeWeb.app */,
 				950F8E2DCA452C46977B3762 /* ClaudeWebTests.xctest */,
+				DE43F559BA34C1AD1EB4A918 /* ClaudeWebUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -325,6 +347,7 @@
 			children = (
 				3BE25D6B07CC3925258BCA3F /* ClaudeWeb */,
 				372B5A9E9C6CE18DB84AEF27 /* ClaudeWebTests */,
+				3A6460C3E59DE6B11001E818 /* ClaudeWebUITests */,
 				CB50C8E7CB022AB193A067F3 /* harness */,
 				A0D0852916E74685EF8CFADB /* Products */,
 			);
@@ -360,6 +383,24 @@
 			productReference = 950F8E2DCA452C46977B3762 /* ClaudeWebTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		2B8B52AFCE2E6A5DFDEDEBDC /* ClaudeWebUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 866CC24E87765B81D3834BD5 /* Build configuration list for PBXNativeTarget "ClaudeWebUITests" */;
+			buildPhases = (
+				55DF1042AF6BE7FE47DFB62D /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FB3233C37F2D8AC62E102E55 /* PBXTargetDependency */,
+			);
+			name = ClaudeWebUITests;
+			packageProductDependencies = (
+			);
+			productName = ClaudeWebUITests;
+			productReference = DE43F559BA34C1AD1EB4A918 /* ClaudeWebUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		59BE935CE7793D344E204498 /* ClaudeWeb */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C2ACC60090096479411F9D21 /* Build configuration list for PBXNativeTarget "ClaudeWeb" */;
@@ -392,6 +433,10 @@
 					271B86341CD3173BC9C3D129 = {
 						DevelopmentTeam = V84XLAQ28F;
 					};
+					2B8B52AFCE2E6A5DFDEDEBDC = {
+						DevelopmentTeam = V84XLAQ28F;
+						TestTargetID = 59BE935CE7793D344E204498;
+					};
 					59BE935CE7793D344E204498 = {
 						DevelopmentTeam = V84XLAQ28F;
 					};
@@ -416,6 +461,7 @@
 			targets = (
 				59BE935CE7793D344E204498 /* ClaudeWeb */,
 				271B86341CD3173BC9C3D129 /* ClaudeWebTests */,
+				2B8B52AFCE2E6A5DFDEDEBDC /* ClaudeWebUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -499,6 +545,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		55DF1042AF6BE7FE47DFB62D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7BAB4A70C3AA5D3D307A00A0 /* HarnessBoardUITests.swift in Sources */,
+				295C46D5D61283494FAC7EA4 /* HarnessDumpUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		7F85EECE6F336C1AC92D9245 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -514,6 +569,11 @@
 			isa = PBXTargetDependency;
 			target = 59BE935CE7793D344E204498 /* ClaudeWeb */;
 			targetProxy = 0C2EF871824D8014FF8A8643 /* PBXContainerItemProxy */;
+		};
+		FB3233C37F2D8AC62E102E55 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 59BE935CE7793D344E204498 /* ClaudeWeb */;
+			targetProxy = FAA5F6FD993B829866CDD1B3 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -569,7 +629,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 43;
+				CURRENT_PROJECT_VERSION = 45;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = V84XLAQ28F;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -655,7 +715,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 43;
+				CURRENT_PROJECT_VERSION = 45;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = V84XLAQ28F;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -682,6 +742,24 @@
 			};
 			name = Release;
 		};
+		A94E2D7FA4D8859D1A13F634 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIDeviceFamily = "[1]";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.albertsun6.claudeweb-native.uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ClaudeWeb;
+			};
+			name = Debug;
+		};
 		B1EEA0FC4FC93A71A5A65539 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -698,6 +776,24 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
+		};
+		D978AC1831E8788B4F00DE77 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIDeviceFamily = "[1]";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.albertsun6.claudeweb-native.uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ClaudeWeb;
+			};
+			name = Release;
 		};
 		DD76F6B3089EA93A0B7F148F /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -720,6 +816,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		866CC24E87765B81D3834BD5 /* Build configuration list for PBXNativeTarget "ClaudeWebUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A94E2D7FA4D8859D1A13F634 /* Debug */,
+				D978AC1831E8788B4F00DE77 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		939E0AF79F0671BA7F46EBC6 /* Build configuration list for PBXProject "ClaudeWeb" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

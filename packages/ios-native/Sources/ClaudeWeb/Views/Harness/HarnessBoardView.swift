@@ -56,41 +56,47 @@ private struct DecisionSheet: View {
     @Environment(HarnessAPI.self) private var api
     @Environment(\.dismiss) private var dismiss
 
-    let decisions: [HarnessDecision]
     let stageId: String
     let onResolved: () -> Void
 
+    @State private var decisions: [HarnessDecision] = []
+    @State private var loading = true
     @State private var resolving: String?
     @State private var error: String?
 
     var body: some View {
         NavigationStack {
             List {
-                ForEach(decisions.filter { $0.chosen_option == nil }) { d in
-                    Section {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("由 \(d.requested_by) 请求 · \(formatTime(d.created_at))")
-                                .font(.caption).foregroundStyle(.secondary)
-                            ForEach(d.options, id: \.self) { opt in
-                                Button {
-                                    Task { await resolve(d.id, option: opt) }
-                                } label: {
-                                    HStack {
-                                        if resolving == d.id + opt {
-                                            ProgressView().scaleEffect(0.8)
+                if loading {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else {
+                    ForEach(decisions.filter { $0.chosen_option == nil }) { d in
+                        Section {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("由 \(d.requested_by) 请求 · \(formatTime(d.created_at))")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                ForEach(d.options, id: \.self) { opt in
+                                    Button {
+                                        Task { await resolve(d.id, option: opt) }
+                                    } label: {
+                                        HStack {
+                                            if resolving == d.id + opt {
+                                                ProgressView().scaleEffect(0.8)
+                                            }
+                                            Text(opt == "approve" ? "✅ 批准" :
+                                                 opt == "reject"  ? "❌ 拒绝" : opt)
+                                                .font(.body.bold())
+                                            Spacer()
                                         }
-                                        Text(opt == "approve" ? "✅ 批准" :
-                                             opt == "reject"  ? "❌ 拒绝" : opt)
-                                            .font(.body.bold())
-                                        Spacer()
+                                        .padding(.vertical, 6)
                                     }
-                                    .padding(.vertical, 6)
+                                    .buttonStyle(.bordered)
+                                    .disabled(resolving != nil)
+                                    .accessibilityIdentifier("decision_option_\(opt)")
                                 }
-                                .buttonStyle(.bordered)
-                                .disabled(resolving != nil)
                             }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
                     }
                 }
             }
@@ -113,6 +119,17 @@ private struct DecisionSheet: View {
                 }
             }
         }
+        .task { await loadDecisions() }
+    }
+
+    private func loadDecisions() async {
+        loading = true
+        do {
+            decisions = try await api.listDecisions(stageId: stageId)
+        } catch {
+            self.error = (error as NSError).localizedDescription
+        }
+        loading = false
     }
 
     private func resolve(_ decisionId: String, option: String) async {
@@ -140,7 +157,6 @@ private struct StageListView: View {
     @State private var addingStage = false
     @State private var newStageKind = "spec"
     @State private var decisionStage: HarnessStage?
-    @State private var pendingDecisions: [HarnessDecision] = []
 
     private let allKinds = ["strategy","discovery","spec","compliance","design","implement","test","review","release","observe"]
 
@@ -192,16 +208,17 @@ private struct StageListView: View {
                         Label("添加 Stage", systemImage: "plus.circle")
                     }
                     .disabled(availableKinds.isEmpty)
+                    .accessibilityIdentifier("stage_add_btn")
                 }
             }
         }
         .listStyle(.insetGrouped)
         .navigationTitle(issue.title)
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("StageListView")
         .task { await load() }
         .sheet(item: $decisionStage) { stage in
             DecisionSheet(
-                decisions: pendingDecisions,
                 stageId: stage.id,
                 onResolved: { Task { await load() } }
             )
@@ -229,10 +246,11 @@ private struct StageListView: View {
                 .foregroundStyle(stageColor(stage.status))
         }
         .padding(.vertical, 2)
+        .accessibilityIdentifier("stage_row_\(stage.id)")
         .swipeActions(edge: .trailing) {
             if stage.status == "awaiting_review" {
                 Button {
-                    Task { await openDecisions(for: stage) }
+                    openDecisions(for: stage)
                 } label: {
                     Label("审批", systemImage: "checkmark.circle")
                 }
@@ -289,11 +307,8 @@ private struct StageListView: View {
         } catch {}
     }
 
-    private func openDecisions(for stage: HarnessStage) async {
-        do {
-            pendingDecisions = try await api.listDecisions(stageId: stage.id)
-            decisionStage = stage
-        } catch {}
+    private func openDecisions(for stage: HarnessStage) {
+        decisionStage = stage   // DecisionSheet fetches its own decisions via .task
     }
 }
 
@@ -329,6 +344,7 @@ private struct IssueListView: View {
                     NavigationLink(destination: StageListView(issue: issue)) {
                         issueRow(issue)
                     }
+                    .accessibilityIdentifier("issue_row_\(issue.id)")
                 }
             }
 
@@ -337,25 +353,30 @@ private struct IssueListView: View {
                     VStack(spacing: 8) {
                         TextField("Issue 标题", text: $newTitle)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("issue_title_field")
                         HStack {
                             Button("取消") { showAdd = false; newTitle = "" }
                                 .buttonStyle(.bordered)
+                                .accessibilityIdentifier("issue_add_cancel")
                             Spacer()
                             Button("创建") { Task { await addIssue() } }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                                .accessibilityIdentifier("issue_add_confirm")
                         }
                     }
                 } else {
                     Button { showAdd = true } label: {
                         Label("新建 Issue", systemImage: "plus.circle")
                     }
+                    .accessibilityIdentifier("issue_add_btn")
                 }
             }
         }
         .listStyle(.insetGrouped)
         .navigationTitle(initiative.title)
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("IssueListView")
         .task { await load() }
     }
 
@@ -435,6 +456,7 @@ struct HarnessBoardView: View {
                                 VStack(spacing: 8) {
                                     Image(systemName: "flag").font(.system(size: 40)).foregroundStyle(.secondary)
                                     Text("还没有 Initiative").font(.subheadline).foregroundStyle(.secondary)
+                                        .accessibilityIdentifier("harness_empty_label")
                                     Text("点右上角 + 创建第一个").font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
@@ -446,20 +468,25 @@ struct HarnessBoardView: View {
                                 NavigationLink(destination: IssueListView(initiative: init_, projectId: projectId)) {
                                     initiativeRow(init_)
                                 }
+                                .accessibilityIdentifier("initiative_row_\(init_.id)")
                             }
                         }
 
                         if showAdd {
                             Section("新建 Initiative") {
                                 TextField("标题", text: $newTitle)
+                                    .accessibilityIdentifier("harness_new_initiative_title")
                                 TextField("目标（可选）", text: $newIntent)
+                                    .accessibilityIdentifier("harness_new_initiative_intent")
                                 HStack {
                                     Button("取消") { showAdd = false; newTitle = ""; newIntent = "" }
                                         .buttonStyle(.bordered)
+                                        .accessibilityIdentifier("harness_add_cancel")
                                     Spacer()
                                     Button("创建") { Task { await addInitiative() } }
                                         .buttonStyle(.borderedProminent)
                                         .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                                        .accessibilityIdentifier("harness_add_confirm")
                                 }
                             }
                         }
@@ -470,14 +497,17 @@ struct HarnessBoardView: View {
             }
             .navigationTitle("🔬 Harness 看板")
             .navigationBarTitleDisplayMode(.inline)
+            .accessibilityIdentifier("HarnessBoardView")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") { dismiss() }
+                        .accessibilityIdentifier("harness_board_close")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showAdd = true } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityIdentifier("harness_board_add")
                 }
             }
         }
@@ -506,7 +536,15 @@ struct HarnessBoardView: View {
         loading = true
         error = nil
         do {
-            initiatives = try await api.listInitiatives(projectId: projectId)
+            // If projectId looks like a file path (starts with "/"), resolve UUID via /api/projects.
+            // This handles cold-start races where registry.projects isn't loaded yet.
+            let resolvedId: String
+            if projectId.hasPrefix("/") {
+                resolvedId = (try? await api.resolveProjectId(cwd: projectId)) ?? projectId
+            } else {
+                resolvedId = projectId
+            }
+            initiatives = try await api.listInitiatives(projectId: resolvedId)
         } catch {
             self.error = (error as NSError).localizedDescription == "The data couldn't be read because it isn't in the correct format."
                 ? "Harness 未启用（后端未连接或 HARNESS_DISABLED=1）"
@@ -519,8 +557,14 @@ struct HarnessBoardView: View {
         let t = newTitle.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { return }
         do {
+            let resolvedId: String
+            if projectId.hasPrefix("/") {
+                resolvedId = (try? await api.resolveProjectId(cwd: projectId)) ?? projectId
+            } else {
+                resolvedId = projectId
+            }
             let init_ = try await api.createInitiative(
-                projectId: projectId, cwd: cwd,
+                projectId: resolvedId, cwd: cwd,
                 title: t, intent: newIntent.trimmingCharacters(in: .whitespaces)
             )
             initiatives.insert(init_, at: 0)

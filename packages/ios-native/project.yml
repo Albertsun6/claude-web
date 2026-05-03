@@ -12,7 +12,7 @@ settings:
     DEVELOPMENT_TEAM: V84XLAQ28F
     SWIFT_VERSION: "5.9"
     MARKETING_VERSION: "0.2.2"
-    CURRENT_PROJECT_VERSION: "43"
+    CURRENT_PROJECT_VERSION: "45"
     ENABLE_USER_SCRIPT_SANDBOXING: "NO"
     SWIFT_STRICT_CONCURRENCY: minimal
 
@@ -77,3 +77,16 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.albertsun6.claudeweb-native.tests
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_UIDeviceFamily: "[1]"
+
+  ClaudeWebUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: ClaudeWebUITests
+    dependencies:
+      - target: ClaudeWeb
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.albertsun6.claudeweb-native.uitests
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_UIDeviceFamily: "[1]"
+        TEST_TARGET_NAME: ClaudeWeb
