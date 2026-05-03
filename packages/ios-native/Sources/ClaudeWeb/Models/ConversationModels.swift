@@ -13,13 +13,21 @@ enum ConnState: Equatable {
 
 struct Conversation: Identifiable, Codable, Equatable {
     let id: String
-    /// Working directory the CLI runs in. Stable for the conversation's
-    /// lifetime — to point at a different cwd, create a new conversation.
+    /// Working directory the CLI runs in by default. Stable for the
+    /// conversation's lifetime. If `worktreePath` is set, the CLI runs in
+    /// that path instead — `cwd` is preserved for display + worktree base.
     let cwd: String
     var sessionId: String?
     var title: String
     let createdAt: Date
     var lastUsed: Date
+    /// Set when this conversation runs in an isolated git worktree (Stage A
+    /// opt-in flow). nil = conversation runs in `cwd` directly. When set,
+    /// CLI subprocess cwd = worktreePath. Survives app restart via cache.
+    var worktreePath: String?
+    /// WorkRecord.id from backend work-registry. Used to call
+    /// /api/worktrees/:id/finalize. nil if no worktree.
+    var worktreeId: String?
 }
 
 struct QueuedPrompt: Identifiable, Equatable {

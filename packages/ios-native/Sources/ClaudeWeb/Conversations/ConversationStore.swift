@@ -153,7 +153,12 @@ final class ConversationStore {
         conversations[convId] = conv
     }
 
-    func createConversation(cwd: String, title: String? = nil) -> Conversation {
+    func createConversation(
+        cwd: String,
+        title: String? = nil,
+        worktreePath: String? = nil,
+        worktreeId: String? = nil,
+    ) -> Conversation {
         let normCwd = (cwd as NSString).standardizingPath
         let resolvedTitle: String
         if let custom = title?.trimmingCharacters(in: .whitespaces), !custom.isEmpty {
@@ -171,7 +176,9 @@ final class ConversationStore {
             sessionId: nil,
             title: resolvedTitle,
             createdAt: now,
-            lastUsed: now
+            lastUsed: now,
+            worktreePath: worktreePath,
+            worktreeId: worktreeId
         )
         conversations[id] = conv
         stateByConversation[id] = ConversationChatState()
@@ -360,7 +367,11 @@ final class ConversationStore {
     /// build the ClientMessage. Returns nil if the conversation isn't tracked.
     func startTurn(convId: String, runId: String, prompt: String) -> StartedTurn? {
         guard var conversation = conversations[convId] else { return nil }
-        let cwd = conversation.cwd
+        // If the conversation has an isolated worktree, the CLI runs there
+        // instead of the user's intended cwd. cwd field is preserved on
+        // Conversation for display + worktree base — never gets sent to CLI
+        // when worktreePath is set.
+        let cwd = conversation.worktreePath ?? conversation.cwd
 
         var s = stateByConversation[convId] ?? ConversationChatState()
         s.currentRunId = runId
@@ -372,7 +383,8 @@ final class ConversationStore {
         // If the title is still auto-generated (e.g. "0502-3"), rewrite it
         // to the prompt's first ~30 chars so the conversation list shows
         // something meaningful. User-customized titles are left alone.
-        if Self.isAutoNamedTitle(conversation.title, cwd: cwd) {
+        // Auto-name uses the user-intent cwd (not worktreePath which is server-managed).
+        if Self.isAutoNamedTitle(conversation.title, cwd: conversation.cwd) {
             let derived = TitleHelper.makeTitle(from: prompt)
             if !derived.isEmpty {
                 conversation.title = derived

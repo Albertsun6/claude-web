@@ -22,6 +22,7 @@ struct ClaudeWebApp: App {
     @State private var gitAPI: GitAPI
     @State private var heartbeat: HeartbeatMonitor
     @State private var inboxAPI: InboxAPI
+    @State private var worktreeAPI: WorktreeAPI
     @State private var harnessConfigAPI: HarnessConfigAPI
     @State private var harnessStore: HarnessStore
 
@@ -56,6 +57,7 @@ struct ClaudeWebApp: App {
         _gitAPI = State(initialValue: GitAPI(backend: backendRef, token: tokenRef))
         _heartbeat = State(initialValue: HeartbeatMonitor(baseURL: backendRef))
         _inboxAPI = State(initialValue: InboxAPI(baseURL: backendRef))
+        _worktreeAPI = State(initialValue: WorktreeAPI(baseURL: backendRef))
         let harnessAPIInst = HarnessConfigAPI(backend: backendRef, token: tokenRef)
         _harnessConfigAPI = State(initialValue: harnessAPIInst)
         _harnessStore = State(initialValue: HarnessStore(cache: cacheInst, api: harnessAPIInst))
@@ -75,6 +77,7 @@ struct ClaudeWebApp: App {
                 .environment(cache)
                 .environment(heartbeat)
                 .environment(inboxAPI)
+                .environment(worktreeAPI)
                 .environment(harnessStore)
                 .onAppear {
                     bootstrap()

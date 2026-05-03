@@ -9,10 +9,14 @@ import SwiftUI
 struct ConversationsSheet: View {
     @Environment(BackendClient.self) private var client
     @Environment(AppSettings.self) private var settings
+    @Environment(WorktreeAPI.self) private var worktreeAPI
     @Environment(\.dismiss) private var dismiss
 
     @State private var renamingConv: Conversation?
     @State private var renameDraft: String = ""
+    @State private var creatingWorktree: Bool = false
+    @State private var worktreeError: String?
+    @State private var activeWorktreeCount: Int = 0
 
     /// cwd to filter by. Passed in so the sheet stays consistent even if focus
     /// changes mid-display (e.g. user taps a conversation row).
@@ -68,14 +72,45 @@ struct ConversationsSheet: View {
                     Button("关闭") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        let conv = client.createConversation(cwd: cwd)
-                        client.currentConversationId = conv.id
-                        settings.currentConversationId = conv.id
-                        dismiss()
+                    Menu {
+                        Button {
+                            createPlain()
+                        } label: {
+                            Label("新对话（同 cwd）", systemImage: "plus.bubble")
+                        }
+                        Button {
+                            Task { await createWithWorktree() }
+                        } label: {
+                            Label(
+                                activeWorktreeCount > 0
+                                    ? "新对话 + 隔离 worktree（已有 \(activeWorktreeCount)）"
+                                    : "新对话 + 隔离 worktree",
+                                systemImage: "arrow.triangle.branch"
+                            )
+                        }
+                        .disabled(creatingWorktree)
                     } label: {
-                        Label("新对话", systemImage: "plus")
+                        if creatingWorktree {
+                            ProgressView()
+                        } else {
+                            Label("新对话", systemImage: "plus")
+                        }
                     }
+                }
+            }
+            .alert("worktree 创建失败", isPresented: Binding(
+                get: { worktreeError != nil },
+                set: { if !$0 { worktreeError = nil } }
+            )) {
+                Button("OK") { worktreeError = nil }
+            } message: {
+                Text(worktreeError ?? "")
+            }
+            .task {
+                // Lazy-load active worktree count for the toolbar Menu hint.
+                // Failure is silent — Menu just doesn't show the count.
+                if let items = try? await worktreeAPI.listByCwd(cwd) {
+                    activeWorktreeCount = items.count
                 }
             }
             .alert("改名", isPresented: Binding(
@@ -93,6 +128,44 @@ struct ConversationsSheet: View {
                     renamingConv = nil
                 }
             }
+        }
+    }
+
+    /// Quick path: create a plain conversation reusing the current cwd. No
+    /// worktree, no isolation. Same as the pre-Stage-A behavior.
+    private func createPlain() {
+        let conv = client.createConversation(cwd: cwd)
+        client.currentConversationId = conv.id
+        settings.currentConversationId = conv.id
+        dismiss()
+    }
+
+    /// Stage A entry: create an isolated git worktree under the current cwd
+    /// and bind a fresh conversation to it. CLI subprocess will run in the
+    /// worktree path; main cwd is preserved for display + finalize base.
+    /// Failure leaves no conversation behind.
+    private func createWithWorktree() async {
+        creatingWorktree = true
+        defer { creatingWorktree = false }
+        // Title hint goes to backend so the WorkRecord is identifiable; the
+        // conversation itself is auto-titled by client.createConversation
+        // and rewritten to the prompt's first 30 chars on first send.
+        let titleHint = client.peekNextAutoName(forCwd: cwd)
+        do {
+            let work = try await worktreeAPI.createWorktree(
+                cwd: cwd,
+                conversationTitle: titleHint
+            )
+            let conv = client.createConversation(
+                cwd: cwd,
+                worktreePath: work.worktreePath,
+                worktreeId: work.id
+            )
+            client.currentConversationId = conv.id
+            settings.currentConversationId = conv.id
+            dismiss()
+        } catch {
+            worktreeError = (error as NSError).localizedDescription
         }
     }
 

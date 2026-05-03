@@ -37,6 +37,7 @@
 		7A6541E53EADD7F1FC45BBC7 /* ContextAttachSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDC43410FF4DEACC7918356 /* ContextAttachSheet.swift */; };
 		8F34AD14FC08A306E5D74124 /* InboxCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A8B576D16DDD305D721AA33 /* InboxCaptureSheet.swift */; };
 		951378A0506A5A38CDB9F26D /* GitGateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141B19D309812F72DC751591 /* GitGateSheet.swift */; };
+		9BB9D18E1BB7379CA41042D0 /* WorktreeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 167A463D9C01BC07C5F7E615 /* WorktreeAPI.swift */; };
 		9C5CCC80588E51B11C14AA5D /* TranscriptParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13FDDA6FDAA0AB0FB743114 /* TranscriptParser.swift */; };
 		9DAEEFD7C4A2F91D7444BCD0 /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 283735CE8528E94F44599D41 /* TTSPlayer.swift */; };
 		A1FB9C60B4A929E71527F7DA /* HarnessProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEA687523D42FE5BEA84075 /* HarnessProtocol.swift */; };
@@ -84,6 +85,7 @@
 		0DE3519D5D4B6BA73D2C4D5D /* RunRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunRouter.swift; sourceTree = "<group>"; };
 		141B19D309812F72DC751591 /* GitGateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitGateSheet.swift; sourceTree = "<group>"; };
 		1513F54E80C419639B1D1705 /* HistorySessionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySessionRow.swift; sourceTree = "<group>"; };
+		167A463D9C01BC07C5F7E615 /* WorktreeAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeAPI.swift; sourceTree = "<group>"; };
 		1DEC4A1A093B16C45CCFA574 /* HarnessConfigAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessConfigAPI.swift; sourceTree = "<group>"; };
 		1F8B9B0AC6F920A2B9E8A240 /* Cache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cache.swift; sourceTree = "<group>"; };
 		214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
@@ -218,6 +220,7 @@
 				283735CE8528E94F44599D41 /* TTSPlayer.swift */,
 				214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */,
 				03EB85EB534A11AFEBB9A548 /* VoiceSession.swift */,
+				167A463D9C01BC07C5F7E615 /* WorktreeAPI.swift */,
 			);
 			name = ClaudeWeb;
 			path = Sources/ClaudeWeb;
@@ -472,6 +475,7 @@
 				6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */,
 				14FF58C0ACCD40C590C4E172 /* VoiceSession.swift in Sources */,
 				D26C4CDFA3EED053DDB5AF93 /* WebSocketClient.swift in Sources */,
+				9BB9D18E1BB7379CA41042D0 /* WorktreeAPI.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

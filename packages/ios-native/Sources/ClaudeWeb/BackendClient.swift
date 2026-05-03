@@ -122,8 +122,18 @@ final class BackendClient {
     }
 
     @discardableResult
-    func createConversation(cwd: String, title: String? = nil) -> Conversation {
-        store.createConversation(cwd: cwd, title: title)
+    func createConversation(
+        cwd: String,
+        title: String? = nil,
+        worktreePath: String? = nil,
+        worktreeId: String? = nil,
+    ) -> Conversation {
+        store.createConversation(
+            cwd: cwd,
+            title: title,
+            worktreePath: worktreePath,
+            worktreeId: worktreeId,
+        )
     }
 
     func adopt(_ conversation: Conversation, messages: [ChatLine] = []) {

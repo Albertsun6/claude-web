@@ -235,7 +235,9 @@ final class ProjectRegistry {
             sessionId: session.sessionId,
             title: derivedTitle,
             createdAt: session.modifiedAt,
-            lastUsed: session.modifiedAt
+            lastUsed: session.modifiedAt,
+            worktreePath: nil,
+            worktreeId: nil
         )
         client.adopt(conv, messages: lines)
         cache.saveSession(conv.id, messages: lines)
