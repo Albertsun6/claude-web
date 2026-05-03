@@ -2,11 +2,17 @@
 // Path: ~/.claude-web/inbox.jsonl
 // Reads buffered into a small in-memory cache for /list endpoint.
 //
+// Concurrency: all mutations go through `withLock` (promise-queue) so two
+// concurrent POST /api/inbox / triage / processed requests can't lose each
+// other's edit. Full rewrites use atomic temp+rename; appends use appendFile.
+// Pattern mirrors projects-store.ts.
+//
 // NOTE on write throughput: setTriage / markProcessed do an O(N) full-file
-// rewrite (line 90+ markProcessed pattern). Fine at current scale; expect
-// noticeable lag past ~10k items — switch to sqlite or per-id index then.
+// rewrite. Fine at current scale; expect noticeable lag past ~10k items —
+// switch to sqlite or per-id index then.
 
 import fs from "node:fs";
+import { rename, writeFile, appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
@@ -41,13 +47,42 @@ export interface InboxItem {
 
 const STORE_DIR = path.join(os.homedir(), ".claude-web");
 const STORE_PATH = path.join(STORE_DIR, "inbox.jsonl");
+const TMP_PATH = STORE_PATH + ".tmp";
 
 let memoryCache: InboxItem[] | null = null;
+
+// Promise-based write lock (mirrors projects-store.ts). Node.js is
+// single-threaded, but read-modify-write across awaits is not atomic — two
+// concurrent triage/processed requests would each load, mutate, and rewrite,
+// and the second would clobber the first's change. Serializing all mutations
+// through this queue prevents that.
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+function withLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = writeQueue.then(fn, fn);
+  // Don't propagate this caller's failure to subsequent waiters.
+  writeQueue = next.catch(() => undefined);
+  return next;
+}
+
+async function ensureDirAsync(): Promise<void> {
+  await mkdir(STORE_DIR, { recursive: true });
+}
 
 function ensureDir(): void {
   if (!fs.existsSync(STORE_DIR)) {
     fs.mkdirSync(STORE_DIR, { recursive: true });
   }
+}
+
+/** Atomic full-file rewrite: write to TMP, then rename. Caller must hold the lock. */
+async function atomicRewrite(items: InboxItem[]): Promise<void> {
+  await ensureDirAsync();
+  const body = items.length
+    ? items.map((it) => JSON.stringify(it)).join("\n") + "\n"
+    : "";
+  await writeFile(TMP_PATH, body, "utf8");
+  await rename(TMP_PATH, STORE_PATH);
 }
 
 function loadAll(): InboxItem[] {
@@ -77,18 +112,20 @@ export interface AppendInput {
   meta?: Record<string, unknown>;
 }
 
-export function appendInbox(input: AppendInput): InboxItem {
-  ensureDir();
-  const item: InboxItem = {
-    id: randomUUID(),
-    body: input.body.trim(),
-    source: input.source ?? "unknown",
-    capturedAt: Date.now(),
-    meta: input.meta,
-  };
-  fs.appendFileSync(STORE_PATH, JSON.stringify(item) + "\n", "utf8");
-  if (memoryCache !== null) memoryCache.push(item);
-  return item;
+export function appendInbox(input: AppendInput): Promise<InboxItem> {
+  return withLock(async () => {
+    await ensureDirAsync();
+    const item: InboxItem = {
+      id: randomUUID(),
+      body: input.body.trim(),
+      source: input.source ?? "unknown",
+      capturedAt: Date.now(),
+      meta: input.meta,
+    };
+    await appendFile(STORE_PATH, JSON.stringify(item) + "\n", "utf8");
+    if (memoryCache !== null) memoryCache.push(item);
+    return item;
+  });
 }
 
 export interface ListOptions {
@@ -113,20 +150,19 @@ export function listInbox(opts: ListOptions = {}): InboxItem[] {
   return filtered.slice().reverse().slice(0, opts.limit ?? 50);
 }
 
-export function markProcessed(id: string, conversationId: string): InboxItem | null {
-  const all = loadAll();
-  const idx = all.findIndex((it) => it.id === id);
-  if (idx < 0) return null;
-  const updated = { ...all[idx], processedIntoConversationId: conversationId };
-  all[idx] = updated;
-  // rewrite the file (~ once per triage; not hot path)
-  ensureDir();
-  fs.writeFileSync(
-    STORE_PATH,
-    all.map((it) => JSON.stringify(it)).join("\n") + "\n",
-    "utf8",
-  );
-  return updated;
+export function markProcessed(
+  id: string,
+  conversationId: string,
+): Promise<InboxItem | null> {
+  return withLock(async () => {
+    const all = loadAll();
+    const idx = all.findIndex((it) => it.id === id);
+    if (idx < 0) return null;
+    const updated = { ...all[idx], processedIntoConversationId: conversationId };
+    all[idx] = updated;
+    await atomicRewrite(all);
+    return updated;
+  });
 }
 
 export interface SetTriageInput {
@@ -144,28 +180,28 @@ export interface SetTriageInput {
  *                         docs/IDEAS.md or docs/HARNESS_ROADMAP §17.
  *                         Backend never writes those docs (§16.3 #1).
  */
-export function setTriage(id: string, input: SetTriageInput): InboxItem | null {
-  const all = loadAll();
-  const idx = all.findIndex((it) => it.id === id);
-  if (idx < 0) return null;
-  const triage: InboxTriage = {
-    destination: input.destination,
-    note: input.note,
-    triagedAt: Date.now(),
-  };
-  const updated: InboxItem = {
-    ...all[idx],
-    status: input.destination === "archive" ? "archived" : "open",
-    triage,
-  };
-  all[idx] = updated;
-  ensureDir();
-  fs.writeFileSync(
-    STORE_PATH,
-    all.map((it) => JSON.stringify(it)).join("\n") + "\n",
-    "utf8",
-  );
-  return updated;
+export function setTriage(
+  id: string,
+  input: SetTriageInput,
+): Promise<InboxItem | null> {
+  return withLock(async () => {
+    const all = loadAll();
+    const idx = all.findIndex((it) => it.id === id);
+    if (idx < 0) return null;
+    const triage: InboxTriage = {
+      destination: input.destination,
+      note: input.note,
+      triagedAt: Date.now(),
+    };
+    const updated: InboxItem = {
+      ...all[idx],
+      status: input.destination === "archive" ? "archived" : "open",
+      triage,
+    };
+    all[idx] = updated;
+    await atomicRewrite(all);
+    return updated;
+  });
 }
 
 export function inboxStats(): { total: number; unprocessed: number } {

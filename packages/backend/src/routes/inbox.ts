@@ -41,7 +41,7 @@ inboxRouter.post("/", async (c) => {
       400,
     );
   }
-  const item = appendInbox({
+  const item = await appendInbox({
     body: payload.body,
     source: payload.source ?? "unknown",
     meta: payload.meta,
@@ -87,7 +87,7 @@ inboxRouter.post("/:id/triage", async (c) => {
   if (body.note !== undefined && typeof body.note !== "string") {
     return c.json({ error: "field 'note' must be a string if provided" }, 400);
   }
-  const updated = setTriage(id, {
+  const updated = await setTriage(id, {
     destination: body.destination as TriageDestination,
     note: body.note as string | undefined,
   });
@@ -108,7 +108,7 @@ inboxRouter.post("/:id/processed", async (c) => {
   if (!body?.conversationId || typeof body.conversationId !== "string") {
     return c.json({ error: "field 'conversationId' is required" }, 400);
   }
-  const updated = markProcessed(id, body.conversationId);
+  const updated = await markProcessed(id, body.conversationId);
   if (!updated) return c.json({ error: "not found" }, 404);
   return c.json({ item: updated });
 });

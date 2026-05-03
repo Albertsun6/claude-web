@@ -11,7 +11,8 @@
     "test:auth": "tsx src/test-auth.ts",
     "test:strip": "tsx src/test-strip-speech.ts",
     "test:convo": "tsx src/test-convo-commands.ts",
-    "test:harness-schema": "tsx src/test-harness-schema.ts"
+    "test:harness-schema": "tsx src/test-harness-schema.ts",
+    "test:inbox-concurrent": "tsx src/test-inbox-concurrent.ts"
   },
   "dependencies": {
     "@claude-web/shared": "workspace:*",
