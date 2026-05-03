@@ -555,6 +555,41 @@ cd packages/ios-native
 
 仅活跃运行 ≥1 时 badge 才出现；要单纯看历史，照样用 chip 切换器。
 
+### 碎想 Inbox（💡 快速捕捉 + 分流）
+
+InputBar 旁的 **💡 按钮** 弹 [InboxCaptureSheet](packages/ios-native/Sources/ClaudeWeb/Views/InboxCaptureSheet.swift)——纯文本 / 语音输入框 + 发送，**30 秒内能存下一个想法**是硬指标。POST `/api/inbox`，落到后端 `~/.claude-web/inbox.jsonl`（多设备共用一份）。
+
+底部工具栏 **📥** 进 [InboxListView](packages/ios-native/Sources/ClaudeWeb/Views/InboxListView.swift)，两个 tab：
+- **💡 碎想**：所有捕捉的想法
+- **📥 当前队列**：当前对话的 prompt 队列（详见 [输入框增强](#输入框增强)）
+
+碎想 tab 顶部两个开关：**只看未处理** / **含归档**（默认隐藏归档项）。
+
+每条 row 带彩色 badge，4 种状态由 `status + processedIntoConversationId + triage` 组合 derive：
+
+| Badge | 触发 | 含义 |
+|---|---|---|
+| 🟠 未处理 | 新捕捉 | 还没人管 |
+| 🟢 已派给 Claude | 点 [派给 Claude] | 已转成新对话 prompt |
+| 🔵 已分到 IDEAS | swipe / 长按 "分到 IDEAS" | 复制了 body 到剪贴板，等你手动粘到 [docs/IDEAS.md](docs/IDEAS.md) |
+| ⚪ 已归档 | swipe / 长按 "归档" | `status="archived"`，默认隐藏，灰色删除线 |
+
+**每条 row 的动作**（任选）：
+- **swipe leading（左→右）→ 蓝色 "分到 IDEAS"**：UIPasteboard 复制 body + 后端打 triage 标签 + 顶部 toast `已复制 — 粘到 docs/IDEAS.md`。后端**绝不**自动改 docs（边界硬约束，对应 `HARNESS_ROADMAP.md §16.3 #1`），你需要自己粘
+- **swipe trailing（右→左）→ 红色 "归档"**：`POST /api/inbox/:id/triage destination=archive`
+- **长按（contextMenu）**：复制内容 / 分到 IDEAS / 归档 全部入口
+- **[派给 Claude] 按钮**：仅 🟠 未处理状态出现，转新对话发 prompt 然后 `POST /api/inbox/:id/processed`
+
+Backend 端点（给 web / 脚本用）：
+
+| 端点 | 用途 |
+|---|---|
+| `POST /api/inbox` | 捕捉。`status` / `triage` 字段会被服务端拒绝（400），后端是它们的唯一写者 |
+| `POST /api/inbox/:id/triage` | 分流。body `{destination: "ideas" \| "archive", note?}` |
+| `GET /api/inbox/list?unprocessed=1&includeArchived=0&limit=50` | 列表 |
+
+> Web 端 inbox UI 还没有（见 [docs/IDEAS.md](docs/IDEAS.md) P6），当前只能 `curl POST /api/inbox` 或走 iOS。
+
 ### Git 安全检查（完成后弹）
 
 `session_ended(reason=completed)` 触发时，如果对话的 cwd 是 git 仓库且工作区有未提交修改，弹 [GitGateSheet](packages/ios-native/Sources/ClaudeWeb/Views/GitGateSheet.swift)：
