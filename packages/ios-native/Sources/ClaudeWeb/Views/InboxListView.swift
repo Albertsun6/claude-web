@@ -1,6 +1,10 @@
 // Inbox list view — see all 碎想 captured via the 💡 button or web POST.
 // Tap an item → "处理为新对话" (turn the captured text into a fresh prompt
 // in a new conversation; backend marks the inbox item processed).
+// Swipe actions:
+//   leading  → "分到 IDEAS"  (copy body to clipboard + triage label)
+//   trailing → "归档" (status="archived")
+// Backend never writes docs/IDEAS.md — user manually pastes (§16.3 #1).
 
 import SwiftUI
 
@@ -14,8 +18,10 @@ struct InboxListView: View {
     @State private var stats: InboxStats?
     @State private var loadState: LoadState = .idle
     @State private var showOnlyUnprocessed = true
+    @State private var includeArchived = false
     @State private var processingIds: Set<String> = []
     @State private var tab: Tab = .inbox
+    @State private var toast: String?
 
     enum Tab: Hashable { case inbox, queue }
 
@@ -75,14 +81,29 @@ struct InboxListView: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
             }
-            Toggle("只看未处理", isOn: $showOnlyUnprocessed)
-                .padding(.horizontal)
-                .padding(.vertical, 6)
-                .onChange(of: showOnlyUnprocessed) { _, _ in
-                    Task { await load() }
-                }
+            HStack(spacing: 16) {
+                Toggle("只看未处理", isOn: $showOnlyUnprocessed)
+                Toggle("含归档", isOn: $includeArchived)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+            .onChange(of: showOnlyUnprocessed) { _, _ in Task { await load() } }
+            .onChange(of: includeArchived) { _, _ in Task { await load() } }
             content
         }
+        .overlay(alignment: .top) {
+            if let toast {
+                Text(toast)
+                    .font(.caption.bold())
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.85), in: Capsule())
+                    .foregroundStyle(.white)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: toast)
     }
 
     @ViewBuilder
@@ -174,27 +195,82 @@ struct InboxListView: View {
             List {
                 ForEach(items) { item in
                     inboxRow(item)
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            Button {
+                                Task { await triageToIdeas(item) }
+                            } label: {
+                                Label("分到 IDEAS", systemImage: "lightbulb.fill")
+                            }
+                            .tint(.blue)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                Task { await archive(item) }
+                            } label: {
+                                Label("归档", systemImage: "archivebox")
+                            }
+                        }
                 }
             }
             .listStyle(.plain)
         }
     }
 
+    /// Visual state derived from item — backend stays minimal (open/archived),
+    /// UI maps the combo of status + processed + triage into 4 badges.
+    private enum RowBadge {
+        case archived, processed, triagedIdeas, fresh
+        var label: String {
+            switch self {
+            case .archived: "已归档"
+            case .processed: "已派给 Claude"
+            case .triagedIdeas: "已分到 IDEAS"
+            case .fresh: "未处理"
+            }
+        }
+        var color: Color {
+            switch self {
+            case .archived: .gray
+            case .processed: .green
+            case .triagedIdeas: .blue
+            case .fresh: .orange
+            }
+        }
+        var systemImage: String {
+            switch self {
+            case .archived: "archivebox.fill"
+            case .processed: "checkmark.circle.fill"
+            case .triagedIdeas: "lightbulb.fill"
+            case .fresh: "tray.fill"
+            }
+        }
+    }
+
+    private func badge(for item: InboxItem) -> RowBadge {
+        if item.status == "archived" { return .archived }
+        if item.processedIntoConversationId != nil { return .processed }
+        if item.triage?.destination == "ideas" { return .triagedIdeas }
+        return .fresh
+    }
+
     @ViewBuilder
     private func inboxRow(_ item: InboxItem) -> some View {
+        let b = badge(for: item)
         VStack(alignment: .leading, spacing: 6) {
             Text(item.body)
                 .font(.body)
                 .lineLimit(8)
+                .strikethrough(b == .archived)
+                .foregroundStyle(b == .archived ? .secondary : .primary)
             HStack(spacing: 8) {
                 Text(formatTime(item.capturedAt))
                 Text("·").foregroundStyle(.tertiary)
                 Text(item.source)
                 Spacer()
-                if item.processedIntoConversationId != nil {
-                    Label("已处理", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                } else {
+                Label(b.label, systemImage: b.systemImage)
+                    .font(.caption.bold())
+                    .foregroundStyle(b.color)
+                if b == .fresh {
                     Button {
                         Task { await processIntoConversation(item) }
                     } label: {
@@ -218,8 +294,21 @@ struct InboxListView: View {
         .contextMenu {
             Button {
                 UIPasteboard.general.string = item.body
+                showToast("已复制")
             } label: {
                 Label("复制内容", systemImage: "doc.on.doc")
+            }
+            if b != .archived {
+                Button {
+                    Task { await triageToIdeas(item) }
+                } label: {
+                    Label("分到 IDEAS", systemImage: "lightbulb")
+                }
+                Button(role: .destructive) {
+                    Task { await archive(item) }
+                } label: {
+                    Label("归档", systemImage: "archivebox")
+                }
             }
         }
     }
@@ -227,7 +316,11 @@ struct InboxListView: View {
     private func load() async {
         loadState = .loading
         do {
-            let resp = try await inboxAPI.list(unprocessedOnly: showOnlyUnprocessed, limit: 200)
+            let resp = try await inboxAPI.list(
+                unprocessedOnly: showOnlyUnprocessed,
+                includeArchived: includeArchived,
+                limit: 200,
+            )
             await MainActor.run {
                 items = resp.items
                 stats = resp.stats
@@ -263,6 +356,8 @@ struct InboxListView: View {
                         source: item.source,
                         capturedAt: item.capturedAt,
                         processedIntoConversationId: convId,
+                        status: item.status,
+                        triage: item.triage,
                     )
                 }
             }
@@ -270,6 +365,57 @@ struct InboxListView: View {
             // mark-processed failure is non-fatal; the prompt was already sent.
         }
         await MainActor.run { dismiss() }
+    }
+
+    /// Triage to IDEAS: backend writes triage label only, UI copies body to
+    /// clipboard so the user manually pastes into docs/IDEAS.md or
+    /// docs/HARNESS_ROADMAP §17. Backend never writes those docs.
+    private func triageToIdeas(_ item: InboxItem) async {
+        UIPasteboard.general.string = item.body
+        do {
+            let updated = try await inboxAPI.triage(id: item.id, destination: "ideas")
+            await MainActor.run {
+                if let idx = items.firstIndex(where: { $0.id == item.id }) {
+                    items[idx] = updated
+                }
+                showToast("已复制 — 粘到 docs/IDEAS.md")
+            }
+        } catch {
+            await MainActor.run {
+                showToast("分到 IDEAS 失败：\((error as NSError).localizedDescription)")
+            }
+        }
+    }
+
+    private func archive(_ item: InboxItem) async {
+        do {
+            let updated = try await inboxAPI.triage(id: item.id, destination: "archive")
+            await MainActor.run {
+                if includeArchived {
+                    if let idx = items.firstIndex(where: { $0.id == item.id }) {
+                        items[idx] = updated
+                    }
+                } else {
+                    items.removeAll { $0.id == item.id }
+                }
+                showToast("已归档")
+            }
+        } catch {
+            await MainActor.run {
+                showToast("归档失败：\((error as NSError).localizedDescription)")
+            }
+        }
+    }
+
+    @MainActor
+    private func showToast(_ message: String) {
+        toast = message
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            await MainActor.run {
+                if toast == message { toast = nil }
+            }
+        }
     }
 
     private func formatTime(_ ms: Int64) -> String {

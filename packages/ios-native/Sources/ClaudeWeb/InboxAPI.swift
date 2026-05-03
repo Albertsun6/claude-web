@@ -3,15 +3,23 @@
 
 import Foundation
 
+struct InboxTriage: Codable, Equatable {
+    let destination: String  // "ideas" | "archive"
+    let note: String?
+    let triagedAt: Int64
+}
+
 struct InboxItem: Codable, Identifiable, Equatable {
     let id: String
     let body: String
     let source: String
     let capturedAt: Int64
     let processedIntoConversationId: String?
+    let status: String?  // "open" | "archived"; nil on legacy records → treat as "open"
+    let triage: InboxTriage?
 
     enum CodingKeys: String, CodingKey {
-        case id, body, source, capturedAt, processedIntoConversationId
+        case id, body, source, capturedAt, processedIntoConversationId, status, triage
     }
 }
 
@@ -57,10 +65,15 @@ final class InboxAPI {
         return try JSONDecoder().decode(Wrap.self, from: data).item
     }
 
-    func list(unprocessedOnly: Bool = false, limit: Int = 50) async throws -> InboxListResponse {
+    func list(
+        unprocessedOnly: Bool = false,
+        includeArchived: Bool = false,
+        limit: Int = 50,
+    ) async throws -> InboxListResponse {
         var comps = URLComponents(url: baseURL().appendingPathComponent("api/inbox/list"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [
             URLQueryItem(name: "unprocessed", value: unprocessedOnly ? "1" : "0"),
+            URLQueryItem(name: "includeArchived", value: includeArchived ? "1" : "0"),
             URLQueryItem(name: "limit", value: String(limit)),
         ]
         var req = URLRequest(url: comps.url!)
@@ -77,6 +90,33 @@ final class InboxAPI {
         req.httpBody = try JSONEncoder().encode(["conversationId": conversationId])
         req.timeoutInterval = 6
         let (data, _) = try await URLSession.shared.data(for: req)
+        struct Wrap: Codable { let item: InboxItem }
+        return try JSONDecoder().decode(Wrap.self, from: data).item
+    }
+
+    /// Triage an inbox item.
+    /// destination=archive → backend flips status to "archived" (item hidden from default list)
+    /// destination=ideas   → backend writes triage label only; caller copies body to clipboard
+    ///                       so user can manually paste into docs/IDEAS.md or HARNESS_ROADMAP §17.
+    ///                       Backend never writes those docs (§16.3 #1).
+    func triage(id: String, destination: String, note: String? = nil) async throws -> InboxItem {
+        let url = baseURL().appendingPathComponent("api/inbox/\(id)/triage")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var payload: [String: String] = ["destination": destination]
+        if let note { payload["note"] = note }
+        req.httpBody = try JSONEncoder().encode(payload)
+        req.timeoutInterval = 6
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+            throw NSError(
+                domain: "InboxAPI",
+                code: code,
+                userInfo: [NSLocalizedDescriptionKey: "triage failed HTTP \(code)"],
+            )
+        }
         struct Wrap: Codable { let item: InboxItem }
         return try JSONDecoder().decode(Wrap.self, from: data).item
     }
