@@ -413,6 +413,28 @@ export const PermissionModeItemSchema = z.object({
 });
 export type PermissionModeItem = z.infer<typeof PermissionModeItemSchema>;
 
+// ============================================================================
+// AgentProfileItem (M0 mini-milestone C agentProfiles Round, protocolVersion 1.2)
+// ============================================================================
+// 把 docs/HARNESS_AGENTS.md §2.2 12 个默认 AgentProfile 迁到 server-driven config。
+// M0 收敛到 6 字段（id / displayName / description / stage / modelHint / enabled），
+// 不锁 enum（id / stage / modelHint 都是 hint-only string，方便 minor bump 扩）。
+// 不在 M0 范围（M2 真 spawn 时 minor bump 加）：
+//   skillNames[] / toolAllowlist[] / defaultPermissionMode / requiresWorktree
+//   parallelizable / contextBudget / reviewerRole / systemPromptTemplate
+// 与 modelList / permissionModes 不同：AgentProfile 没有"isDefault exactly-one"
+// 概念——多个 profile 可同时 enabled（每条对应不同 Stage）。
+
+export const AgentProfileItemSchema = z.object({
+  id: z.string(),                                    // opaque stable string，对应 Task.agentProfileId
+  displayName: z.string(),                           // 短名 "PM" / "Coder" / "Reviewer-cross"
+  description: z.string(),                           // 一行职责
+  stage: z.string(),                                 // hint-only "discovery"/"implement"/etc，未知值 graceful skip
+  modelHint: z.string(),                             // hint-only "opus"/"sonnet"/"haiku"/"adaptive"，未知值 UI 默认显示
+  enabled: z.boolean(),                              // M0=11 false + PM=true（M1 discovery 准备）
+});
+export type AgentProfileItem = z.infer<typeof AgentProfileItemSchema>;
+
 export const HarnessConfigSchema = z
   .object({
     protocolVersion: z.string(),                     // "1.x"; minor bump 加新字段，老 client graceful skip
@@ -423,6 +445,10 @@ export const HarnessConfigSchema = z
     // 加新字段 = minor bump，与 ADR-0015 一致。**iOS Codable 端必须 optional**
     // 防止 v1.1 client + v1.0 server payload 时 keyNotFound（双向兼容硬约束）
     permissionModes: z.array(PermissionModeItemSchema),
+    // agentProfiles Round (M0 mini-milestone C, protocolVersion 1.2):
+    // 同 permissionModes 的 minor bump 模式 — Swift 端必须 optional，
+    // shared / backend 严格必填。M2 真 spawn 时再 minor bump 加复杂字段。
+    agentProfiles: z.array(AgentProfileItemSchema),
   })
   .superRefine((cfg, ctx) => {
     // Phase 3 cross M1: modelList isDefault exactly-one
@@ -443,6 +469,16 @@ export const HarnessConfigSchema = z
         code: z.ZodIssueCode.custom,
         message: `permissionModes must have exactly 1 isDefault item, got ${defaultModes.length}`,
         path: ["permissionModes"],
+      });
+    }
+    // agentProfiles Round: id 唯一性 (避免 Task.agentProfileId 路由歧义)
+    const ids = cfg.agentProfiles.map((p) => p.id);
+    const dupIds = ids.filter((id, i) => ids.indexOf(id) !== i);
+    if (dupIds.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `agentProfiles must have unique ids, found duplicates: ${[...new Set(dupIds)].join(", ")}`,
+        path: ["agentProfiles"],
       });
     }
   });

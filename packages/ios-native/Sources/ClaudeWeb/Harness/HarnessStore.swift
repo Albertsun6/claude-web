@@ -110,7 +110,7 @@ final class HarnessStore {
             // last-resort hardcoded — should never hit if xcodegen + Bundle copy worked
             assertionFailure("Bundle fallback-config.json missing or unparseable; falling back to single-model emergency hardcode")
             return HarnessConfig(
-                protocolVersion: "1.1",
+                protocolVersion: "1.2",
                 minClientVersion: "1.0",
                 etag: "",
                 modelList: [ModelListItem(
@@ -128,6 +128,14 @@ final class HarnessStore {
                     description: "默认行为",
                     isDefault: true,
                     riskLevel: "low",
+                )],
+                agentProfiles: [AgentProfileItem(
+                    id: "PM",
+                    displayName: "PM",
+                    description: "需求收集 + spec 起草",
+                    stage: "discovery",
+                    modelHint: "sonnet",
+                    enabled: true,
                 )]
             )
         }
@@ -194,5 +202,30 @@ final class HarnessStore {
             "modeId": modeId,
             "riskLevel": riskLevel,
         ])
+    }
+
+    // MARK: - agentProfiles (M0 mini-milestone C, v1.2)
+
+    /// agentProfiles (server-driven if available; bundle fallback otherwise).
+    /// 与 permissionModes 同模式的双向 minor bump 兼容兜底。UI 永远拿到非空数组。
+    var agentProfiles: [AgentProfileItem] {
+        if let profiles = config.agentProfiles, !profiles.isEmpty {
+            return profiles
+        }
+        if let fallbackProfiles = HarnessStore.bundleFallback().agentProfiles {
+            telemetry?.warn("harness_store.partial_payload", props: ["missing": "agentProfiles"])
+            return fallbackProfiles
+        }
+        return []
+    }
+
+    /// Profiles eligible to show as "active" in UI (enabled only). M0 期 ≤1 项 (PM)。
+    var enabledAgentProfiles: [AgentProfileItem] {
+        agentProfiles.filter { $0.enabled }
+    }
+
+    /// Look up an agent profile by id (e.g. Task.agentProfileId).
+    func agentProfile(id: String) -> AgentProfileItem? {
+        agentProfiles.first(where: { $0.id == id })
     }
 }

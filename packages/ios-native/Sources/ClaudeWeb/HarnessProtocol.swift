@@ -462,6 +462,18 @@ struct PermissionModeItem: Codable, Equatable {
     let riskLevel: String?               // hint-only string，推荐 "low"/"medium"/"high"; 未知值默认色 + telemetry warn
 }
 
+// agentProfiles Round (M0 mini-milestone C, protocolVersion 1.2)
+// 同 PermissionModeItem 设计：短 displayName + hint-only string 字段。
+// id / stage / modelHint 均为 opaque string（不锁 enum）—— minor bump 友好。
+struct AgentProfileItem: Codable, Equatable {
+    let id: String                       // opaque stable string，对应 Task.agentProfileId
+    let displayName: String              // 短名 (per ADR-0011 displayName 治理总则)
+    let description: String              // 一行职责
+    let stage: String                    // hint-only "discovery"/"implement"/etc
+    let modelHint: String                // hint-only "opus"/"sonnet"/"haiku"/"adaptive"
+    let enabled: Bool                    // M0=11 false + PM=true
+}
+
 struct HarnessConfig: Codable, Equatable {
     let protocolVersion: String
     let minClientVersion: String
@@ -475,6 +487,10 @@ struct HarnessConfig: Codable, Equatable {
     // **警告**：不要给 HarnessConfig 加自定义 init(from:) + container.allKeys 校验——会反向破坏
     // Apple Swift Decodable 默认的 ignore unknown keys 行为，导致老 build 31 收到新字段时 decode 失败
     let permissionModes: [PermissionModeItem]?
+    // agentProfiles Round (M0 mini-milestone C, protocolVersion 1.2)：
+    // 同 permissionModes 的双向 minor bump 兼容硬约束 — Swift 端 optional，
+    // store 层 ?? bundleFallback().agentProfiles! 兜底。
+    let agentProfiles: [AgentProfileItem]?
 }
 
 // MARK: - Version comparator (RFC §2.3, mirrors packages/shared/src/version.ts)

@@ -57,7 +57,8 @@ describe("HarnessConfigSchema with permissionModes", () => {
   it("fallback-config.json passes (含 permissionModes)", () => {
     cfg = HarnessConfigSchema.parse(load("fallback-config.json"));
     expect(cfg.permissionModes).toHaveLength(4);
-    expect(cfg.protocolVersion).toBe("1.1");
+    // bumped to "1.2" by agentProfiles Round (M0 mini-milestone C); minor bump is graceful skip
+    expect(cfg.protocolVersion).toBe("1.2");
   });
   it("isDefault exactly-one (phase 3 cross M1 superRefine 扩展)", () => {
     expect(cfg.permissionModes.filter(p => p.isDefault)).toHaveLength(1);

@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.1",
+  "protocolVersion": "1.2",
   "minClientVersion": "1.0",
   "etag": "",
   "modelList": [
@@ -71,6 +71,104 @@
       "description": "全自动，最危险 — agent 跑任何工具都不弹窗，仅用于受信工作流",
       "isDefault": false,
       "riskLevel": "high"
+    }
+  ],
+  "agentProfiles": [
+    {
+      "id": "Strategist",
+      "displayName": "Strategist",
+      "description": "战略 / KPI / trade-off 决策",
+      "stage": "strategy",
+      "modelHint": "sonnet",
+      "enabled": false
+    },
+    {
+      "id": "PM",
+      "displayName": "PM",
+      "description": "需求收集 + spec 起草",
+      "stage": "discovery",
+      "modelHint": "sonnet",
+      "enabled": true
+    },
+    {
+      "id": "Reviewer-compliance",
+      "displayName": "Reviewer-compliance",
+      "description": "数据 / 安全 / 许可合规审查",
+      "stage": "compliance",
+      "modelHint": "sonnet",
+      "enabled": false
+    },
+    {
+      "id": "Architect",
+      "displayName": "Architect",
+      "description": "接口契约 + 数据流图 + ADR",
+      "stage": "design",
+      "modelHint": "opus",
+      "enabled": false
+    },
+    {
+      "id": "Reviewer-architecture",
+      "displayName": "Reviewer-architecture",
+      "description": "架构契合度审查（独立 prompt）",
+      "stage": "design",
+      "modelHint": "opus",
+      "enabled": false
+    },
+    {
+      "id": "Coder",
+      "displayName": "Coder",
+      "description": "实现 + 测试同步写（复杂度自适应）",
+      "stage": "implement",
+      "modelHint": "adaptive",
+      "enabled": false
+    },
+    {
+      "id": "Tester",
+      "displayName": "Tester",
+      "description": "单测 / 集成 / 回归",
+      "stage": "test",
+      "modelHint": "sonnet",
+      "enabled": false
+    },
+    {
+      "id": "Reviewer-code",
+      "displayName": "Reviewer-code",
+      "description": "代码审查（建设性）",
+      "stage": "review",
+      "modelHint": "sonnet",
+      "enabled": false
+    },
+    {
+      "id": "Reviewer-cross",
+      "displayName": "Reviewer-cross",
+      "description": "代码审查（独立验证：安全/性能/边界）",
+      "stage": "review",
+      "modelHint": "opus",
+      "enabled": false
+    },
+    {
+      "id": "Releaser",
+      "displayName": "Releaser",
+      "description": "灰度 / 回滚 / 用户通知",
+      "stage": "release",
+      "modelHint": "sonnet",
+      "enabled": false
+    },
+    {
+      "id": "Observer",
+      "displayName": "Observer",
+      "description": "监控 / 告警 / 反向产 Issue",
+      "stage": "observe",
+      "modelHint": "haiku",
+      "enabled": false
+    },
+    {
+      "id": "Documentor",
+      "displayName": "Documentor",
+      "description": "持续维护 docs / changelog / retrospective 起草",
+      "stage": "release",
+      "modelHint": "sonnet",
+      "enabled": false
     }
   ]
 }

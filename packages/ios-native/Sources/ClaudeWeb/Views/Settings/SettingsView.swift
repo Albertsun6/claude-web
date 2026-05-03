@@ -199,6 +199,49 @@ struct SettingsView: View {
                     Text("由服务端配置 (/api/harness/config)。Bypass 模式下 Claude 可以直接跑 Bash / Edit / Write 等任何工具，不再弹询问。**只在你完全信任当前 cwd + 会话内容时**用。")
                 }
                 Section {
+                    // M0 agentProfiles Round (v1.2): server-driven 只读列表。
+                    // M0 期 11 项 disabled + PM enabled (M1 discovery 准备); M2 真 spawn 时此处升级为可触发。
+                    let profiles = harnessStore.agentProfiles
+                    ForEach(profiles, id: \.id) { profile in
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text(profile.displayName)
+                                        .font(.body)
+                                        .foregroundStyle(profile.enabled ? .primary : .secondary)
+                                    Text(profile.modelHint)
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 1)
+                                        .background(modelHintColor(profile.modelHint).opacity(0.18))
+                                        .foregroundStyle(modelHintColor(profile.modelHint))
+                                        .clipShape(Capsule())
+                                }
+                                Text(profile.description)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(2)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(profile.stage)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                if profile.enabled {
+                                    Text("ENABLED")
+                                        .font(.caption2.bold())
+                                        .foregroundStyle(.green)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } header: {
+                    Text("Agent Profiles (\(harnessStore.agentProfiles.count))")
+                } footer: {
+                    Text("由服务端配置 (/api/harness/config v1.2)。M0 期仅 PM 启用（M1 discovery 准备），其余 11 项 M2 真 agent spawn 时打开。改 fallback-config.json 重启 backend 即可热更。")
+                }
+                Section {
                     Picker("聊天区字号", selection: $s.fontSize) {
                         Text("小").tag("medium")
                         Text("默认").tag("large")
@@ -380,6 +423,18 @@ struct SettingsView: View {
             // Unknown value (e.g. server adds "critical" later) — UI default + log
             harnessStore.notifyUnknownRiskLevel(modeId: "?", riskLevel: riskLevel ?? "")
             return .primary
+        }
+    }
+
+    /// Map agentProfile.modelHint to a chip color. hint-only string, unknown values
+    /// fall back to neutral. Mirrors riskColor pattern for permissionModes.
+    private func modelHintColor(_ hint: String) -> Color {
+        switch hint {
+        case "opus": return .purple
+        case "sonnet": return .blue
+        case "haiku": return .teal
+        case "adaptive": return .orange
+        default: return .secondary
         }
     }
 
