@@ -27,9 +27,14 @@ Seaidea iOS 原生 app 是 thin shell（CLAUDE.md 既定路线），核心约束
 
 **M-1 立项**（本 ADR）：声明 server-driven thin-shell 是长期路线，关键约束在 M0 实施时落定：
 
-1. **服务端 endpoint**：`GET /api/harness/config` 返回 schema：`{ stages, agentProfiles, decisionForms, modelList, reviewMatrix, methodologyTemplates, promptTemplates, featureFlags, copy, healthChecks, protocolVersion, minClientVersion }`
+1. **服务端 endpoint**：`GET /api/harness/config` 返回**分阶段扩展的 schema**（M0 modelList Round phase 3 cross M3 + arch react agree 修复）：
+   - **M0 第一契约**（仅 modelList，详见 [M0_HARNESS_CONFIG_MODELLIST](../proposals/M0_HARNESS_CONFIG_MODELLIST.md)）：`{ protocolVersion, minClientVersion, etag, modelList }`
+   - **M1+ 增量加** stages / agentProfiles / decisionForms / reviewMatrix / methodologyTemplates / promptTemplates / featureFlags / copy / healthChecks 等。每次新增字段 = minor bump（"1.x" → "1.(x+1)"），老 iOS Zod `.passthrough()` / Swift `Codable` ignoreUnknownKeys **graceful skip 未知字段**，不切 fallback
+   - **major bump**（"1.x" → "2.0"）：删字段 / 改语义。iOS 自查 `compareVersion(clientVersion, minClientVersion) < 0` 切 fallback + 升级提示
 2. **iOS 端**：HarnessStore 持有 config snapshot；冷启动用打包内 fallback config 兜底；联网后拉新 config + ETag 缓存
-3. **WS 推送**：`harness_event { kind: "config_changed" }` → iOS 自动 refetch（不重装）
+3. **WS 推送 hot-reload**（M0 modelList Round phase 3 cross B1 + arch MAJOR-1 修复，措辞收敛）：
+   - **M0 简化版**：作者改 config → tsx watch 重启 backend → WS 自动断 → iOS WSReconnect → iOS 立即 GET `/api/harness/config` with If-None-Match → 200 (etag 变) / 304 (不变)。不实施真 push 事件
+   - **M0.5+**：如果用户反馈"改 config 不想每次重启 backend"，再加 `harness_event { kind: "config_changed" }` 真 push（需要 backend modelList 来源升级 B JSON 文件 + file watch）
 4. **版本协商**：`HARNESS_PROTOCOL_VERSION = "1.0"` + `MIN_CLIENT_VERSION = "1.0"`；`clientVersion < MIN_CLIENT_VERSION` → 推升级提示 + fallback config
 5. **离线兜底范围**（用户 M0 敲定）：iOS fallback config 仅保留**老聊天功能**；Board / Decision / 创建 Initiative 在离线 / 未连接时显示"未连接"占位
 

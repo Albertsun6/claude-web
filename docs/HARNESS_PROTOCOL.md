@@ -29,7 +29,7 @@ harness 的协议层有 4 个出口：
 |---|---|
 | 字段命名 | **wire camelCase**（`createdAt`, `projectId`），DB snake_case（`created_at`, `project_id`），转换由 store 层负责 |
 | 时间戳 | **epoch ms**（数字），不传字符串，不用 ISO 8601。和 `~/.claude-web/telemetry.jsonl` 一致 |
-| ID | UUIDv4 字符串；客户端生成 / backend 生成都允许，但**写入前必须 unique** |
+| ID | **opaque stable string**，推荐 `<type>-<ULID>` 前缀（如 `proj-01HJK5...` / `iss-01HJK5...`）；**不强制 UUIDv4**；客户端不应解析 ID 内容；后端可任意生成形式但同 Issue 范围内必须稳定 unique（M0 modelList Round phase 3 cross M2 修复 §1 vs §8 自相矛盾） |
 | JSON 字段 | DB 里以 `*_json` 列存原始 JSON 字符串；wire DTO 里展开成 typed 结构 |
 | 可选字段 | wire 上 **完全省略**（不发送 `null`）。Zod `.optional()` |
 | 枚举 | 全部小写、下划线分词（`in_progress`），不用驼峰 / 大写 |

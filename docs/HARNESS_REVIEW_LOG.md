@@ -319,4 +319,71 @@ decided_at: <ISO>
 
 ---
 
+### M0 modelList Round — `/api/harness/config` payload + modelList 试点（v2 第一个真用例）
+
+**日期**：2026-05-03
+**Artifact**：[docs/proposals/M0_HARNESS_CONFIG_MODELLIST.md](proposals/M0_HARNESS_CONFIG_MODELLIST.md)（v1.0 → v1.1 修订）
+
+**触发**：M0 第一契约。**v2 Review Mechanism 第一个真用例**（dogfood self-validation 之外），全程走三层流程。
+
+#### Phase 1 verdicts（独立隔离）
+
+- arch: [m0-modellist-arch-2026-05-03-1145.md](reviews/m0-modellist-arch-2026-05-03-1145.md) — claude-opus-4-7（**0 BLOCKER + 4 MAJOR + 5 MINOR**）
+- cross: [m0-modellist-cross-2026-05-03-1144.md](reviews/m0-modellist-cross-2026-05-03-1144.md) — gpt-5.5-medium（**2 BLOCKER + 4 MAJOR + 3 MINOR**，overall score 3.0/5）
+
+#### Phase 2 react verdicts（cross-pollinate）
+
+- arch react（看 cross verdict）: [m0-modellist-arch-react-2026-05-03-1210.md](reviews/m0-modellist-arch-react-2026-05-03-1210.md) — **6 agree / 0 disagree / 3 refine / 2 self-revisions / 2 new findings (N1+N2)**
+- cross react（看 arch verdict）: [m0-modellist-cross-react-2026-05-03-1151.md](reviews/m0-modellist-cross-react-2026-05-03-1151.md) — **7 agree / 1 disagree / 6 refine / 3 self-revisions / 0 new findings**
+
+#### v2 §4 验收（PASS ✅）
+
+- (a) 流程必过 ✅：4 verdict 全落盘；PHASE_2_PROMPT 四选一遵守；至少 1 disagree/refine 硬约束（cross 6 refine + 1 disagree, arch 3 refine）
+- (b1) ✅：cross react 自降 own B1 BLOCKER → MAJOR + 自拆 own B2 / arch react 自拆 own MAJOR-2 → 2a+2b
+- (b2) ✅：phase 2 浮出 2 new findings（arch react N1 protocolVersion 语义 + N2 If-None-Match 不传行为）
+
+**关键 cross-pollinate 价值**：
+- cross 看 arch 后接受降级 BLOCKER（B1 → MAJOR）—— 避免过度 escalation 阻塞实施
+- arch 看 cross 后 acknowledge **4 项 cross-lens unique 贡献**（cross M2 ID 契约 / M3 ADR Decision #1 不一致 / m2 ETag header quoting / m3 auth 继承）—— 全是 4-dim lens 之外的真问题，arch 全 agree
+- cross 拒绝 arch MINOR-4（minClientVersion 合并 backend）—— **唯一保留分歧**，phase 3 author 接受 cross 立场（HTTP endpoint 无 client version，iOS 自查必要）
+
+#### Phase 3 裁决矩阵（合 phase 1 + phase 2 共 18 项 finding）
+
+| # | 主张（合并源）| 终决严重度 | 判断 | 处理 |
+|---|---|---|---|---|
+| 1 | M0 是否有 WS push config_changed 矛盾（cross B1 / arch MAJOR-1，phase 2 共识降 MAJOR + 同步修 ADR-0011 #3）| MAJOR | ✅ | §0 + §5.2 删 "WS 推 config_changed" 验收项；§2.4 改"WS 重连后 GET + If-None-Match"；ADR-0011 Decision #3 同步改 |
+| 2 | ETag canonical_json 嵌套字段被 sortedKeys 白名单过滤（cross B2 / arch MAJOR-2a）| BLOCKER | ✅ | §1.3 改写递归 canonicalizer pseudo-code + 强制 fixture 测试断言改嵌套字段都改 etag + key 顺序无关 stable |
+| 3 | compareVersion 实施责任真空（arch MAJOR-2b 自拆 + cross react agree）| MAJOR | ✅ | §2.3 加 `packages/shared/src/version.ts` compareVersion 实施清单 step + 工具函数代码 |
+| 4 | recommendedFor 开放 string 破协议契约（arch MAJOR-3 / cross react refine "可接受但写未知值忽略"）| MAJOR | ⚠️ | 部分接受：保留 z.string() 数组（不锁 enum 避免 minor bump 烦恼），但 §1.1 加注 hint-only + iOS UI 不分支 + 未知值 graceful skip |
+| 5 | isDefault exactly-one schema 没 enforce（cross M1）| MAJOR | ✅ | §1.2 HarnessConfigSchema 加 `.superRefine()` 全局校验 enabled+isDefault 恰好 1 |
+| 6 | iOS cutover 默认从 haiku 静默漂移到 sonnet（arch MAJOR-4 (2)，cross react 自承认漏掉）| MAJOR | ✅ | §3.4 加 cutover 行为段：检查 settings.currentModelId vs server isDefault；显式选过保留，未选过用 server 默认；停用提示用户 |
+| 7 | enabled=false 当前 selection 切换语义（cross m1 + arch MAJOR-4 (3) 同源）| MAJOR | ✅ | §1.1 + §3.4：disabled 不出现新选择；当前已 disabled 保留 + "已停用" 标签 + 切走后不可再选 |
+| 8 | HARNESS_PROTOCOL §1 ID UUIDv4 vs §8 opaque stable string 自相矛盾（cross M2，arch react agree—cross-lens unique 贡献）| MAJOR | ✅ | HARNESS_PROTOCOL.md §1 ID 行改 opaque stable string |
+| 9 | ADR-0011 Decision #1 endpoint payload 全量 vs M0 modelList-only 不一致（cross M3，arch react agree）| MAJOR | ✅ | ADR-0011 Decision #1 改"分阶段扩展 config，M0 仅 modelList，新增字段 minor bump + graceful skip" |
+| 10 | iOS fallback config OQ-A + drift 风险 OQ-C（cross M4 + arch MINOR-2，phase 2 共识 single-source）| MAJOR | ✅ | OQ-A 决议：single source `packages/shared/fixtures/harness/fallback-config.json`；backend import + iOS xcodegen 复制 Bundle resource；drift 单元测试强制 |
+| 11 | protocolVersion 1.0 vs minor bump 语义对接缺失（arch react N1）| MAJOR | ✅ | §1.2 加 minor/major bump 规则 + Zod `.passthrough()` / Swift `keyDecodingStrategy` graceful skip 未知字段 |
+| 12 | ETag header HTTP quoting（cross m2，arch react agree—cross-lens 贡献）| MINOR | ✅ | §2.1 明确 header `ETag: "sha256:xxx"` 标准引号 + body 字段裸字符串；backend 比较 If-None-Match 兼容 quoted/unquoted |
+| 13 | endpoint auth 继承（cross m3，arch react agree—cross-lens 贡献）| MINOR | ✅ | §2.1 加"挂在现有 /api/* auth 体系下" |
+| 14 | If-None-Match 不传行为（arch react N2）| MINOR | ✅ | §2.1 加"无 If-None-Match → 200 + body" |
+| 15 | §0 退出条件没标 "试点子集"（arch MINOR-1）| MINOR | ✅ | §0 加"M0 全局退出条件子集"标注 |
+| 16 | TS const mutation 风格（arch MINOR-3）| MINOR | ⚠️ | 部分接受：改 lazy `getHarnessConfig()` 函数（也利于后续 file-watch 升级），不是 correctness 问题 |
+| 17 | minClientVersion 责任分散两端（arch MINOR-4 / cross react disagree）| MINOR | 🚫 | **反驳**（phase 3 author 接受 cross 立场）：HTTP config endpoint 无法知道 client version，iOS 自查必要；ADR-0011 §最小协议层行为契约已写明 iOS 端检测 |
+| 18 | iOS 真机 fallback 验证缺失（arch MINOR-5，cross react agree）| MINOR | ✅ | §5.2 加真机断网 cold start 验收项（M0 是 iOS 唯一一次大改装） |
+
+**汇总**：✅ 14 / ⚠️ 2 / 🚫 1 / 🟡 0 → **0 still-disagree → 1 轮收敛**
+
+#### 反向挑战（沉淀）
+
+1. **arch 4-dim lens 对"近端文本一致性"盲**：cross 找出 §3 cost table 矛盾 / HARNESS_PROTOCOL §1 vs §8 ID 矛盾 / ADR-0011 Decision #1 vs proposal §1.2 不一致——这 3 项都是 arch 完全没看出的 cross-lens unique 贡献。arch react 全 agree 验证了 cross-pollinate 的实质价值
+2. **cross 5-lens 对"里程碑出口判定 / 本提案与全局 milestone 对接"盲**：arch 找出 §0 退出条件没标"试点子集"（arch MINOR-1）+ MAJOR-4 cutover 默认模型漂移 + N1 protocolVersion 与 ADR-0015 minor bump 流程未 echo——cross 完全没提。互补成立
+3. **double-blind phase 1 是合理 baseline**：18 项 finding 中**只有 1 项 (#17) 双方仍 disagree**，其余 17 项收敛或互补——证明 multi-agent debate 在 v2 期对 M0 真业务是有效的（不是 dogfood self-reflective）
+
+#### 用户拍板状态
+
+✅ **作者自动收敛**（按用户"按建议"授权）：14 ✅ 接受全部已落地（proposal v1.1 修订完毕 + ADR-0011 Decision #1+#3 修 + HARNESS_PROTOCOL §1 ID 修），2 ⚠️ 部分接受写明边界，1 🚫 反驳给具体反论据，0 still-disagree。
+
+**M0 modelList Round 验收 PASS** —— 进入实施阶段（19 步实施清单见 proposal §4）。
+
+---
+
 (后续 Round / Round N ... 在此追加)
