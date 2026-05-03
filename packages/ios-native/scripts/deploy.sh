@@ -86,6 +86,10 @@ echo "[2/3] Install + launch on device"
 xcrun devicectl device install app --device "$DEVICE_ID" "$APP_BUNDLE" > /tmp/_install.log 2>&1 || {
   echo "install failed:"; tail -20 /tmp/_install.log; exit 1;
 }
+# NOTE: launch fail with stderr containing all 3 keywords:
+#   "was not, or could not be, unlocked" + "FBSOpenApplicationServiceErrorDomain" + "Locked"
+# is NOT a real error — install itself succeeded, only launch was blocked by lock screen.
+# See .claude/skills/ios-install/SKILL.md §4 for triage rules + Mac TTS notify path.
 xcrun devicectl device process launch --device "$DEVICE_ID" "$BUNDLE_ID" --terminate-existing > /tmp/_launch.log 2>&1 || {
   echo "launch failed:"; tail -20 /tmp/_launch.log; exit 1;
 }
