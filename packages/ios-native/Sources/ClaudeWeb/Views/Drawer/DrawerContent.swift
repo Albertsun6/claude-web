@@ -49,11 +49,12 @@ struct DrawerContent: View {
                     .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showHarnessBoard) {
-                HarnessBoardView(
-                    projectId: settings.cwd,
-                    cwd: settings.cwd
-                )
-                .presentationDragIndicator(.visible)
+                // Use the server-side project UUID so harness FK constraints pass.
+                // Fall back to cwd string when the project isn't registered yet.
+                let cwd = settings.cwd
+                let projectId = registry.project(forCwd: cwd)?.id ?? cwd
+                HarnessBoardView(projectId: projectId, cwd: cwd)
+                    .presentationDragIndicator(.visible)
             }
             .navigationDestination(isPresented: $showQuickPicker) {
                 DirectoryPicker(initialPath: settings.cwd) { picked in

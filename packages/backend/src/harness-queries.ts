@@ -28,10 +28,11 @@ export function ensureHarnessProject(db: Database.Database, projectId: string, c
   const effectiveCwd = cwd ?? projectId;
   const name = effectiveCwd.split("/").pop() ?? effectiveCwd;
   const worktreeRoot = effectiveCwd + "/.claude-worktrees";
+  // Two possible conflicts: id PK or cwd UNIQUE.
+  // INSERT OR IGNORE handles both — if either constraint fires, skip silently.
   db.prepare(`
-    INSERT INTO harness_project(id, cwd, name, worktree_root, harness_enabled, created_at)
+    INSERT OR IGNORE INTO harness_project(id, cwd, name, worktree_root, harness_enabled, created_at)
     VALUES(?, ?, ?, ?, 1, ?)
-    ON CONFLICT(id) DO NOTHING
   `).run(projectId, effectiveCwd, name, worktreeRoot, Date.now());
 }
 

@@ -143,7 +143,12 @@ final class HarnessAPI {
     }
 
     private func request(method: String, path: String) -> URLRequest {
-        let url = baseURL().appendingPathComponent(path)
+        // Use string concatenation so query params don't get percent-encoded
+        // by appendingPathComponent (which encodes "?" and "=").
+        let base = baseURL().absoluteString.hasSuffix("/")
+            ? baseURL().absoluteString
+            : baseURL().absoluteString + "/"
+        let url = URL(string: base + path)!
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.timeoutInterval = 8
