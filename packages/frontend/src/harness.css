@@ -1,0 +1,295 @@
+/* Harness M1 styles */
+
+/* Main layout */
+.main.harness-active {
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.harness-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+  font-size: 13px;
+  color: var(--text, #e5e5e5);
+}
+
+.harness-col {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--border, #333);
+}
+.harness-col:last-child { border-right: none; }
+
+.harness-col-left  { width: 240px; min-width: 180px; flex-shrink: 0; }
+.harness-col-center { flex: 1; overflow-y: auto; }
+.harness-col-right  { width: 260px; min-width: 200px; flex-shrink: 0; }
+
+/* Error banner */
+.harness-error {
+  background: #c62828;
+  color: #fff;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Empty / loading states */
+.harness-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-dim, #888);
+  font-size: 13px;
+  padding: 24px;
+  text-align: center;
+}
+.harness-empty-hint {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-dim, #888);
+}
+.harness-loading {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-dim, #888);
+}
+
+/* Inline forms */
+.harness-inline-form {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+}
+.harness-inline-form input {
+  flex: 1;
+  background: var(--bg2, #1e1e1e);
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  color: var(--text, #e5e5e5);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.harness-inline-form button {
+  background: var(--accent, #3d8ef8);
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+.harness-inline-form button:last-child {
+  background: transparent;
+  border: 1px solid var(--border, #444);
+  color: var(--text-dim, #888);
+}
+
+.harness-icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim, #888);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.harness-icon-btn:hover { color: var(--text, #e5e5e5); }
+
+.harness-btn-primary {
+  background: var(--accent, #3d8ef8);
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 12px;
+}
+.harness-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- InitiativeTree ---------- */
+.initiative-tree {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  height: 100%;
+}
+.initiative-tree-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim, #888);
+  border-bottom: 1px solid var(--border, #333);
+  flex-shrink: 0;
+}
+
+.initiative-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.initiative-row:hover { background: var(--hover, rgba(255,255,255,0.05)); }
+.initiative-row.selected { background: var(--accent-muted, rgba(61,142,248,0.15)); }
+
+.initiative-status { font-size: 14px; flex-shrink: 0; }
+.initiative-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.issue-list {
+  padding-left: 12px;
+  border-left: 2px solid var(--accent-muted, rgba(61,142,248,0.3));
+  margin-left: 16px;
+}
+.issue-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.issue-row:hover { background: var(--hover, rgba(255,255,255,0.05)); }
+.issue-row.selected { background: var(--accent-muted, rgba(61,142,248,0.15)); }
+.issue-status { font-size: 12px; flex-shrink: 0; }
+.issue-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.issue-priority {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.priority-low    { background: #37474f; color: #90a4ae; }
+.priority-normal { background: #1565c0; color: #90caf9; }
+.priority-high   { background: #e65100; color: #ffcc80; }
+.priority-critical { background: #b71c1c; color: #ef9a9a; }
+
+.harness-add-issue-btn {
+  background: none;
+  border: 1px dashed var(--border, #444);
+  border-radius: 4px;
+  color: var(--text-dim, #888);
+  cursor: pointer;
+  font-size: 11px;
+  margin: 4px 4px 8px;
+  padding: 4px 8px;
+  width: calc(100% - 8px);
+}
+.harness-add-issue-btn:hover { border-color: var(--accent, #3d8ef8); color: var(--accent, #3d8ef8); }
+
+/* ---------- StageBoard ---------- */
+.stage-board {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 8px;
+}
+.stage-board-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border, #333);
+}
+.stage-board-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.stage-board-meta { font-size: 11px; color: var(--text-dim, #888); }
+
+.stage-list { display: flex; flex-direction: column; gap: 6px; }
+
+.stage-card {
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--bg2, #1e1e1e);
+}
+.stage-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.stage-weight { font-size: 14px; }
+.stage-kind { font-size: 13px; font-weight: 600; flex: 1; }
+.stage-status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.stage-card-meta { font-size: 11px; color: var(--text-dim, #888); margin-bottom: 6px; }
+
+.stage-transitions { display: flex; gap: 6px; flex-wrap: wrap; }
+.stage-transition-btn {
+  background: none;
+  border: 1px solid;
+  border-radius: 4px;
+  color: var(--text, #e5e5e5);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+.stage-transition-btn:hover { opacity: 0.8; }
+
+.stage-add-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.stage-add-row select {
+  flex: 1;
+  background: var(--bg2, #1e1e1e);
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  color: var(--text, #e5e5e5);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+/* ---------- Run panel stub ---------- */
+.harness-runpanel-stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+  color: var(--text-dim, #888);
+  font-size: 13px;
+}
+.harness-stub-badge {
+  background: var(--accent-muted, rgba(61,142,248,0.2));
+  border: 1px solid var(--accent, #3d8ef8);
+  border-radius: 4px;
+  color: var(--accent, #3d8ef8);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+}
+
+/* Topbar active state for 🔬 button */
+.topbar .icon-btn.active {
+  background: var(--accent-muted, rgba(61,142,248,0.2));
+  border-radius: 4px;
+}

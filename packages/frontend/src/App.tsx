@@ -19,6 +19,7 @@ import { Resizer } from "./components/Resizer";
 import { CallMode } from "./components/CallMode";
 import { VoiceProvider, useVoiceCtx } from "./hooks/VoiceContext";
 import { useWakeLock } from "./hooks/useWakeLock";
+import { HarnessPage } from "./components/harness/HarnessPage";
 
 // Heavy: CodeMirror is ~250KB. Lazy-load when files panel actually opens.
 const FilesPanel = lazy(() => import("./components/FilesPanel").then((m) => ({ default: m.FilesPanel })));
@@ -93,6 +94,7 @@ function AppInner() {
   const [drawer, setDrawer] = useState<DrawerSide>(null);
   const [callMode, setCallMode] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [harnessMode, setHarnessMode] = useState(false);
   const voice = useVoiceCtx();
   // keep screen awake during a hands-free conversation
   useWakeLock(voice.conversationMode || callMode);
@@ -306,6 +308,14 @@ function AppInner() {
           ☰
         </button>
         <div className="topbar-title">{session?.name ?? "claude-web"}</div>
+        <button
+          className={`icon-btn${harnessMode ? " active" : ""}`}
+          onClick={() => setHarnessMode((v) => !v)}
+          aria-label="harness board"
+          title={harnessMode ? "返回聊天" : "Harness 看板"}
+        >
+          🔬
+        </button>
         <button className="icon-btn" onClick={() => setDrawer(drawer === "right" ? null : "right")} aria-label="files">
           📁
         </button>
@@ -317,13 +327,19 @@ function AppInner() {
       <aside className="sidebar">{sidebar}</aside>
       <Resizer side="left" initial={sidebarWidth} min={220} max={520} onChange={setSidebarWidth} />
 
-      <main className="main">
-        <ProjectTabs />
-        <ClaudeMdBanner />
-        <MessageStream />
-        <InputBox onVoiceTranscript={handleVoiceTranscript} />
-        <StatusBar />
-        <FilePreviewPane />
+      <main className={`main${harnessMode ? " harness-active" : ""}`}>
+        {harnessMode ? (
+          <HarnessPage />
+        ) : (
+          <>
+            <ProjectTabs />
+            <ClaudeMdBanner />
+            <MessageStream />
+            <InputBox onVoiceTranscript={handleVoiceTranscript} />
+            <StatusBar />
+            <FilePreviewPane />
+          </>
+        )}
       </main>
 
       <Resizer side="right" initial={rightbarWidth} min={240} max={720} onChange={setRightbarWidth} />

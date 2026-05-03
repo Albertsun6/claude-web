@@ -30,6 +30,8 @@ import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
 import { harnessConfigRouter } from "./routes/harness-config.js";
 import { harnessConfigEvents } from "./harness-config.js";
+import { buildHarnessRouter } from "./routes/harness.js";
+import { openHarnessDb } from "./harness-store.js";
 import { worktreesRouter, workRouter } from "./routes/worktrees.js";
 import { buildNotificationHub, type NotificationContext, type SessionEndReason } from "./notifications/index.js";
 import {
@@ -98,6 +100,24 @@ app.route("/api/help", helpRouter);
 app.route("/api/harness/config", harnessConfigRouter);
 app.route("/api/worktrees", worktreesRouter);
 app.route("/api/work", workRouter);
+
+// Harness M1: open SQLite DB + mount CRUD routes.
+// HARNESS_DISABLED=1 skips DB init and returns 503 for all /api/harness/* routes
+// except /api/harness/config (already mounted above).
+if (!process.env.HARNESS_DISABLED) {
+  try {
+    const harnessDb = openHarnessDb();
+    app.route("/api/harness", buildHarnessRouter(harnessDb.db));
+    console.log(`[harness] SQLite ready (schema v${harnessDb.schemaVersion})`);
+  } catch (err) {
+    console.error("[harness] DB init failed — harness routes unavailable:", err);
+  }
+} else {
+  app.all("/api/harness/*", (c) => {
+    // /api/harness/config is already handled above; only CRUD routes land here.
+    return c.json({ ok: false, error: "harness disabled (HARNESS_DISABLED=1)" }, 503);
+  });
+}
 
 // Notification hub: builds Server酱 / future channels from settings.
 // Returns NoOpHub if no channels configured.
