@@ -74,6 +74,8 @@ fsRouter.get("/tree", async (c) => {
   for (const d of dirents) {
     if (!showHidden && d.name.startsWith(".")) continue;
     if (!showNodeModules && d.name === "node_modules") continue;
+    // Always hide claude-web's worktree storage from file tree (no toggle).
+    if (d.name === ".claude-worktrees") continue;
 
     const isDir = d.isDirectory();
     const isFile = d.isFile();
