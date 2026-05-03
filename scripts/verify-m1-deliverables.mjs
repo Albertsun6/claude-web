@@ -48,6 +48,10 @@ const DELIVERABLES = [
   // 方法论
   { path: "methodologies/00-discovery.md",                           contract: "methodology",    required: true },
   { path: "methodologies/01-spec.md",                                contract: "methodology",    required: true },
+
+  // Review Mechanism v2 (2026-05-03)
+  { path: "docs/proposals/REVIEW_MECHANISM_V2.md",                   contract: "review-v2",      required: true },
+  { path: "scripts/run-debate-phase.sh",                             contract: "review-v2",      required: true },
 ];
 
 let missing = 0;

@@ -11,15 +11,28 @@ description: Independent cross-reviewer for harness contracts, designs, and patc
 
 ---
 
+## 评审三层（Review Mechanism v2，2026-05-03 起）
+
+| 层 | 输入 | 输出 | 独立性 |
+|---|---|---|---|
+| **phase 1 评审** Review | 仅 artifact + 本 SKILL prompt + LEARNINGS.md | verdict.md（5 lens + numeric score 段） | 互不可见，fresh context |
+| **phase 2 辩论** Debate | artifact + own Round 1 verdict + sibling Round 1 verdict（**不读 author counter**） | react verdict.md（每条 sibling finding 四选一表态） | 互可见，但不复用对话历史 |
+| **phase 3 裁决** Arbitration | 全部 verdicts + react verdicts + author counter | applied fixes + REVIEW_LOG 矩阵 | author 草拟 → 用户终审 |
+
+详见 [docs/proposals/REVIEW_MECHANISM_V2.md](../../../docs/proposals/REVIEW_MECHANISM_V2.md)。
+
+**OQ1 触发规则**：M-1/M0 期一律跑 phase 2；M1+ 触发条件式（详见 v2 §6 OQ1）。
+
 ## Independence Constraints (HARD)
 
 调用本 skill 时**必须**满足：
 
 1. **不读 author 的 transcript / 思考流 / 工具调用历史**——只读最终 artifact 文件
-2. **不读 `harness-architecture-review` 的 verdict**——直到 debate 阶段才合并
-3. **不修改任何文件**——纯读 + 出 verdict markdown
-4. **fresh context**——不复用前一轮 review 的对话历史
+2. **phase 1**：不读 `harness-architecture-review` 的 verdict——只读 artifact
+3. **phase 2**：可读 sibling Round 1 verdict + own Round 1 verdict + artifact；**不读** author counter / 4 档分类草案；**不复用对话历史 / transcript**（fresh context = 不继承前一轮 turn，但允许读本轮所有 reviewer verdict 文件）
+4. **不修改任何文件**——纯读 + 出 verdict markdown
 5. **不读 LEARNINGS.md 之前的对话**——只读 LEARNINGS.md 文件本身（学过的规则）
+6. **phase 2 react verdict 硬约束**：每条 sibling finding 必须四选一：`agree` / `disagree-with-evidence` / `refine` / `not-reviewed-with-reason`。**至少 1 条** disagree 或 refine（全 agree 自动 escalate "phase 2 信号弱"）。撤回自己 Round 1 verdict 必须给反例（具体 sibling 证据 + 自己原 verdict 失误点）
 
 违反任一条 → verdict 失效。
 

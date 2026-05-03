@@ -2,26 +2,55 @@
 
 > **用途**：harness 各契约 / 设计 / 方法论的评审历史。每轮评审追加一段，**不删除**历史。
 >
-> **流程**：每个待审 artifact 由 2 个独立 reviewer 出 verdict，作者跑 debate-review 合并发现，用户拍板放行 / 返工。
->
-> **状态**：M-1 启动期建立（2026-05-03）。
+> **状态**：M-1 启动期建立（2026-05-03）。Review Mechanism v2 升级 2026-05-03。
+
+## 评审机制版本
+
+- **v1**（2026-05-03 之前）：phase 1 独立评审 + author solo arbitration（合并 phase 2 + 3）
+- **v2**（2026-05-03 起）：phase 1 独立评审 + **phase 2 cross-pollinate**（reviewer 互看互怼）+ phase 3 author 草拟 + 用户终审。M3+ 加 Synthesizer 时升级为 v3
+- 详见 [docs/proposals/REVIEW_MECHANISM_V2.md](proposals/REVIEW_MECHANISM_V2.md)
+
+**v1 期已 ship 的 4 个 round**（详见下面 Round 1 / Round 2 / contract-2 / contract-3-4-method）：**按 v1 跑，无 phase 2 cross-pollinate verdict**。M3+ Synthesizer 上线后允许在新 retrospective 中标记 `M3+ re-arbitrated`，形成 audit trail。**不回填**已有 round 的 phase 2 verdict（伪造历史）。
+
+**v2 期新 round 强制三段格式**：phase 1 / phase 2 / phase 3 verdict + matrix。
 
 ---
 
-## 评审机制元配置
+## 评审机制元配置（v2）
 
-| Reviewer | 角色 | 视角维度 | 实现 | 模型 |
+| Reviewer / 角色 | 评审三层 | 视角维度 | 实现 | 模型 |
 |---|---|---|---|---|
-| `harness-architecture-review` | 主评审 | 架构可行性 / 里程碑裁剪 / 垂直贴谱性 / 风险遗漏 | Claude (Agent) | claude-opus-4-7 |
-| `reviewer-cross` | 独立第二视角 | 正确性 / 跨端对齐 / 不可逆 / 安全 / 简化 | cursor-agent CLI（plan 模式） | gpt-5.5-medium |
-| `debate-review` (作者跑) | 合并发现 | 4 档判断（接受 / 部分接受 / 反驳 / 挂起） | skill in current context | claude-opus-4-7 |
-| 用户拍板 | 终审 | blocker rebuttal 必须显式批准；分歧升级人审 | 人 | — |
+| `harness-architecture-review` | phase 1 + phase 2 react | 架构可行性 / 里程碑裁剪 / 垂直贴谱性 / 风险遗漏 | Agent (Claude) | claude-opus-4-7 |
+| `reviewer-cross` | phase 1 + phase 2 react | 正确性 / 跨端对齐 / 不可逆 / 安全 / 简化 | cursor-agent CLI（plan 模式） | gpt-5.5-medium |
+| `debate-review` SKILL（作者跑） | phase 3 裁决 | 4 档判断（接受 / 部分接受 / 反驳 / 挂起） | skill in current context | claude-opus-4-7 |
+| 用户拍板 | phase 3 终审 | blocker rebuttal 必须显式批准；分歧升级人审 | 人 | — |
 
-**独立性硬约束**（每位 reviewer 必须满足）：
-1. 不读 author 的 transcript / 思考流 / 工具调用历史
-2. 不读其他 reviewer 的 verdict（直到 debate 阶段才合并）
-3. 不修改任何文件
-4. fresh context（不复用前一轮 review 对话历史）
+**phase 1 → phase 2 → phase 3 流程**：
+1. phase 1：reviewer 各自隔离评 artifact（互不见）→ verdicts
+2. phase 2：cursor-agent 跑 cross + Agent 跑 arch，**互看 sibling verdict**，按 [PHASE_2_PROMPT.md](~/.claude/skills/debate-review/PHASE_2_PROMPT.md) 四选一表态 + 至少 1 disagree/refine 硬约束 → react verdicts
+3. phase 3：author 用 [debate-review SKILL](~/.claude/skills/debate-review/SKILL.md) 综合 phase 1+2 → 4 档矩阵 → applied fixes → 用户终审
+
+**独立性硬约束（v2 dogfood Round cross M1 修复）**：
+- phase 1：reviewer **不读** author transcript / 思考流 / 工具调用历史；reviewer 互不可见
+- phase 2：reviewer **不读** author counter / 4 档分类草案；只读 own + sibling Round 1 verdict + artifact
+- phase 3：author **必须读取** phase 1 + phase 2 全部 verdict（[debate-review SKILL.md](~/.claude/skills/debate-review/SKILL.md) phase 3 输入合约）；缺任一 react verdict 不能裁决（v2 dogfood Round arch react N1 修复）
+
+**M1+ phase 2 跳过日志格式**（v2 dogfood Round cross M3 + arch refine 修复）：
+- 当 OQ1 触发条件不满足时（M1+ 期），允许跳过 phase 2，但 REVIEW_LOG 必须记录：
+
+```
+phase 2: skipped
+trigger check:
+  - blocker_mismatch: false (arch BLOCKERs=[B1] vs cross BLOCKERs=[B1] same)
+  - high_risk_label: none (labels=[refactor, docs])
+  - irreversible: false
+  - priority: normal
+source-of-truth: harness.db.issue.id=iss-XXX (priority=normal, labels=...)
+decided_by: author / harness-runtime (M2 review-orchestrator)
+decided_at: <ISO>
+```
+
+不允许漏写"未触发原因"。否则 audit 无法区分"漏跑"vs"合法跳过"。
 
 **Verdict 等级**：
 - **BLOCKER**：必须先修才能放行；如需绕开，需 author rebuttal + 用户显式 approve
@@ -52,7 +81,7 @@
 - [contract-1-2-arch-2026-05-03-0209.md](reviews/contract-1-2-arch-2026-05-03-0209.md) — harness-architecture-review（claude-opus-4-7，2 BLOCKER + 5 MAJOR + 4 MINOR）
 - [contract-1-2-cross-2026-05-03-0207.md](reviews/contract-1-2-cross-2026-05-03-0207.md) — reviewer-cross（gpt-5.5-medium，1 BLOCKER + 7 MAJOR + 5 MINOR）
 
-#### 辩论矩阵
+#### 裁决矩阵（v1，无 phase 2 react verdict）
 
 | # | 主张（来源） | 严重度 | 判断 | 处理 |
 |---|---|---|---|---|
@@ -152,7 +181,7 @@
 - [contract-2-arch-2026-05-03-0241.md](reviews/contract-2-arch-2026-05-03-0241.md) — claude-opus-4-7（1 BLOCKER + 4 MAJOR + 4 MINOR）
 - [contract-2-cross-2026-05-03-0239.md](reviews/contract-2-cross-2026-05-03-0239.md) — gpt-5.5-medium（0 BLOCKER + 3 MAJOR + 3 MINOR）
 
-#### 辩论矩阵
+#### 裁决矩阵（v1，无 phase 2 react verdict）
 
 | # | 主张（来源） | 严重度 | 判断 | 处理 |
 |---|---|---|---|---|
@@ -197,7 +226,7 @@
 - [contract-3-4-method-cross-2026-05-03-0253.md](reviews/contract-3-4-method-cross-2026-05-03-0253.md) — gpt-5.5-medium（**2 BLOCKER + 5 MAJOR + 4 MINOR**）
 - [contract-3-4-method-arch-2026-05-03-RETRY.md](reviews/contract-3-4-method-arch-2026-05-03-RETRY.md) — claude-opus-4-7（0 BLOCKER + 4 MAJOR + 5 MINOR；首次 stream 超时，retry 成功）
 
-#### 辩论矩阵（合并 cross + arch 共 18 项独立 finding）
+#### 裁决矩阵（v1，无 phase 2 react verdict；合并 cross + arch 共 18 项独立 finding）
 
 | # | 主张（来源） | 严重度 | 判断 | 处理 |
 |---|---|---|---|---|
@@ -233,6 +262,60 @@
 #### Round 1 用户拍板状态
 
 ✅ **作者自动收敛**：14 ✅ 接受全部已落地（test 全绿 + verify 23/23），3 🟡 挂起项写明边界 + 触发条件 + 时间窗口，0 still-disagree。**无需用户介入**，M-1 4 契约 + 2 方法论全部完成。
+
+---
+
+### v2 dogfood Round — Review Mechanism v2 自验收（2026-05-03）
+
+**Artifact**：[docs/proposals/REVIEW_MECHANISM_V2.md](proposals/REVIEW_MECHANISM_V2.md)（v2.0 修订版，已吸收 Round 1 的 12 项 finding）
+
+**触发**：v2.0 设计文档自验收 dogfood，验证三层流程能产生实质 phase 2 信号。
+
+#### Phase 1 verdicts（独立隔离）
+
+- arch: [review-mech-v2-revised-arch-2026-05-03-1120.md](reviews/review-mech-v2-revised-arch-2026-05-03-1120.md) — claude-opus-4-7（**0 BLOCKER + 2 MAJOR + 3 MINOR**：v1 12 项全 absorb + 引入 5 项新 finding）
+- cross: [review-mech-v2-revised-cross-2026-05-03-1119.md](reviews/review-mech-v2-revised-cross-2026-05-03-1119.md) — gpt-5.5-medium（**1 BLOCKER + 3 MAJOR + 3 MINOR**：§3 author counter 矛盾 / REVIEW_LOG 硬约束缺 / §8 弱化 / M1+ skip 无日志格式）
+
+#### Phase 2 react verdicts（cross-pollinate）
+
+- arch react（看 cross verdict）: [review-mech-v2-revised-arch-react-2026-05-03-1135.md](reviews/review-mech-v2-revised-arch-react-2026-05-03-1135.md) — 4 agree / 0 disagree / 3 refine / **2 new findings (N1 N2)**
+- cross react（看 arch verdict）: [review-mech-v2-revised-cross-react-2026-05-03-1125.md](reviews/review-mech-v2-revised-cross-react-2026-05-03-1125.md) — 6 agree / 0 disagree / 5 refine / **2 self-revisions** (B1 BLOCKER → MAJOR) + **1 new finding (N1)**
+
+#### v2 §4 验收（PASS ✅）
+
+- (a) 流程必过：✅ 两份 react verdict 落盘；四选一被遵守；至少 1 disagree/refine 硬约束被遵守（cross 5 refine, arch 3 refine）
+- (b1) ✅ cross 撤回了 phase 1 BLOCKER B1 严重度（→ MAJOR），附反例（"sibling 指出脚本实际不读 author counter"）
+- (b2) ✅ phase 2 浮出 3 new findings（arch react N1+N2 / cross react N1）—— phase 1 双盲都没提
+
+**结论**：v2 phase 2 cross-pollinate 真产生实质信号，不是仪式化。
+
+#### Phase 3 裁决矩阵（合计 phase 1 + phase 2 共 14 项 finding）
+
+| # | 主张（来源） | 严重度 | 判断 | 处理 |
+|---|---|---|---|---|
+| 1 | §3 成本表说"读 sibling + author counter"，与 §1.1/§1.2 矛盾（cross B1 → 自降 MAJOR）| MAJOR | ✅ 接受 | §3 移除 author counter 引用 |
+| 2 | scripts/run-debate-phase.sh spawn-injection 风险（arch M1） | MAJOR | ⚠️ 部分接受 | M2 review-orchestrator 自动化时彻底解决；当前 stub 文档约束 author 严格按模板 spawn arch react，不允许加 contextual hint |
+| 3 | 自验收 dogfood 用本提案 = author 既写又裁，反向诱导 (b1)/(b2)（arch M2）| MAJOR | ⚠️ 部分接受 | 本轮 dogfood 已成既定事实；但实际 phase 2 产 1 self-revision + 3 new findings + 10 refine 远超门槛，证明非反向诱导。下次 dogfood 用第三方 artifact（M0 第一个真 contract）验证 |
+| 4 | REVIEW_LOG 独立性硬约束缺 phase 2 禁读 author counter（cross M1） | MAJOR | ✅ 接受 | REVIEW_LOG 头部加显式硬约束三层 |
+| 5 | §8 完工 checklist 弱化 §4 双门槛（cross M2） | MAJOR | ✅ 接受 | §8 与 §4 完全一致 |
+| 6 | M1+ phase 2 skip 无日志格式（cross M3 → arch refine 加 source-of-truth） | MAJOR | ✅ 接受 | REVIEW_LOG 头部加 skip 日志模板（trigger check + source-of-truth 字段） |
+| 7 | phase 3 SKILL 必须 fail-loud 缺任一 react verdict 不能裁决（arch react N1）| MAJOR | ✅ 接受 | debate-review SKILL 加输入合约段；缺文件 → 拒绝裁决 |
+| 8 | phase 2 boundary 单点 enforcement（arch react N2） | MAJOR | ⚠️ 部分接受 | M-1 期作者责任；M2 orchestrator 机器化 |
+| 9 | phase 2 合法性缺机器校验（cross react N1） | MAJOR | 🟡 挂起 | M2 orchestrator 解析 react verdict 校验 stance distribution + M+K≥1 |
+| 10 | §10 历史 4 round 未明列具体名（arch m1） | MINOR | ✅ 接受 | 头部"v1 期已 ship 4 round" 段已列 Round 1 / Round 2 / contract-2 / contract-3-4-method |
+| 11 | OQ1 (c) Issue.priority=high 生效窗口未说（arch m2 + cross refine 扩到所有触发条件 source-of-truth） | MINOR | ✅ 接受 | §6 OQ1 加 "(c) M-1/M0 期 priority 字段无业务数据，M1+ 才生效"；skip 日志强制每条 a/b/c 的 source-of-truth 字段 |
+| 12 | ROADMAP M0/M1 显式妥协项 acceptance 弱（arch m3） | MINOR | 🟡 挂起 | 当前已加段到 ROADMAP M0/M1 退出条件；grep 校验在 verify-m1-deliverables 已加 ROADMAP 文件存在；具体内容 grep 留 M0 准入 ritual |
+| 13 | v1/v2 日期边界不准（cross m1） | MINOR | ⚠️ 部分接受 | 头部已写"v1 ship 前 vs v2 起"，时间戳精确到分要 retroactive 改动量大；当前措辞 OK |
+| 14 | 历史"辩论矩阵"与 v2 phase 3 同名（cross m2） | MINOR | ✅ 接受 | 4 个历史 round 头部全部改名"裁决矩阵（v1，无 phase 2 react verdict）" |
+| 15 | (b1) 价值信号没把"refine 改 fix"算（cross m3 + arch refine：仅"改 fix"算，纯措辞不算） | MINOR | ✅ 接受 | §4 (b1) 扩为"撤回 / 升级 / refine-改 fix"，纯措辞 refine 不算 |
+
+**汇总**：✅ 9 / ⚠️ 4 / 🚫 0 / 🟡 2 → **0 still-disagree → 1 轮收敛**
+
+#### v2 dogfood 用户拍板状态
+
+✅ **作者自动收敛**：所有 ✅ 接受落地（test 全绿 + verify 25/25），4 ⚠️ 部分接受写明边界，2 🟡 挂起到 M2 orchestrator。**无需用户介入**。
+
+**v2 验收 PASS** —— Review Mechanism v2 进入生产用，下一个评审走完整三层流程。
 
 ---
 
