@@ -45,6 +45,7 @@
 		A86805111F9BBB87D5F766B8 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF31E552D528619F13A5B40 /* Settings.swift */; };
 		B6A2546A75572485AB556C82 /* fallback-config.json in Resources */ = {isa = PBXBuildFile; fileRef = 4E6E919BA558154CE8CEECE4 /* fallback-config.json */; };
 		BDF1B6F1B1BAD0C95977B94A /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CF08EE066963DF8D4E840B /* ConversationStore.swift */; };
+		C408C4024E900398248D6FBA /* WorktreeFinalizeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C13D24EEBC5D76849C99436 /* WorktreeFinalizeSheet.swift */; };
 		C5294351B59BB0E0751C492A /* RunRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DE3519D5D4B6BA73D2C4D5D /* RunRouter.swift */; };
 		C9664DF94B985632714B4DF9 /* RecordingHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5FCEE04C05DD4DE2F890DBA /* RecordingHUD.swift */; };
 		CBC22CAD60B6F38CC3E4D28B /* TelemetryDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3CDA99E7C72B2FA85DB71A /* TelemetryDebugView.swift */; };
@@ -109,6 +110,7 @@
 		6B80ADC25852208EBDCC0BA7 /* AtFilePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtFilePicker.swift; sourceTree = "<group>"; };
 		763A49693E0CE52A2C691B3C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7869FC7E7224F973A25D5A07 /* ConversationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModels.swift; sourceTree = "<group>"; };
+		7C13D24EEBC5D76849C99436 /* WorktreeFinalizeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeFinalizeSheet.swift; sourceTree = "<group>"; };
 		7C28BF07613AA8EC64207D2F /* BuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildInfo.swift; sourceTree = "<group>"; };
 		7CAC5820B96A0B62BECEA82D /* ClaudeWeb.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClaudeWeb.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7CC90A35D2B5C0F8ECFFA3D6 /* ContextAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextAPI.swift; sourceTree = "<group>"; };
@@ -261,6 +263,7 @@
 				AF2C287FAD57E3EE4B5AC077 /* PermissionSheet.swift */,
 				F5FCEE04C05DD4DE2F890DBA /* RecordingHUD.swift */,
 				481612632594972A31DFC674 /* RunsDashboardSheet.swift */,
+				7C13D24EEBC5D76849C99436 /* WorktreeFinalizeSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -476,6 +479,7 @@
 				14FF58C0ACCD40C590C4E172 /* VoiceSession.swift in Sources */,
 				D26C4CDFA3EED053DDB5AF93 /* WebSocketClient.swift in Sources */,
 				9BB9D18E1BB7379CA41042D0 /* WorktreeAPI.swift in Sources */,
+				C408C4024E900398248D6FBA /* WorktreeFinalizeSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

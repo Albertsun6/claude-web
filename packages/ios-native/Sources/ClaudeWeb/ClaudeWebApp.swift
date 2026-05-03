@@ -196,6 +196,16 @@ struct ClaudeWebApp: App {
             if settingsRef.completionChimeEnabled {
                 AudioServicesPlaySystemSound(1057)
             }
+            // Stage A: arm worktree finalize sheet if this conversation has a
+            // worktree. Independent of git gate — even no dirty changes, user
+            // may want to push branch / discard. Sheet is shown AFTER GitGate
+            // (ContentView chains them) so user sees status first.
+            if let c = clientRef,
+               let conv = c.conversations[convId],
+               let worktreeId = conv.worktreeId
+            {
+                c.setPendingWorktreeFinalize(convId: convId, worktreeId: worktreeId)
+            }
             guard settingsRef.gitGateEnabled else { return }
             guard let c = clientRef, let api = gitAPIRef else { return }
             Task { @MainActor in

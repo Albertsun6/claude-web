@@ -133,6 +133,34 @@ final class ConversationStore {
         stateByConversation[convId] = s
     }
 
+    var currentPendingWorktreeFinalize: String? {
+        guard let id = currentConversationId else { return nil }
+        return stateByConversation[id]?.pendingWorktreeFinalize
+    }
+
+    func setPendingWorktreeFinalize(convId: String, worktreeId: String) {
+        guard var s = stateByConversation[convId] else { return }
+        s.pendingWorktreeFinalize = worktreeId
+        stateByConversation[convId] = s
+    }
+
+    func clearPendingWorktreeFinalize(convId: String) {
+        guard var s = stateByConversation[convId] else { return }
+        s.pendingWorktreeFinalize = nil
+        stateByConversation[convId] = s
+    }
+
+    /// After backend finalize succeeds, drop the worktreeId from the
+    /// Conversation model — the worktree no longer exists, future sends
+    /// must go to the original cwd. Called from WorktreeFinalizeSheet.
+    func clearWorktreeBinding(convId: String) {
+        guard var conv = conversations[convId] else { return }
+        conv.worktreePath = nil
+        conv.worktreeId = nil
+        conversations[convId] = conv
+        onConversationDirty?(convId)
+    }
+
     /// Total number of in-flight turns across ALL conversations. UI uses this
     /// for the global activity badge on the drawer button.
     var activeRunCount: Int {

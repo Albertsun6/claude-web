@@ -99,6 +99,25 @@ final class BackendClient {
         store.setPendingGitGate(convId: convId, report: report)
     }
 
+    var currentPendingWorktreeFinalize: String? {
+        store.currentPendingWorktreeFinalize
+    }
+
+    func setPendingWorktreeFinalize(convId: String, worktreeId: String) {
+        store.setPendingWorktreeFinalize(convId: convId, worktreeId: worktreeId)
+    }
+
+    func clearPendingWorktreeFinalize(convId: String) {
+        store.clearPendingWorktreeFinalize(convId: convId)
+    }
+
+    /// Drop the worktree binding from a Conversation after finalize succeeds
+    /// (worktree physically removed by backend). Future prompts in this
+    /// conversation will run in the original cwd.
+    func clearWorktreeBinding(convId: String) {
+        store.clearWorktreeBinding(convId: convId)
+    }
+
     func clearPendingGitGate(convId: String) {
         store.clearPendingGitGate(convId: convId)
     }

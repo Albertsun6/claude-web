@@ -59,6 +59,12 @@ struct ConversationChatState: Equatable {
     /// renders a sheet when the conversation is focused; cleared when the user
     /// dismisses it. Survives focus switches by living on per-conversation state.
     var pendingGitGate: GitStatusReport? = nil
+    /// Set after a `sessionEnded(reason: completed)` if the conversation has
+    /// `worktreeId` set (Stage A isolated worktree opt-in). Stores the
+    /// worktreeId so the finalize sheet can re-fetch fresh WorkRecord state.
+    /// Cleared when the user picks merge / push / discard or dismisses.
+    /// Mounted AFTER pendingGitGate so user sees git status before finalize.
+    var pendingWorktreeFinalize: String? = nil
     /// When the current run started. Set in `startTurn`, cleared in
     /// `handleSessionEnded`. Used by the H1 run dashboard for "running for 2m".
     var runStartedAt: Date? = nil

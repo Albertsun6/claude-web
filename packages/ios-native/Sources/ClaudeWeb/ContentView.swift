@@ -207,6 +207,31 @@ struct ContentView: View {
                 .presentationDragIndicator(.visible)
             }
         }
+        // Worktree finalize chained AFTER git gate. Both can be pending; SwiftUI
+        // presents only one .sheet at a time, so git gate goes first (it dismisses
+        // → state updates → this binding's get re-evaluates true → finalize shown).
+        .sheet(isPresented: Binding(
+            get: {
+                client.currentPendingWorktreeFinalize != nil
+                    && client.currentPendingGitGate == nil
+            },
+            set: { newValue in
+                if !newValue, let id = client.currentConversationId {
+                    client.clearPendingWorktreeFinalize(convId: id)
+                }
+            }
+        )) {
+            if let worktreeId = client.currentPendingWorktreeFinalize,
+               let convId = client.currentConversationId
+            {
+                WorktreeFinalizeSheet(
+                    conversationId: convId,
+                    worktreeId: worktreeId
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
     }
 
     private var mainContent: some View {
