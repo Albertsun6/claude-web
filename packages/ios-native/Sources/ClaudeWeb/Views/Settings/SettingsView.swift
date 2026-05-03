@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Environment(TTSPlayer.self) private var tts
     @Environment(Cache.self) private var cache
     @Environment(HeartbeatMonitor.self) private var heartbeat
+    @Environment(HarnessStore.self) private var harnessStore
     @Environment(\.dismiss) private var dismiss
     @State private var draftURL: String = ""
     @State private var draftCwd: String = ""
@@ -124,14 +125,51 @@ struct SettingsView: View {
                 } footer: {
                     Text("如果 backend 启用了 token 认证，粘贴这里。WS 用 ?token= 拼，HTTP 用 Bearer。改完会自动重连。")
                 }
-                Section("模型") {
+                Section {
+                    // M0 modelList Round: server-driven model list from HarnessStore.
+                    // Filter enabled, but if current selection is in disabled list keep it
+                    // displayed with "已停用" annotation (phase 3 cross m1 + arch MAJOR-4(3)).
+                    let availableModels = harnessStore.config.modelList
+                    let enabledIds = Set(availableModels.filter { $0.enabled }.map { $0.id })
+                    let currentSelectionDisabled = !enabledIds.contains(s.model)
+                        && availableModels.contains { $0.id == s.model }
+
                     Picker("模型", selection: $s.model) {
-                        Text("Haiku 4.5（快、便宜，默认）").tag("claude-haiku-4-5")
-                        Text("Sonnet 4.6（平衡）").tag("claude-sonnet-4-6")
-                        Text("Opus 4.7（最强、最贵）").tag("claude-opus-4-7")
+                        ForEach(availableModels.filter { $0.enabled || $0.id == s.model }, id: \.id) { m in
+                            HStack {
+                                Text(m.displayName)
+                                if !m.enabled {
+                                    Text("已停用")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let desc = m.description {
+                                    Spacer()
+                                    Text(desc)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .tag(m.id)
+                        }
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
+
+                    if currentSelectionDisabled {
+                        Text("⚠️ 您当前选择的模型已被服务端停用，切换后不可再选回")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    if harnessStore.isStale {
+                        Text("（离线 / 未连接，使用本地缓存或打包内默认列表）")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                } header: {
+                    Text("模型")
+                } footer: {
+                    Text("模型列表由服务端配置（/api/harness/config）。改服务端 fallback-config.json 重启 backend 后会自动同步。")
                 }
                 Section {
                     Picker("权限模式", selection: $draftMode) {

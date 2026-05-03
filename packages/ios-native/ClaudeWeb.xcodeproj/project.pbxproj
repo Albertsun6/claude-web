@@ -39,8 +39,10 @@
 		951378A0506A5A38CDB9F26D /* GitGateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141B19D309812F72DC751591 /* GitGateSheet.swift */; };
 		9C5CCC80588E51B11C14AA5D /* TranscriptParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13FDDA6FDAA0AB0FB743114 /* TranscriptParser.swift */; };
 		9DAEEFD7C4A2F91D7444BCD0 /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 283735CE8528E94F44599D41 /* TTSPlayer.swift */; };
+		A1FB9C60B4A929E71527F7DA /* HarnessProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEA687523D42FE5BEA84075 /* HarnessProtocol.swift */; };
 		A5117A31C889867986B4E998 /* DirectoryPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4588360C6A81FAB43597D8E /* DirectoryPicker.swift */; };
 		A86805111F9BBB87D5F766B8 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF31E552D528619F13A5B40 /* Settings.swift */; };
+		B6A2546A75572485AB556C82 /* fallback-config.json in Resources */ = {isa = PBXBuildFile; fileRef = 4E6E919BA558154CE8CEECE4 /* fallback-config.json */; };
 		BDF1B6F1B1BAD0C95977B94A /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CF08EE066963DF8D4E840B /* ConversationStore.swift */; };
 		C5294351B59BB0E0751C492A /* RunRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DE3519D5D4B6BA73D2C4D5D /* RunRouter.swift */; };
 		C9664DF94B985632714B4DF9 /* RecordingHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5FCEE04C05DD4DE2F890DBA /* RecordingHUD.swift */; };
@@ -53,10 +55,12 @@
 		DA152D4966DF3D049BCA41C2 /* SessionsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02CBF7C84A20380B2383AD1 /* SessionsAPI.swift */; };
 		DA75273976369895263A106F /* ClaudeWebApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E431C062B9438869B8D6E399 /* ClaudeWebApp.swift */; };
 		E09093E9B0F2E9C3F716B609 /* Cache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8B9B0AC6F920A2B9E8A240 /* Cache.swift */; };
+		ECD2B428AD8FF6405850B49B /* HarnessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40791FB6FE738D6C9A4F7B81 /* HarnessStore.swift */; };
 		ECD39FE8127CCEB3C3630235 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E67AEC4B21826DE8E273887E /* SettingsView.swift */; };
 		ED27D43A57EAFD4C28DF5C36 /* NewConversationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1FACCED35C3A770740F004 /* NewConversationSheet.swift */; };
 		EE6BF701D3746908D0A2DF82 /* ConversationsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E624BC3A86F193896A4424A /* ConversationsSheet.swift */; };
 		F0336354BB84D5D2A5362A95 /* FsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989ACA299187F4EE9220555C /* FsAPI.swift */; };
+		F26EC5ED09ECD1519DA8A3A3 /* HarnessConfigAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DEC4A1A093B16C45CCFA574 /* HarnessConfigAPI.swift */; };
 		F4E960AF9B256452B1E59C84 /* DrawerContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF24044B9AC2AAF0F0243B11 /* DrawerContent.swift */; };
 		F72F1EAEFF34149B7BC359BE /* TitleHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB87B81434281D40E047F081 /* TitleHelper.swift */; };
 		F772B81502ED4246E6B7968E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9AF5FF381485944DDD277DA6 /* Assets.xcassets */; };
@@ -76,9 +80,11 @@
 
 /* Begin PBXFileReference section */
 		03EB85EB534A11AFEBB9A548 /* VoiceSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSession.swift; sourceTree = "<group>"; };
+		0AEA687523D42FE5BEA84075 /* HarnessProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessProtocol.swift; sourceTree = "<group>"; };
 		0DE3519D5D4B6BA73D2C4D5D /* RunRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunRouter.swift; sourceTree = "<group>"; };
 		141B19D309812F72DC751591 /* GitGateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitGateSheet.swift; sourceTree = "<group>"; };
 		1513F54E80C419639B1D1705 /* HistorySessionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySessionRow.swift; sourceTree = "<group>"; };
+		1DEC4A1A093B16C45CCFA574 /* HarnessConfigAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessConfigAPI.swift; sourceTree = "<group>"; };
 		1F8B9B0AC6F920A2B9E8A240 /* Cache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cache.swift; sourceTree = "<group>"; };
 		214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
 		283735CE8528E94F44599D41 /* TTSPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSPlayer.swift; sourceTree = "<group>"; };
@@ -86,9 +92,11 @@
 		350011A28BB99092BDE97C46 /* HealthCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheckView.swift; sourceTree = "<group>"; };
 		3A8B576D16DDD305D721AA33 /* InboxCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxCaptureSheet.swift; sourceTree = "<group>"; };
 		3E624BC3A86F193896A4424A /* ConversationsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsSheet.swift; sourceTree = "<group>"; };
+		40791FB6FE738D6C9A4F7B81 /* HarnessStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessStore.swift; sourceTree = "<group>"; };
 		42AA631E277EDCEFDF480163 /* InputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBar.swift; sourceTree = "<group>"; };
 		45BC150255A000C4B594FB34 /* Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Telemetry.swift; sourceTree = "<group>"; };
 		481612632594972A31DFC674 /* RunsDashboardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunsDashboardSheet.swift; sourceTree = "<group>"; };
+		4E6E919BA558154CE8CEECE4 /* fallback-config.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "fallback-config.json"; sourceTree = "<group>"; };
 		4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendClient.swift; sourceTree = "<group>"; };
 		55DF4DA3445654EBE1E3F69B /* ConversationNamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNamer.swift; sourceTree = "<group>"; };
 		592C33B52949B8FC89528D76 /* ProjectRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRegistry.swift; sourceTree = "<group>"; };
@@ -176,6 +184,7 @@
 			isa = PBXGroup;
 			children = (
 				2819E4E7D4A6B0F8DA0B3574 /* Conversations */,
+				66EBF22C00E110E80CE3BABA /* Harness */,
 				F2E2E57C82386E7E0BADE981 /* Models */,
 				60865AB66DC4C76EE13C09E6 /* Networking */,
 				6D9E9D6C8B524E849E6C129F /* Views */,
@@ -190,6 +199,8 @@
 				B4588360C6A81FAB43597D8E /* DirectoryPicker.swift */,
 				989ACA299187F4EE9220555C /* FsAPI.swift */,
 				B1938FAC36CF48013C9205F2 /* GitAPI.swift */,
+				1DEC4A1A093B16C45CCFA574 /* HarnessConfigAPI.swift */,
+				0AEA687523D42FE5BEA84075 /* HarnessProtocol.swift */,
 				5D56E3A8DF4DCA98024F7B77 /* HeartbeatMonitor.swift */,
 				BDC54C524ACD7548486C9F64 /* InboxAPI.swift */,
 				763A49693E0CE52A2C691B3C /* Info.plist */,
@@ -218,6 +229,14 @@
 				BDD24330D2EB3BF5B5938822 /* WebSocketClient.swift */,
 			);
 			path = Networking;
+			sourceTree = "<group>";
+		};
+		66EBF22C00E110E80CE3BABA /* Harness */ = {
+			isa = PBXGroup;
+			children = (
+				40791FB6FE738D6C9A4F7B81 /* HarnessStore.swift */,
+			);
+			path = Harness;
 			sourceTree = "<group>";
 		};
 		6D9E9D6C8B524E849E6C129F /* Views */ = {
@@ -262,6 +281,15 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		CB50C8E7CB022AB193A067F3 /* harness */ = {
+			isa = PBXGroup;
+			children = (
+				4E6E919BA558154CE8CEECE4 /* fallback-config.json */,
+			);
+			name = harness;
+			path = ../shared/fixtures/harness;
+			sourceTree = "<group>";
+		};
 		D1E3B38375A4390DE63C796C /* Chat */ = {
 			isa = PBXGroup;
 			children = (
@@ -277,6 +305,7 @@
 			children = (
 				3BE25D6B07CC3925258BCA3F /* ClaudeWeb */,
 				372B5A9E9C6CE18DB84AEF27 /* ClaudeWebTests */,
+				CB50C8E7CB022AB193A067F3 /* harness */,
 				A0D0852916E74685EF8CFADB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -377,6 +406,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F772B81502ED4246E6B7968E /* Assets.xcassets in Resources */,
+				B6A2546A75572485AB556C82 /* fallback-config.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,6 +438,9 @@
 				767A29E33E102EBAAB5F03FB /* GitAPI.swift in Sources */,
 				951378A0506A5A38CDB9F26D /* GitGateSheet.swift in Sources */,
 				0502184B06DB8D77B2EB28BF /* GitModels.swift in Sources */,
+				F26EC5ED09ECD1519DA8A3A3 /* HarnessConfigAPI.swift in Sources */,
+				A1FB9C60B4A929E71527F7DA /* HarnessProtocol.swift in Sources */,
+				ECD2B428AD8FF6405850B49B /* HarnessStore.swift in Sources */,
 				D236A7D09D60FE98BD6705D2 /* HealthCheckView.swift in Sources */,
 				192A2008297FE17F8C99BCFE /* HeartbeatMonitor.swift in Sources */,
 				2107FA880BBCCF5BBB1CE131 /* HelpView.swift in Sources */,

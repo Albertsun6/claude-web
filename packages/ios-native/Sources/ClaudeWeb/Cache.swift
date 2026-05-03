@@ -43,7 +43,30 @@ final class Cache {
         self.projectsPath = cacheRoot.appendingPathComponent("projects.json")
         self.conversationsPath = cacheRoot.appendingPathComponent("conversations.json")
         self.sessionsDir = cacheRoot.appendingPathComponent("sessions")
+        self.harnessConfigPath = cacheRoot.appendingPathComponent("harness-config.json")
         try? FileManager.default.createDirectory(at: sessionsDir, withIntermediateDirectories: true)
+    }
+
+    private let harnessConfigPath: URL
+
+    // MARK: - Harness config snapshot (M0 modelList Round)
+
+    /// Load cached harness config, or nil if no cache. Used as last-resort
+    /// fallback after Bundle fallback (HarnessStore handles the priority).
+    func loadHarnessConfig() -> HarnessConfig? {
+        guard let data = try? Data(contentsOf: harnessConfigPath) else { return nil }
+        return try? JSONDecoder().decode(HarnessConfig.self, from: data)
+    }
+
+    func saveHarnessConfig(_ config: HarnessConfig) {
+        guard let data = try? JSONEncoder().encode(config) else { return }
+        let tmp = harnessConfigPath.appendingPathExtension("tmp")
+        do {
+            try data.write(to: tmp, options: .atomic)
+            _ = try FileManager.default.replaceItemAt(harnessConfigPath, withItemAt: tmp)
+        } catch {
+            telemetry?.warn("cache.harness_config.save_failed", props: ["err": String(describing: error)])
+        }
     }
 
     // MARK: - Projects snapshot

@@ -1,0 +1,13 @@
+{
+  "id": "claude-sonnet-4-6",
+  "displayName": "Sonnet 4.6",
+  "description": "通用 / CRUD / 文档",
+  "capabilities": {
+    "supportsThinking": false,
+    "supportsLongContext": false,
+    "contextWindow": 200000
+  },
+  "recommendedFor": ["coding", "docs"],
+  "isDefault": true,
+  "enabled": true
+}

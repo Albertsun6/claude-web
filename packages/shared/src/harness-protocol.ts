@@ -366,6 +366,50 @@ export const HarnessEventSchema = z.discriminatedUnion("kind", [
 export type HarnessEvent = z.infer<typeof HarnessEventSchema>;
 
 // ============================================================================
+// M0 modelList Round —— /api/harness/config 第一契约
+// ============================================================================
+// 详见 docs/proposals/M0_HARNESS_CONFIG_MODELLIST.md
+// Phase 3 全 18 项 finding 落地后 v1.1 修订版
+
+export const ModelCapabilitiesSchema = z.object({
+  supportsThinking: z.boolean(),
+  supportsLongContext: z.boolean(),
+  contextWindow: z.number().int().positive(),
+});
+export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;
+
+export const ModelListItemSchema = z.object({
+  id: z.string(),                                    // opaque stable string，推荐 <type>-<ULID>
+  displayName: z.string(),
+  description: z.string().optional(),
+  capabilities: ModelCapabilitiesSchema,
+  recommendedFor: z.array(z.string()),               // hint-only, 未知值 graceful skip
+  isDefault: z.boolean(),                            // exactly-one constraint at HarnessConfig level
+  enabled: z.boolean(),                              // false → UI 隐藏；当前 selection 已 disabled 保留 + 标签
+});
+export type ModelListItem = z.infer<typeof ModelListItemSchema>;
+
+export const HarnessConfigSchema = z
+  .object({
+    protocolVersion: z.string(),                     // "1.x"; minor bump 加新字段，老 client graceful skip
+    minClientVersion: z.string(),                    // iOS compareVersion 自查
+    etag: z.string(),                                // computeEtag(rest) "sha256:<16 hex>"
+    modelList: z.array(ModelListItemSchema),
+  })
+  .superRefine((cfg, ctx) => {
+    // Phase 3 cross M1: isDefault exactly-one schema enforce
+    const enabledDefaults = cfg.modelList.filter((m) => m.isDefault && m.enabled);
+    if (enabledDefaults.length !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `modelList must have exactly 1 enabled+isDefault item, got ${enabledDefaults.length}`,
+        path: ["modelList"],
+      });
+    }
+  });
+export type HarnessConfig = z.infer<typeof HarnessConfigSchema>;
+
+// ============================================================================
 // 公开 schema 集合（fixture round-trip 测试 + verify 脚本用）
 // ============================================================================
 

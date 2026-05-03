@@ -22,6 +22,8 @@ struct ClaudeWebApp: App {
     @State private var gitAPI: GitAPI
     @State private var heartbeat: HeartbeatMonitor
     @State private var inboxAPI: InboxAPI
+    @State private var harnessConfigAPI: HarnessConfigAPI
+    @State private var harnessStore: HarnessStore
 
     init() {
         let s = AppSettings()
@@ -54,6 +56,9 @@ struct ClaudeWebApp: App {
         _gitAPI = State(initialValue: GitAPI(backend: backendRef, token: tokenRef))
         _heartbeat = State(initialValue: HeartbeatMonitor(baseURL: backendRef))
         _inboxAPI = State(initialValue: InboxAPI(baseURL: backendRef))
+        let harnessAPIInst = HarnessConfigAPI(backend: backendRef, token: tokenRef)
+        _harnessConfigAPI = State(initialValue: harnessAPIInst)
+        _harnessStore = State(initialValue: HarnessStore(cache: cacheInst, api: harnessAPIInst))
     }
 
     var body: some Scene {
@@ -70,9 +75,11 @@ struct ClaudeWebApp: App {
                 .environment(cache)
                 .environment(heartbeat)
                 .environment(inboxAPI)
+                .environment(harnessStore)
                 .onAppear {
                     bootstrap()
                     Task { @MainActor in heartbeat.start() }
+                    Task { @MainActor in await harnessStore.refetch() }
                 }
                 .onChange(of: client.currentConversationId) { _, newId in
                     // Switching conversations cuts off TTS from the previous
@@ -124,6 +131,7 @@ struct ClaudeWebApp: App {
         client.bindTelemetry(telemetry)
         tts.bindTelemetry(telemetry)
         notes.bindTelemetry(telemetry)
+        harnessStore.bindTelemetry(telemetry)
 
         // Persist to disk on every dirty signal. Two writes per signal:
         //   sessions/<convId>.json — full ChatLine[] for this conversation

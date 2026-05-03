@@ -29,6 +29,12 @@ targets:
     platform: iOS
     sources:
       - Sources/ClaudeWeb
+      - path: ../shared/fixtures/harness/fallback-config.json
+        buildPhase: resources
+        # M0 modelList Round single-source fallback (RFC §2.2):
+        # backend imports the same JSON, iOS bundles a copy. Drift is impossible
+        # because both ends decode the same bytes. xcodegen flattens the path so
+        # HarnessStore.bundleFallback() finds it via url(forResource:withExtension:).
     dependencies:
       - package: MarkdownUI
     info:

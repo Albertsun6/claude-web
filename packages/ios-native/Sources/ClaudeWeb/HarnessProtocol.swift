@@ -20,6 +20,12 @@ enum HarnessProtocolVersion {
     static let minClient = "1.0"
 }
 
+/// The harness protocol version this iOS client supports.
+/// Compared against server's `minClientVersion` (NOT app marketing version
+/// CFBundleShortVersionString — those are independent semantics).
+/// Bump when iOS adds support for a new harness protocol major version.
+let HARNESS_PROTOCOL_CLIENT_VERSION = "1.0"
+
 // MARK: - Enums (must match TS string literals exactly)
 
 enum StageKind: String, Codable, CaseIterable {
@@ -425,6 +431,48 @@ enum HarnessEvent: Codable {
             try raw.encode(to: encoder)
         }
     }
+}
+
+// MARK: - M0 modelList Round (RFC §1)
+
+struct ModelCapabilities: Codable, Equatable {
+    let supportsThinking: Bool
+    let supportsLongContext: Bool
+    let contextWindow: Int
+}
+
+struct ModelListItem: Codable, Equatable {
+    let id: String
+    let displayName: String
+    let description: String?
+    let capabilities: ModelCapabilities
+    let recommendedFor: [String]
+    let isDefault: Bool
+    let enabled: Bool
+}
+
+struct HarnessConfig: Codable, Equatable {
+    let protocolVersion: String
+    let minClientVersion: String
+    let etag: String
+    let modelList: [ModelListItem]
+}
+
+// MARK: - Version comparator (RFC §2.3, mirrors packages/shared/src/version.ts)
+
+/// Numeric semver-ish comparison. Defeats string lex (1.10 vs 1.9).
+/// Returns -1 if a < b, 0 if equal, 1 if a > b. Missing parts treated as 0.
+func compareVersion(_ a: String, _ b: String) -> Int {
+    let pa = a.split(separator: ".").map { Int($0) ?? 0 }
+    let pb = b.split(separator: ".").map { Int($0) ?? 0 }
+    let len = max(pa.count, pb.count)
+    for i in 0..<len {
+        let x = i < pa.count ? pa[i] : 0
+        let y = i < pb.count ? pb[i] : 0
+        if x < y { return -1 }
+        if x > y { return 1 }
+    }
+    return 0
 }
 
 // MARK: - AnyCodable helper (for metadata / before / after JSON-shaped fields)

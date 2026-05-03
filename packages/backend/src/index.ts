@@ -27,6 +27,7 @@ import {
 import { inboxRouter } from "./routes/inbox.js";
 import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
+import { harnessConfigRouter } from "./routes/harness-config.js";
 import { buildNotificationHub, type NotificationContext, type SessionEndReason } from "./notifications/index.js";
 import {
   recordSpawn as heartbeatRecordSpawn,
@@ -91,6 +92,7 @@ app.route("/api/permission", permissionRouter);
 app.route("/api/inbox", inboxRouter);
 app.route("/api/runs", runsRouter);
 app.route("/api/help", helpRouter);
+app.route("/api/harness/config", harnessConfigRouter);
 
 // Notification hub: builds Server酱 / future channels from settings.
 // Returns NoOpHub if no channels configured.

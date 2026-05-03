@@ -1,0 +1,56 @@
+{
+  "protocolVersion": "1.0",
+  "minClientVersion": "1.0",
+  "etag": "",
+  "modelList": [
+    {
+      "id": "claude-opus-4-7",
+      "displayName": "Opus 4.7",
+      "description": "复杂推理 / 架构 / 评审",
+      "capabilities": {
+        "supportsThinking": true,
+        "supportsLongContext": true,
+        "contextWindow": 1000000
+      },
+      "recommendedFor": [
+        "architecture",
+        "review",
+        "complex"
+      ],
+      "isDefault": false,
+      "enabled": true
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "displayName": "Sonnet 4.6",
+      "description": "通用 / CRUD / 文档",
+      "capabilities": {
+        "supportsThinking": false,
+        "supportsLongContext": false,
+        "contextWindow": 200000
+      },
+      "recommendedFor": [
+        "coding",
+        "docs"
+      ],
+      "isDefault": true,
+      "enabled": true
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "displayName": "Haiku 4.5",
+      "description": "快速 / 摘要 / 通知",
+      "capabilities": {
+        "supportsThinking": false,
+        "supportsLongContext": false,
+        "contextWindow": 200000
+      },
+      "recommendedFor": [
+        "fast-chat",
+        "summarization"
+      ],
+      "isDefault": false,
+      "enabled": true
+    }
+  ]
+}
