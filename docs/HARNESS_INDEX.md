@@ -74,6 +74,17 @@
 | `methodologies/01-spec.md` | TBD（M-1 必产，企业字段必填段） |
 | `methodologies/02..10` | TBD（进 Stage 时再敲，占位） |
 
+### 里程碑 Retrospectives（每完工一个 milestone 必产）
+
+| 里程碑 | 文件 | 状态 |
+|---|---|---|
+| M-1 架构与方法论奠基 | [retrospectives/M-1.md](retrospectives/M-1.md) | ✅ 完成（2026-05-03） |
+| M0 server-driven 底座 + Inbox | retrospectives/M0.md | 待启动 |
+| M1 骨架 | retrospectives/M1.md | — |
+| M2 真 agent + dogfood | retrospectives/M2.md | — |
+| M3 质量与可观测 | retrospectives/M3.md | — |
+| M4 方法论沉淀 | retrospectives/M4.md | — |
+
 ### 关联资源（不在项目仓库内）
 
 | 路径 | 用途 |
