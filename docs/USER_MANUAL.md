@@ -600,6 +600,39 @@ Backend 端点（给 web / 脚本用）：
 
 仅完成（completed）触发；被打断（interrupted）/ 报错（error）不弹。开关在设置 → "Git 安全检查"，默认 ON。
 
+### 隔离 worktree（多需求并行不冲突）
+
+iOS 端在 ConversationsSheet（顶栏点项目名打开）的 "新对话" 按钮现在是 **Menu 双选项**：
+
+- **新对话（同 cwd）** — 现存行为，多个对话共用 cwd。改文件互相会踩。适合"快速问问题 / 看代码"。
+- **新对话 + 隔离 worktree** — 后端创建 git worktree（`<cwd>/.claude-worktrees/<uuid>` 一份独立分支 `wt/<uuid>`），CLI 子进程在 worktree 目录下跑。**改文件物理隔离**，多个对话并行做不冲突。Menu 显示当前 cwd 已有几个 active worktree，引导你决定续写还是新开（**相关联的需求建议续写**省 token；独立需求才新开）。
+
+完成（`session_ended(reason=completed)`）后弹 [WorktreeFinalizeSheet](packages/ios-native/Sources/ClaudeWeb/Views/WorktreeFinalizeSheet.swift)（在 GitGateSheet 之后串联弹出，不重叠）：
+
+| 按钮 | 行为 |
+|---|---|
+| **合到 main** | 后端 `git merge --no-ff <branch>`；冲突 → 弹 alert "worktree 保留，请手动解决" |
+| **push 分支** | `git push -u origin <branch>` → 提示去 GitHub 开 PR；worktree 保留等审 |
+| **丢弃** | 双确认 → 删除 worktree 目录 + 删除分支；work-registry 历史**保留**为 `discarded` |
+
+**关键约束**：
+- worktree id / branch slug 全 server 生成（client 不可传 id）；branch 字符限 `^[a-zA-Z0-9._/-]+$`
+- 创建 worktree 时自动写 `.git/info/exclude` 加 `.claude-worktrees/`，git status 不会污染
+- iOS 文件浏览器（`/api/fs/tree`）也永久排除 `.claude-worktrees/` 顶层目录
+- node_modules **不自动 copy**（pnpm workspace symlink 风险）；要跑 `pnpm test/build` 请回主 cwd `pnpm install` 后再用
+- `cwd` 不存在 work-registry 中（避免与 `~/.claude-web/projects.json` 双写漂移）；从 worktreePath 派生
+- 1 conversation = 1 worktree = 1 branch = 1 PR。**永远 1 PR**（v0.5 决定不做 stacked PR；想 stacked 用 Graphite）
+
+backend 端点：
+
+| 端点 | 用途 |
+|---|---|
+| `POST /api/worktrees` | 创建。body `{cwd, conversationTitle}`；id/branch/worktreePath 全 server 生成 |
+| `POST /api/worktrees/:id/finalize` | 收尾。body `{action: "merge" \| "push" \| "discard"}` |
+| `GET /api/work?cwd=<abs>&include=all` | 列表。默认隐藏 merged / discarded |
+
+> **当前阶段（Stage A）**：仅手动一对话一 worktree。未做：Dashboard 工作台 tab（看所有 worktree 状态汇总）/ stale 自动清理 / Issue 间依赖追踪 / scheduler 推荐"下一个跑"。这些在 [Plan-2 Stage A.5 + B + C](docs/proposals/PARALLEL_WORK_ORCHESTRATOR.md) 范围。
+
 ### 附加上下文（paperclip）
 
 InputBar 上 PhotoPicker 旁的 📎 → 打开 [ContextAttachSheet](packages/ios-native/Sources/ClaudeWeb/Views/ContextAttachSheet.swift)：
