@@ -27,6 +27,28 @@
 - [ ] 是否需要更新 `CLAUDE.md` 的关键不变量？
 - [ ] 是否影响 iOS 原生端？
 
+### Harness 流水线 PR（agent 产 PR 时必填，人工 PR 可省）
+
+仅当本 PR 由 harness Coder agent 产出时填写（[HARNESS_PR_GUIDE.md §4](../docs/HARNESS_PR_GUIDE.md)）：
+
+- **Issue ID**：iss-...
+- **Stage kind**：spec / design / implement / test / review / release
+- **AgentProfile**：Coder / Reviewer-code / Documentor / ...
+- **Reviewer Verdicts**：链接到 `docs/reviews/<issue>-arch-*.md` + `<issue>-cross-*.md`（risk-triggered 双 reviewer 时两条）
+- **Decision 历史**：链接到 `harness.db.decision` 行（M1 起 PR 描述自动生成）
+- **回滚预案**：1-2 句描述回滚命令 + 可能影响范围
+- **Changelog 摘要**：1 句进 CHANGELOG.md
+- **Cost**：$X.XX (tokens in/out)
+- **schema migration**：是 / 否；若是，附 migration 文件链接（[ADR-0015](../docs/adr/ADR-0015-schema-migration.md)）
+
+约束：
+- [ ] 通过 `node packages/backend/scripts/test-prod-guard.mjs`
+- [ ] 通过 `node packages/backend/scripts/test-git-guard.mjs`
+- [ ] 双 reviewer Verdict score 全 ≥ 4.0/5（risk-triggered 触发时）
+- [ ] 用户 Decision approved 已记录
+- [ ] commit message 含 `harness-stage: <kind>` + `harness-issue: <id>` trailer（[COMMIT_CONVENTION.md](../docs/COMMIT_CONVENTION.md)）
+- [ ] branch 名形如 `harness/<issueId>-<slug>`（[branch-naming.md](../docs/branch-naming.md)）
+
 ---
 
 ## 测试

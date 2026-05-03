@@ -470,7 +470,10 @@ ADR 抽到 [docs/adr/](adr/) 单独维护：
 - [ ] `Protocol.swift` 加 harness 骨架 —— **本契约下游**，由"契约 #2 协议"产出
 - [ ] fixtures round-trip 测试 —— **本契约下游**，由"契约 #2 协议"产出
 
-**Round 1 评审挂起项**（[HARNESS_REVIEW_LOG.md](HARNESS_REVIEW_LOG.md)）：
-- [ ] FTS5 大批写入性能（M2 Retrospective 加观察项；M3 视情况换 `content` 内嵌）
-- [ ] `stage_artifact` 中间表（替代 `stage.{input,output,review_verdict}_artifact_ids_json` 三 JSON 列）—— M2 dogfood 报表查询频率信号决定
-- [ ] `Artifact.metadata_json` 是否升级为 typed schema —— M2 dogfood toy 企业仓库后再敲
+**Round 1+2 评审挂起项**（[HARNESS_REVIEW_LOG.md](HARNESS_REVIEW_LOG.md)）：
+- [ ] **FTS5 大批写入性能**（M2 Retrospective 加观察项；M3 视情况换 `content` 内嵌）
+  - **Round 2 cross m2 + arch 加字段**：M2 Retrospective 必须记录 `{batchSize, totalBytes, ftsTriggerLatencyMs.p50, ftsTriggerLatencyMs.p95, ftsInsertLatencyMs.p95}`。手动日志即可，不需要监控系统
+- [ ] **`stage_artifact` 中间表**（替代 `stage.{input,output,review_verdict}_artifact_ids_json` 三 JSON 列）—— M2 dogfood 报表查询频率信号决定
+  - **Round 2 cross M2 + arch 加字段**：M2 Retrospective 必须记录 `{stageArtifactReverseQueryCountByStageKind, p95QueryLatencyMs}`，达阈值触发拆中间表 ritual
+- [ ] **`Artifact.metadata_json` 是否升级为 typed schema** —— M2 dogfood toy 企业仓库后再敲
+- [ ] **`Methodology.stage_defaults_json`**（Round 2 cross M1 精炼）—— 当 stage 创建需要默认 weight 时，加 `methodology.stage_defaults_json: { design: "heavy", compliance: "checklist" }` 列；当前 methodology 表没此字段，等 M1 真业务用时再加

@@ -1,0 +1,17 @@
+{
+  "id": "verdict-arch-001",
+  "stageId": "stage-01HJK5XD0CDEF05",
+  "reviewerProfileId": "Reviewer-architecture",
+  "model": "claude-opus-4-7",
+  "score": 4.2,
+  "dimensions": {
+    "correctness": 4.5,
+    "completeness": 4.0,
+    "alignmentWithSpec": 4.5,
+    "security": 3.5,
+    "maintainability": 4.5
+  },
+  "notes": "整体设计合理，security 维度建议补充 18 位 unifiedCreditCode 在线核验时的请求频次限制",
+  "agreesWithPrior": true,
+  "createdAt": 1746234830000
+}

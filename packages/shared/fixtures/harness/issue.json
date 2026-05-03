@@ -1,0 +1,13 @@
+{
+  "id": "iss-01HJK5XB0CDEF03",
+  "projectId": "proj-01HJK5X8Y2QMR3N4P9ABCDEF01",
+  "initiativeId": "init-01HJK5XA0CDEF02",
+  "source": "user_feedback",
+  "title": "客户表加 unifiedCreditCode 字段并校验",
+  "body": "当前 customer.taxId 与新合规要求的 18 位统一社会信用代码不兼容；需要新增字段 + 校验 + 老数据迁移。",
+  "labels": ["security", "migration", "schema"],
+  "priority": "high",
+  "status": "in_progress",
+  "createdAt": 1746234600000,
+  "updatedAt": 1746234900000
+}

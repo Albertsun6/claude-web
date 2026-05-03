@@ -1,0 +1,15 @@
+{
+  "id": "dec-01HJK5XJ0CDEF0A",
+  "stageId": "stage-01HJK5XD0CDEF05",
+  "requestedBy": "PM",
+  "options": [
+    { "label": "通过", "value": "approve" },
+    { "label": "驳回", "value": "reject" },
+    { "label": "需更多信息", "value": "request_info" }
+  ],
+  "chosenOption": "approve",
+  "decidedBy": "user",
+  "rationale": "Reviewer 提出的频次限制 spec.md 已补",
+  "decidedAt": 1746234850000,
+  "createdAt": 1746234835000
+}

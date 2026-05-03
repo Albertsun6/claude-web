@@ -1,0 +1,9 @@
+{
+  "id": "proj-01HJK5X8Y2QMR3N4P9ABCDEF01",
+  "cwd": "/Users/dev/projects/example-admin",
+  "name": "example-admin",
+  "defaultBranch": "main",
+  "worktreeRoot": "/Users/dev/projects/example-admin/.worktrees",
+  "harnessEnabled": true,
+  "createdAt": 1746234567000
+}

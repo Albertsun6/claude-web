@@ -33,6 +33,21 @@ Seaidea iOS 原生 app 是 thin shell（CLAUDE.md 既定路线），核心约束
 4. **版本协商**：`HARNESS_PROTOCOL_VERSION = "1.0"` + `MIN_CLIENT_VERSION = "1.0"`；`clientVersion < MIN_CLIENT_VERSION` → 推升级提示 + fallback config
 5. **离线兜底范围**（用户 M0 敲定）：iOS fallback config 仅保留**老聊天功能**；Board / Decision / 创建 Initiative 在离线 / 未连接时显示"未连接"占位
 
+### 最小协议层行为契约（Round 1 arch M2 修复 LEARNINGS rule #1 漏洞）
+
+**老 iOS + 新字段（minor bump）**：iOS 必须 graceful skip 任何未知字段。Swift Codable 默认行为已满足（unknown key 不抛错）；`HarnessEvent` 的 `kind` 字段额外加了 `.unknown(kind, raw)` case 防止未知 kind 阻塞 WS 流（[HarnessProtocol.swift](../../packages/ios-native/Sources/ClaudeWeb/HarnessProtocol.swift)）。
+
+**老 iOS + 删字段（minor bump 不允许，但容错）**：DTO 必填字段缺失 → decode 失败 → 该条消息丢弃 + 上报 telemetry warn；不阻塞整个 WS。
+
+**老 iOS + 新 enum 值（minor bump）**：Swift `RawRepresentable` 默认会抛 decode 错。M0 实施时所有 enum 字段必须封装"未知值落 fallback case"逻辑（如 `StageStatus.unknownFromServer`）。M-1 范围内 enum 是 hard-locked，所以不立即触发；M0 加新值时同步加该机制。
+
+**版本字符串比较（Round 1 arch M4 修复）**：`HARNESS_PROTOCOL_VERSION` 是 `<major>.<minor>` 形式的字符串，**不能用 lex 比较**（`"1.10" < "1.9"` 是错的）。M0 实施时必须用 `compareVersion(a, b): -1 | 0 | 1` 工具函数按数值字段比较。M-1 范围内只有 1.0 出现，暂无问题。
+
+**fallback 行为**（用户 M0 敲定）：
+- `clientVersion < MIN_CLIENT_VERSION` → push 升级提示 + 切回打包内 fallback config（M0 范围）
+- 网络 unreachable → 立即用 fallback config，不阻塞 UI
+- ETag 不匹配 → 静默 refetch + WS 推 `config_changed`
+
 ---
 
 ## Why placeholder ADR (not deferred entirely)

@@ -59,6 +59,17 @@ harness schema 在四个独立"端"出现，必须同步演化：
 - ❌ 在 minor bump 里删字段或改语义
 - ❌ iOS 单端先升而 backend 没升（违反 thin shell 原则——iOS 改一次锁很久）
 
+### Migrations 路径假设（Round 2 cross m3）
+
+当前 backend 用 `tsx watch src/index.ts` 直接跑源码，**不打包，不复制 dist**。`harness-store.ts` 通过 `import.meta.url` 解析定位到 `packages/backend/src/migrations/`，路径稳定。
+
+未来若引入打包（esbuild / rollup / bundler）：
+- 必须把 `*.sql` 文件纳入 copy 清单（如 `esbuild --loader:.sql=copy`）
+- 或改成 `MIGRATIONS_DIR` 环境变量显式配置
+- 或改成把 SQL 内容 inline 进 TS（比如 build 时 codegen `migrations.gen.ts`）
+
+当前选项：维持源码运行，不打包（[HARNESS_ROADMAP §0 #11](../HARNESS_ROADMAP.md) "不引入新基础组件"）。
+
 ### 工具链
 
 **M-1 阶段**（手动验，本里程碑准入门槛）：

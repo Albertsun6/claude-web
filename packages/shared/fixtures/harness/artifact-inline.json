@@ -1,0 +1,16 @@
+{
+  "id": "art-spec-001",
+  "stageId": "stage-01HJK5XD0CDEF05",
+  "kind": "spec",
+  "hash": "sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+  "storage": "inline",
+  "contentText": "# Spec — 客户表加 unifiedCreditCode 字段\n\n## 验收准则\n- 18 位长度校验\n- 政府接口在线核验...\n",
+  "sizeBytes": 1024,
+  "metadata": {
+    "businessEntities": ["customer"],
+    "permissionMatrix": { "admin": ["read", "write"], "viewer": ["read"] },
+    "approvalSteps": ["manager-review", "compliance-review"],
+    "reportSchemas": []
+  },
+  "createdAt": 1746234810000
+}

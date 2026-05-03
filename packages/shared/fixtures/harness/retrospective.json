@@ -1,0 +1,14 @@
+{
+  "id": "retro-01HJK5XK0CDEF0B",
+  "issueId": "iss-01HJK5XB0CDEF03",
+  "whatWentWell": "spec methodology v1.0 的企业字段必填段一次过审；Reviewer 的频次限制提示合理",
+  "whatToImprove": "Coder 在 implement 时漏掉了已存在 customer 的字段回填策略，下次 spec 应该把『老数据兼容窗口』作为必填段",
+  "methodologyFeedback": "01-spec.md 应在企业字段必填段加『数据迁移策略』子段",
+  "costSummary": {
+    "totalUsd": 1.482,
+    "byStage": { "spec": 0.07, "design": 0.32, "implement": 0.81, "test": 0.18, "review": 0.1 },
+    "byModel": { "opus": 0.42, "sonnet": 1.062 }
+  },
+  "createdBy": "Documentor",
+  "createdAt": 1746235000000
+}

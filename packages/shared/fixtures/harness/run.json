@@ -1,0 +1,13 @@
+{
+  "id": "run-01HJK5XH0CDEF09",
+  "taskId": "task-01HJK5XF0CDEF07",
+  "sessionId": "sess-claude-cli-12345",
+  "exitCode": 0,
+  "model": "claude-sonnet-4-6",
+  "tokensIn": 12450,
+  "tokensOut": 3870,
+  "cost": 0.0712,
+  "transcriptPath": "/Users/dev/.claude/projects/-Users-dev-projects-example-admin/sess-claude-cli-12345.jsonl",
+  "startedAt": 1746234720000,
+  "endedAt": 1746234812000
+}

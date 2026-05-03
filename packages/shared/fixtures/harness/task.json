@@ -1,0 +1,15 @@
+{
+  "id": "task-01HJK5XF0CDEF07",
+  "stageId": "stage-01HJK5XD0CDEF05",
+  "agentProfileId": "PM",
+  "model": "sonnet",
+  "cwd": "/Users/dev/projects/example-admin",
+  "prompt": "请把 issue iss-01HJK5XB0CDEF03 写成完整 spec.md，企业字段必填段全部填全",
+  "skillSet": [],
+  "permissionMode": "default",
+  "contextBundleId": "bundle-01HJK5XG0CDEF08",
+  "runIds": ["run-01HJK5XH0CDEF09"],
+  "status": "completed",
+  "createdAt": 1746234710000,
+  "updatedAt": 1746234810000
+}

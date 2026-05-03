@@ -1,0 +1,9 @@
+{
+  "id": "meth-01HJK5XE0CDEF06",
+  "stageKind": "spec",
+  "version": "1.0",
+  "appliesTo": "enterprise-admin",
+  "contentRef": "methodologies/01-spec.md",
+  "approvedBy": "user, reviewer-cross, reviewer-architecture",
+  "approvedAt": 1746234600000
+}

@@ -27,6 +27,12 @@ const DB_PATH = join(HARNESS_DIR, "harness.db");
 // 1.0 → 100, 1.2 → 102, 2.0 → 200
 export const HARNESS_SCHEMA_VERSION = 100;
 
+// migrations 目录定位（Round 2 cross m3 边界注释）：
+// - 当前 backend 用 `tsx watch src/index.ts` 直接跑源码，不打包，不复制 dist
+//   所以 import.meta.url 解析到 packages/backend/src/，相对找 migrations/ 稳定
+// - launchd plist 也是直接指 tsx，运行 cwd 不影响 __dirname
+// - 如果未来引入打包（esbuild / rollup），必须把 migrations/*.sql 纳入 copy 清单
+//   并改成显式 MIGRATIONS_DIR env var；现在不必
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, "migrations");
 

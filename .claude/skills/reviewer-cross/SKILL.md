@@ -133,6 +133,22 @@ description: Independent cross-reviewer for harness contracts, designs, and patc
 - Minors: K
 - 总体判断：建议合并 / 建议小改后合并 / 必须先修
 
+## Numeric Score（Round 1 contract #2 cross M3 修正：与 ReviewVerdict DTO 对齐）
+
+每个 lens 给一个 0..5 分（与 [HARNESS_DATA_MODEL.md §1.11 ReviewVerdict.dimensions](../../docs/HARNESS_DATA_MODEL.md) 对齐）：
+
+| Lens | Score (0..5) |
+|---|---|
+| 正确性 | X.X |
+| 跨端对齐 | X.X |
+| 不可逆 | X.X |
+| 安全 | X.X |
+| 简化 | X.X |
+
+**Overall score**：X.X（5 lens 加权平均；如有 blocker 上限 3.9）
+
+> M-1 阶段 markdown 即可；M2 起 ReviewVerdict 落 SQLite 时由 review-orchestrator 把上述分数解析成 `dimensions_json: {correctness, crossEndAlignment, irreversible, security, simplification}` 并保存到 [review_verdict 表](../../docs/HARNESS_DATA_MODEL.md)。
+
 ## Findings
 
 ### B1 [BLOCKER] <finding title>

@@ -24,6 +24,7 @@ struct InputBar: View {
 
     @Environment(VoiceRecorder.self) private var recorder
     @Environment(InboxAPI.self) private var inboxAPI
+    @Environment(AppSettings.self) private var settings
     @FocusState private var inputFocused: Bool
 
     @State private var pendingImages: [PendingImage] = []
@@ -40,6 +41,14 @@ struct InputBar: View {
 
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
+    }
+
+    private var shortModelName: String {
+        let m = settings.model.lowercased()
+        if m.contains("haiku") { return "Haiku" }
+        if m.contains("sonnet") { return "Sonnet" }
+        if m.contains("opus") { return "Opus" }
+        return settings.model
     }
 
     /// Icon for the combined attach menu. Filled "+" when there are pending
@@ -93,6 +102,23 @@ struct InputBar: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                 }
+            }
+
+            // Model chip — shows current model at a glance; hidden while typing
+            // (keyboard tools row is more useful then) or recording.
+            if !inputFocused && recorder.state == .idle {
+                HStack {
+                    Spacer()
+                    Text(shortModelName)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.secondary.opacity(0.1), in: .capsule)
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+                .transition(.opacity)
             }
 
             // Input row

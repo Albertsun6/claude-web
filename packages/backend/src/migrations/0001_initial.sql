@@ -218,7 +218,8 @@ CREATE TABLE IF NOT EXISTS artifact (
   size_bytes        INTEGER NOT NULL,
   -- Round 1 arch 垂直#8: 加 metadata_json 列（minor bump 行为：可选，default '{}'）
   -- 结构由 methodologies/<stage>.md 约定，schema 不强制 typed（M2 dogfood 后视情况升级）
-  metadata_json     TEXT NOT NULL DEFAULT '{}',
+  -- Round 2 cross M3: 加 json_valid CHECK，防非法字符串让 TS/Swift decode 行为分裂
+  metadata_json     TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(metadata_json)),
   -- Round 1 cross M4: superseded_by 方向语义敲定
   -- 旧 row.superseded_by = 新 row.id；新 row.superseded_by = NULL
   -- 即"我被谁替代"，与字段名自然语义一致

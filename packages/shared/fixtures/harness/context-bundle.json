@@ -1,0 +1,10 @@
+{
+  "id": "bundle-01HJK5XG0CDEF08",
+  "taskId": "task-01HJK5XF0CDEF07",
+  "artifactRefs": ["art-issue-001", "art-methodology-spec-v1"],
+  "maxTokens": 32000,
+  "prunedFiles": ["packages/legacy/oldCustomerForm.tsx"],
+  "summary": "Issue body + spec methodology v1.0 + 类似 Issue 的 spec.md 共 3 份 Artifact，预算 32k tokens",
+  "snapshotPath": "/Users/dev/.claude-web/bundles/bundle-01HJK5XG0CDEF08.md",
+  "createdAt": 1746234715000
+}

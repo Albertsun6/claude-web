@@ -1,0 +1,16 @@
+{
+  "id": "init-01HJK5XA0CDEF02",
+  "projectId": "proj-01HJK5X8Y2QMR3N4P9ABCDEF01",
+  "title": "Q2 客户档案模块改造",
+  "intent": "替换老的 customer 表 + 表单 + 审批流以支持新的合规字段",
+  "kpis": [
+    { "name": "首次合规审核通过率", "target": ">= 95%", "selected": true },
+    { "name": "字段填写工时", "target": "<= 5min/customer", "selected": true },
+    { "name": "迁移导致的数据漂移", "target": "0 row", "selected": false }
+  ],
+  "status": "active",
+  "ownerHuman": "albert",
+  "methodologyVersion": "1.0",
+  "createdAt": 1746234567000,
+  "updatedAt": 1746234890000
+}

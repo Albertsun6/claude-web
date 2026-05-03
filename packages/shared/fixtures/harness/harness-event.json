@@ -1,0 +1,6 @@
+{
+  "type": "harness_event",
+  "kind": "stage_changed",
+  "stageId": "stage-01HJK5XD0CDEF05",
+  "status": "awaiting_review"
+}

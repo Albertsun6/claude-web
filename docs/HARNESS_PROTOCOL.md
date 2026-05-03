@@ -171,22 +171,35 @@ fixture 位置：`packages/shared/fixtures/harness/<entity>.json`。
 
 ---
 
-## 8. 契约 #2 进度状态
+## 8. 契约 #2 完工状态（v1.0 ship 后真实状态）
 
-> **本契约 doc-only 阶段**（2026-05-03）。下面 5 条交付物**未起步**。
+> 契约 #2 evaluation Round 1（2026-05-03）已完成。下面是当前真实交付状态。
 >
-> Round 1 评审捕获了"§8 [x] 撒谎"问题（HARNESS_REVIEW_LOG.md Round 1 #1 BLOCKER-1）；现修正为待办清单 + verify 脚本守门。
+> Round 1 评审 BLOCKER：原 §8 在交付物 ship 后仍说 "doc-only"，与现实不符（同 Round 1 BLOCKER-1 的反向）。现已更新。
 
-- [ ] [`packages/shared/src/harness-protocol.ts`](../packages/shared/src/harness-protocol.ts) 13 实体 DTO + AuditLogEntry + HarnessEvent + 版本常量
-- [ ] [`packages/shared/fixtures/harness/`](../packages/shared/fixtures/harness/) 每实体的 JSON 样例
-- [ ] [`packages/ios-native/Sources/ClaudeWeb/HarnessProtocol.swift`](../packages/ios-native/Sources/ClaudeWeb/HarnessProtocol.swift) Swift Codable 镜像
-- [ ] [`packages/shared/src/__tests__/harness-protocol.test.ts`](../packages/shared/src/__tests__/harness-protocol.test.ts) Zod parse + round-trip 测试
-- [ ] [ADR-0011 server-driven thin-shell](adr/ADR-0011-server-driven-thin-shell.md) — 当前为 Proposed status，决定推到 M0
+| 交付物 | 状态 | 文件 |
+|---|---|---|
+| Zod schemas (13 实体 + AuditLogEntry + HarnessEvent + 版本常量) | ✅ ship | [`packages/shared/src/harness-protocol.ts`](../packages/shared/src/harness-protocol.ts) |
+| 16 fixtures（13 实体 + Artifact inline + file + audit + event） | ✅ ship | [`packages/shared/fixtures/harness/`](../packages/shared/fixtures/harness/) |
+| Swift Codable 镜像 | ✅ ship | [`packages/ios-native/Sources/ClaudeWeb/HarnessProtocol.swift`](../packages/ios-native/Sources/ClaudeWeb/HarnessProtocol.swift) |
+| TS round-trip 测试 (42/42 绿) | ✅ ship | [`packages/shared/src/__tests__/harness-protocol.test.ts`](../packages/shared/src/__tests__/harness-protocol.test.ts) |
+| ADR-0011 server-driven thin-shell | ✅ Proposed | [`adr/ADR-0011-server-driven-thin-shell.md`](adr/ADR-0011-server-driven-thin-shell.md)（M0 升级 Accepted） |
 
-**enum 值锁**（M-1 已交付，见 §1）：HARNESS_PROTOCOL.md §1 已经把所有枚举值固定列出，下游 Zod / Swift 实现必须 1:1 对齐；CI 应该跑 enum 字符串完全匹配测试（M1+ 引入）。
+**enum 值锁**（已交付，见 §1）：HARNESS_PROTOCOL.md §1 把所有枚举值固定列出，下游 Zod / Swift 实现 1:1 对齐。
 
-**自动化守门**：[scripts/verify-m1-deliverables.mjs](../scripts/verify-m1-deliverables.mjs) 检查上面 5 条文件是否存在；M-1 验收时跑一次，缺哪个挂哪个，不允许"靠 [x] 自报通过"。
+**自动化守门**：[scripts/verify-m1-deliverables.mjs](../scripts/verify-m1-deliverables.mjs) 检查文件存在性，**不读 [x]**。
+
+**ID 格式契约**（Round 1 cross M1 修正）：本协议中所有 `id` / `*Id` 字段是 **opaque stable string，推荐 `<type>-<ULID>` 前缀**（如 `proj-01HJK5...`、`iss-01HJK5...`）。**不强制 UUIDv4**。客户端不应解析 ID 内容；后端可任意生成形式但同 Issue 范围内必须稳定 unique。
+
+**Swift round-trip 覆盖（Round 1 cross M3 / arch M1 留给 M1+）**：
+- M-1 范围：人工抽样验证（已对齐字段名、enum、optional 处理）
+- M1+ 必产 Swift 自动化测试，覆盖以下高风险点：
+  - `AuditLogEntry.before / after` null 编码（TS Zod 保留 null vs Swift 默认丢 nil-key 的语义差）
+  - `Artifact.metadata` 任意 JSON via `AnyCodable` 递归
+  - `HarnessEvent` discriminated union 手写 encode/decode
+  - 长整数（Int64） 边界与 JS Number 精度（< 2^53）的兼容
+- 当前 manual sampling 结果记录在 `docs/reviews/contract-2-*.md`
 
 **M0 引入**：`/api/harness/config` payload schema、`harness_event` 实际 payload 字段、iOS HarnessStore + SchemaRenderer、ADR-0011 升级为 Accepted。
 
-**M1 引入**：`/api/harness/*` REST 端点 schema（initiative / issue / stage / decision CRUD）。
+**M1 引入**：`/api/harness/*` REST 端点 schema（initiative / issue / stage / decision CRUD），Swift round-trip 自动化测试，CI 接 enum 锁。

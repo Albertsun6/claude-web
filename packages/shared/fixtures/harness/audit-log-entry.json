@@ -1,0 +1,17 @@
+{
+  "ts": 1746234810500,
+  "actor": "agent:PM",
+  "op": "insert",
+  "table": "artifact",
+  "id": "art-spec-001",
+  "before": null,
+  "after": {
+    "id": "art-spec-001",
+    "stageId": "stage-01HJK5XD0CDEF05",
+    "kind": "spec",
+    "hash": "sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+    "storage": "inline",
+    "sizeBytes": 1024
+  },
+  "rationale": "PM agent first draft of spec.md after methodology ritual"
+}

@@ -51,6 +51,16 @@
 - `node scripts/verify-m1-deliverables.mjs` 必须 0 missing
 - 所有 contract 通过 Round N 评审（每契约至少一轮 arch + cross verdict）
 
+**每契约最小 acceptance 物清单**（Round 2 cross m1 修正：防 doc-only 完工）：
+
+| 契约 | 必产 |
+|---|---|
+| #1 数据模型 | ✅ DDL + ADR-0010/0015 + migration runner + test (28/28 绿) + verify 脚本检测通过 |
+| #2 协议 | TS Zod (13 entities + AuditLogEntry + HarnessEvent) + 13 fixtures (each entity 1+) + Swift Codable mirror + round-trip vitest 测试通过 |
+| #3 ContextBundle | ContextBundle 协议 doc + ADR-0014 + 默认挑选规则表（每 Stage kind 一行 mustInclude/mayInclude）+ 反例段（≥3 反例） |
+| #4 PR/worktree | PR 模板 harness 段补充 + COMMIT_CONVENTION.md + branch-naming.md + git-guard.mjs（含 dev 拒绝场景测试通过）+ prod-guard.mjs（含 dev 拒绝场景测试通过）+ ADR-0013 |
+| 方法论 | 00-discovery.md + 01-spec.md（含企业管理系统专属字段 4 项必填段：业务实体 / 权限矩阵 / 审批流 / 报表口径）+ "carried-over observation items" 段（Round 2 arch 加字段） |
+
 ### 待相应 Stage 进入时再写（占位）
 
 按 plan §6.1，这些文件 M-1 时只留大纲 + TBD 标记，进入对应 Stage 时由方法论 ritual 补完：
