@@ -389,21 +389,60 @@ export const ModelListItemSchema = z.object({
 });
 export type ModelListItem = z.infer<typeof ModelListItemSchema>;
 
+// ============================================================================
+// PermissionModeItem (M0 modelList Round + permissionModes Round v1.1)
+// ============================================================================
+// 三端同步约束（permissionModes Round phase 3 cross M3 + arch agree）：
+// - packages/shared/src/protocol.ts ClientMessage.permissionMode 字面值
+// - PermissionModeIdSchema enum 此处
+// - packages/backend/scripts/permission-hook.mjs / cli-runner.ts 实际处理
+// 改一处必须三端同步。
+
+export const PermissionModeIdSchema = z.enum([
+  "default", "acceptEdits", "bypassPermissions", "plan",
+]);
+export type PermissionModeId = z.infer<typeof PermissionModeIdSchema>;
+
+export const PermissionModeItemSchema = z.object({
+  id: PermissionModeIdSchema,
+  displayName: z.string(),                            // 短名（permissionModes Round arch react N1 + cross m2: "Plan" / "Default" / etc）
+  description: z.string().optional(),
+  isDefault: z.boolean(),                             // exactly-one constraint at HarnessConfig level
+  riskLevel: z.string().optional(),                   // hint-only string (phase 3 修复：与 modelList recommendedFor 对称，graceful skip 未知值)
+                                                       // 推荐 "low" / "medium" / "high"; UI if/else 不强制 exhaustive switch
+});
+export type PermissionModeItem = z.infer<typeof PermissionModeItemSchema>;
+
 export const HarnessConfigSchema = z
   .object({
     protocolVersion: z.string(),                     // "1.x"; minor bump 加新字段，老 client graceful skip
     minClientVersion: z.string(),                    // iOS compareVersion 自查
     etag: z.string(),                                // computeEtag(rest) "sha256:<16 hex>"
     modelList: z.array(ModelListItemSchema),
+    // permissionModes Round (M0 mini-milestone B, protocolVersion 1.1)：
+    // 加新字段 = minor bump，与 ADR-0015 一致。**iOS Codable 端必须 optional**
+    // 防止 v1.1 client + v1.0 server payload 时 keyNotFound（双向兼容硬约束）
+    permissionModes: z.array(PermissionModeItemSchema),
   })
   .superRefine((cfg, ctx) => {
-    // Phase 3 cross M1: isDefault exactly-one schema enforce
+    // Phase 3 cross M1: modelList isDefault exactly-one
     const enabledDefaults = cfg.modelList.filter((m) => m.isDefault && m.enabled);
     if (enabledDefaults.length !== 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `modelList must have exactly 1 enabled+isDefault item, got ${enabledDefaults.length}`,
         path: ["modelList"],
+      });
+    }
+    // permissionModes Round phase 3 cross m1 + arch refine:
+    // 当前对所有 permissionModes 检查（M0 无 enabled 字段）。未来加 enabled 时 superRefine
+    // 必须改为 isDefault && enabled exactly-one（ADR-0015 footnote F1 标记此约束）
+    const defaultModes = cfg.permissionModes.filter((p) => p.isDefault);
+    if (defaultModes.length !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `permissionModes must have exactly 1 isDefault item, got ${defaultModes.length}`,
+        path: ["permissionModes"],
       });
     }
   });

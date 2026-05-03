@@ -58,6 +58,11 @@ harness schema 在四个独立"端"出现，必须同步演化：
 - ❌ 直接改老 migration 文件（必须新建一份）
 - ❌ 在 minor bump 里删字段或改语义
 - ❌ iOS 单端先升而 backend 没升（违反 thin shell 原则——iOS 改一次锁很久）
+- ❌ **iOS 端将 server-driven config 字段建模为 non-optional**——破坏 minor bump 双向兼容（v1.1 client + v1.0 server payload 会 keyNotFound decode 失败）。**所有 minor bump 加的字段在 iOS Codable struct 中必须是 optional**，store 层用 `?? bundleFallback().<field>!` 兜底（M0 permissionModes Round phase 3 BLOCKER 修复）
+
+### Footnotes（mini-milestone 实测沉淀的边界条件）
+
+- **F1（permissionModes Round phase 3 cross m1 + arch refine 修复）**：M0 permissionModes 当前**没有 enabled 字段**，因此 `isDefault` exactly-one 的 superRefine 检查是对所有项的约束。**未来加 enabled 字段时（minor bump）**，superRefine 必须同步改为 `isDefault && enabled` exactly-one——否则静默放过 0-default 配置。这条约束写在此处防遗漏
 
 ### Migrations 路径假设（Round 2 cross m3）
 

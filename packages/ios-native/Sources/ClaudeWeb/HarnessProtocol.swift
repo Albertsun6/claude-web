@@ -451,11 +451,30 @@ struct ModelListItem: Codable, Equatable {
     let enabled: Bool
 }
 
+// permissionModes Round (M0 mini-milestone B, protocolVersion 1.1)
+//
+// 三端同步：与 PermissionMode (Protocol.swift) + ClientMessage.permissionMode + cli-runner permission-hook 一致
+struct PermissionModeItem: Codable, Equatable {
+    let id: String                       // "default" | "acceptEdits" | "bypassPermissions" | "plan"
+    let displayName: String              // 短名 (per ADR-0011 displayName 治理总则)
+    let description: String?
+    let isDefault: Bool
+    let riskLevel: String?               // hint-only string，推荐 "low"/"medium"/"high"; 未知值默认色 + telemetry warn
+}
+
 struct HarnessConfig: Codable, Equatable {
     let protocolVersion: String
     let minClientVersion: String
     let etag: String
     let modelList: [ModelListItem]
+    // permissionModes Round (M0 mini-milestone B, protocolVersion 1.1):
+    // **Optional 不是 required** (phase 3 BLOCKER 修复) — 双向 minor bump 兼容：
+    // v1.1 build 32 + v1.0 server payload 时 nil → store 层 ?? bundleFallback().permissionModes!
+    // ADR-0015 footnote 已记录 server-driven 字段必须 optional 的硬约束
+    //
+    // **警告**：不要给 HarnessConfig 加自定义 init(from:) + container.allKeys 校验——会反向破坏
+    // Apple Swift Decodable 默认的 ignore unknown keys 行为，导致老 build 31 收到新字段时 decode 失败
+    let permissionModes: [PermissionModeItem]?
 }
 
 // MARK: - Version comparator (RFC §2.3, mirrors packages/shared/src/version.ts)

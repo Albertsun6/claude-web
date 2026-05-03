@@ -78,13 +78,11 @@ describe("computeEtag", () => {
     const cfg = load("fallback-config.json") as HarnessConfig;
     const base = computeEtag(cfg);
 
-    // Reorder top-level keys
-    const reordered = {
-      modelList: cfg.modelList,
-      etag: cfg.etag,
-      minClientVersion: cfg.minClientVersion,
-      protocolVersion: cfg.protocolVersion,
-    };
+    // Reorder top-level keys (含 permissionModes from v1.1)
+    const reordered: Record<string, unknown> = {};
+    for (const k of Object.keys(cfg).sort().reverse()) {
+      reordered[k] = (cfg as any)[k];
+    }
     expect(computeEtag(reordered)).toBe(base);
   });
 });

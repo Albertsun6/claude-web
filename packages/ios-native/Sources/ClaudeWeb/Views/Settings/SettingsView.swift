@@ -172,18 +172,31 @@ struct SettingsView: View {
                     Text("模型列表由服务端配置（/api/harness/config）。改服务端 fallback-config.json 重启 backend 后会自动同步。")
                 }
                 Section {
+                    // M0 permissionModes Round (v1.1): server-driven from HarnessStore.
+                    // Cutover: 已选 mode 仍在 list 则保留；否则切 server isDefault.
+                    let permModes = harnessStore.permissionModes
                     Picker("权限模式", selection: $draftMode) {
-                        Text("Plan（只读规划，最安全）").tag("plan")
-                        Text("Default（每次工具问允许 / 拒绝）").tag("default")
-                        Text("Accept Edits（自动允许编辑，Bash 仍问）").tag("acceptEdits")
-                        Text("Bypass（自动允许所有工具）⚠️").tag("bypassPermissions")
+                        ForEach(permModes, id: \.id) { mode in
+                            HStack {
+                                Text(mode.displayName)
+                                    .foregroundStyle(riskColor(mode.riskLevel))
+                                if let desc = mode.description {
+                                    Spacer()
+                                    Text(desc)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                        .lineLimit(2)
+                                }
+                            }
+                            .tag(mode.id)
+                        }
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
                 } header: {
                     Text("权限模式")
                 } footer: {
-                    Text("Bypass 模式下 Claude 可以直接跑 Bash / Edit / Write 等任何工具，不再弹询问。**只在你完全信任当前 cwd + 会话内容时**用。")
+                    Text("由服务端配置 (/api/harness/config)。Bypass 模式下 Claude 可以直接跑 Bash / Edit / Write 等任何工具，不再弹询问。**只在你完全信任当前 cwd + 会话内容时**用。")
                 }
                 Section {
                     Picker("聊天区字号", selection: $s.fontSize) {
@@ -351,6 +364,22 @@ struct SettingsView: View {
                 draftCwd = settings.cwd
                 draftMode = settings.permissionMode
             }
+        }
+    }
+
+    /// Map server-driven riskLevel string to UI color. Unknown values fall back
+    /// to .primary + telemetry warn (called via HarnessStore.notifyUnknownRiskLevel).
+    /// Phase 3 cross M2 + arch react: hint-only string, NOT enum-locked.
+    private func riskColor(_ riskLevel: String?) -> Color {
+        switch riskLevel {
+        case "low": return .primary
+        case "medium": return .orange
+        case "high": return .red
+        case nil: return .primary
+        default:
+            // Unknown value (e.g. server adds "critical" later) — UI default + log
+            harnessStore.notifyUnknownRiskLevel(modeId: "?", riskLevel: riskLevel ?? "")
+            return .primary
         }
     }
 

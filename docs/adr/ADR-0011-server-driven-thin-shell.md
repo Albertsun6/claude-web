@@ -51,7 +51,32 @@ Seaidea iOS 原生 app 是 thin shell（CLAUDE.md 既定路线），核心约束
 **fallback 行为**（用户 M0 敲定）：
 - `clientVersion < MIN_CLIENT_VERSION` → push 升级提示 + 切回打包内 fallback config（M0 范围）
 - 网络 unreachable → 立即用 fallback config，不阻塞 UI
-- ETag 不匹配 → 静默 refetch + WS 推 `config_changed`
+- ETag 不匹配 → **WS reconnect 或 app foreground 时 GET /api/harness/config 携带 If-None-Match → 200 (etag 变) / 304 (不变)**（M0 modelList Round phase 3 cross B1 + arch MAJOR-1 修复 + permissionModes Round cross M3 + arch react agree 二次 audit：删除原 "WS 推 config_changed" wording，与 Decision #3 真 push M0.5+ 一致）
+
+### server-driven displayName 治理总则（permissionModes Round phase 3 arch react N1 修复）
+
+所有 server-driven config 的 `displayName` 字段**只承载短名**（如 `"Plan"` / `"Sonnet 4.6"` / `"Coder"`）。状态、风险、默认、分组等信息**必须用结构化字段**承载：
+
+| 信息 | 字段 |
+|---|---|
+| 默认状态 | `isDefault: boolean` |
+| 风险等级 | `riskLevel: string` (hint-only, UI 不分支) |
+| 启用状态 | `enabled: boolean` |
+| 分组 / 分类 | `tags: string[]` 或专门字段 |
+| 详情说明 | `description: string?` |
+
+**理由**：
+1. **避免文案与结构化字段失同步**——比如 `displayName: "Bypass（最危险）"` + `riskLevel: "high"` 双写，server 改 riskLevel 时忘改 displayName 就会自相矛盾
+2. **简化 i18n**（M4+）—— 短名 + description 各自翻译，不需要拆已有长串
+3. **UI 渲染层逻辑解耦**——颜色 / 标签 / 着色都是结构化字段驱动，不靠正则解析 displayName
+
+**反例**（在 modelList Round 和 permissionModes Round 都被发现）：
+- ❌ `displayName: "Plan（只读规划，最安全）"`
+- ❌ `displayName: "Sonnet 4.6（默认）"`
+- ✅ `displayName: "Plan"` + `description: "只读规划"` + `riskLevel: "low"`
+- ✅ `displayName: "Sonnet 4.6"` + `isDefault: true`
+
+**追溯**：modelList Round phase 3 已部分对齐（description + isDefault 拆分），但 displayName 仍带括号注（"快、便宜，默认"等）。permissionModes Round 二次 audit 把这条提升为协议总则——**所有 future server-driven 字段必须遵守**。
 
 ---
 

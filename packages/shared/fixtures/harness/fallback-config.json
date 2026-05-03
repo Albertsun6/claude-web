@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": "1.1",
   "minClientVersion": "1.0",
   "etag": "",
   "modelList": [
@@ -12,11 +12,7 @@
         "supportsLongContext": true,
         "contextWindow": 1000000
       },
-      "recommendedFor": [
-        "architecture",
-        "review",
-        "complex"
-      ],
+      "recommendedFor": ["architecture", "review", "complex"],
       "isDefault": false,
       "enabled": true
     },
@@ -29,10 +25,7 @@
         "supportsLongContext": false,
         "contextWindow": 200000
       },
-      "recommendedFor": [
-        "coding",
-        "docs"
-      ],
+      "recommendedFor": ["coding", "docs"],
       "isDefault": true,
       "enabled": true
     },
@@ -45,12 +38,39 @@
         "supportsLongContext": false,
         "contextWindow": 200000
       },
-      "recommendedFor": [
-        "fast-chat",
-        "summarization"
-      ],
+      "recommendedFor": ["fast-chat", "summarization"],
       "isDefault": false,
       "enabled": true
+    }
+  ],
+  "permissionModes": [
+    {
+      "id": "plan",
+      "displayName": "Plan",
+      "description": "只读规划，最安全 — agent 只能 read/grep，不会改文件",
+      "isDefault": false,
+      "riskLevel": "low"
+    },
+    {
+      "id": "default",
+      "displayName": "Default",
+      "description": "默认行为，每个 tool call 弹权限弹窗",
+      "isDefault": true,
+      "riskLevel": "low"
+    },
+    {
+      "id": "acceptEdits",
+      "displayName": "Accept Edits",
+      "description": "自动允许 Edit/Write；代码改动不再问，但 Bash 仍弹窗",
+      "isDefault": false,
+      "riskLevel": "medium"
+    },
+    {
+      "id": "bypassPermissions",
+      "displayName": "Bypass",
+      "description": "全自动，最危险 — agent 跑任何工具都不弹窗，仅用于受信工作流",
+      "isDefault": false,
+      "riskLevel": "high"
     }
   ]
 }

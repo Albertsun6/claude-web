@@ -386,4 +386,66 @@ decided_at: <ISO>
 
 ---
 
+### M0 permissionModes Round — server-driven 第二契约 + minor bump 真测（v2 第二个真业务用例）
+
+**日期**：2026-05-03
+**Artifact**：[docs/proposals/M0_PERMISSION_MODES.md](proposals/M0_PERMISSION_MODES.md)（v1.0 → v1.1 修订）
+
+**触发**：M0 modelList Round 完工后用户拍板 "B"——permissionModes 是最小增量，**关键价值是顺便验证 protocolVersion v1.0 → v1.1 minor bump + 老 build 31 graceful skip**（不重装就能验，靠 telemetry）
+
+#### Phase 1 verdicts（独立隔离）
+
+- arch: [m0-permission-modes-arch-2026-05-03-1501.md](reviews/m0-permission-modes-arch-2026-05-03-1501.md) — claude-opus-4-7（**1 BLOCKER + 3 MAJOR + 4 MINOR**）
+- cross: [m0-permission-modes-cross-2026-05-03-1500.md](reviews/m0-permission-modes-cross-2026-05-03-1500.md) — gpt-5.5-medium（**0 BLOCKER + 3 MAJOR + 4 MINOR**，overall 3.9/5）
+
+#### Phase 2 react verdicts（cross-pollinate）
+
+- arch react: [m0-permission-modes-arch-react-2026-05-03-1530.md](reviews/m0-permission-modes-arch-react-2026-05-03-1530.md) — **4 agree / 1 disagree / 2 refine / 2 self-revisions / 1 new finding (N1 displayName 治理总则)**
+- cross react: [m0-permission-modes-cross-react-2026-05-03-1506.md](reviews/m0-permission-modes-cross-react-2026-05-03-1506.md) — **8 agree / 0 disagree / 3 refine / 3 self-revisions / 0 new findings**
+
+#### v2 §4 验收（PASS ✅）
+
+- (a) 流程必过 ✅：4 verdict 落盘；四选一遵守；至少 1 disagree/refine 硬约束（arch 1 disagree+2 refine, cross 3 refine）
+- (b1) ✅ **强 self-revision 信号**：cross 自升 own M1 → BLOCKER 与 arch B1 合并；cross 自撤回 own M2 Swift enum 建议（接受 arch String? + recommendedFor 对称论据）
+- (b2) ✅ phase 2 浮出 1 new finding（arch react N1：displayName 治理总则——modelList Round 也漏了，permissionModes Round 二次 audit 升级为 ADR-0011 协议总则）
+
+**关键 cross-pollinate 价值**：
+- cross 自升 BLOCKER 严重度——避免作者强行打架，1 轮收敛
+- arch 接受 cross M3（ADR-0011 fallback 残留 config_changed wording）—— cross-lens 找文档不一致 unique 贡献
+- arch react N1 phase 2 浮出 displayName 治理总则——回顾 modelList Round 也有同问题，**升级为跨 mini-milestone 总则**写到 ADR-0011
+
+#### Phase 3 裁决矩阵（13 项 finding 全 ✅ 收敛）
+
+| # | 主张（合并源） | 终决严重度 | 判断 | 处理 |
+|---|---|---|---|---|
+| 1 | iOS permissionModes non-optional 杀双向 minor bump 兼容（cross M1 自升 + arch B1 锁方案 A）| BLOCKER | ✅ | iOS Codable `[PermissionModeItem]?` optional + store 层 `?? bundleFallback().permissionModes!` 兜底；ADR-0015 加禁止 server-driven non-optional footnote |
+| 2 | 验证矩阵 row 4 没可执行入口（arch MAJOR-1）| MAJOR | ✅ | §3.1 重写 4 行矩阵每行都有执行步骤 + acceptance；§6.4 加 row 4 验收 |
+| 3 | riskLevel 锁 enum 反 modelList recommendedFor 共识（arch MAJOR-2 + cross react self-withdraw enum）| MAJOR | ✅ | TS Zod `z.string().optional()` 不锁 enum；Swift String?；UI if/else 渲染颜色 + 未知值 telemetry warn |
+| 4 | Swift Codable unknown keys 风险方向写反（arch MAJOR-3 + cross agree）| MAJOR | ✅ | §3.2 §3.3 §7 改写：默认 Decodable 合成 init 是 Apple Swift 协议层 graceful skip（与 iOS 17 无关）；真风险是 author 加自定义 init 用 allKeys 校验破坏默认 |
+| 5 | ADR-0011 fallback 残留 config_changed wording（cross M3 + arch react agree）| MAJOR | ✅ | ADR-0011 fallback bullet 删 `config_changed` wording 改 "WS reconnect 携带 If-None-Match" |
+| 6 | ADR sync 缺退出条件（arch MINOR-1 + cross M3 合并升级）| MAJOR | ✅ | §0 + §5 step #11 加完整 ADR sync 动作（ADR-0011 fallback bullet + N1 displayName 总则 + ADR-0015 footnote）|
+| 7 | 工作量 "2h" 违反 user no-time-estimates（arch MINOR-2 + cross refine）| MINOR | ✅ | 删时间估算（user_thinking_style.md 已是有效偏好；外部证据不必再求） |
+| 8 | PermissionModeId 三端同步约束 trace（arch MINOR-3 + cross agree）| MINOR | ✅ | §1 加 trace 注：shared/protocol.ts ClientMessage.permissionMode + cli-runner permission-hook |
+| 9 | telemetry build 31 watch 前置条件 + props 具体化（arch MINOR-4 + cross m3+m4 合并升级 MAJOR）| MAJOR | ✅ | §6.2 加前置 (xcrun devicectl 确认 build 31 仍在) + telemetry props 必含 protocolVersion/etag/modelCount/buildVersion |
+| 10 | isDefault exactly-one enabled 边界（cross m1 + arch refine 落 superRefine 注释）| MINOR | ✅ | §1.2 superRefine 加注 + ADR-0015 footnote F1 标记 "permissionModes.enabled 字段加入时 minor bump 但 superRefine 语义需同改" |
+| 11 | displayName 文案协议化（cross m2 + arch react agree）| MINOR | ✅ | §1 fallback-config 4 项改短名 + description 拆 + riskLevel 表达风险 |
+| 12 | ClientMessage.permissionMode wire 测试缺（cross m4 + arch react agree）| MINOR | ✅ | §6.3 加 outbound WS 验收：选 plan/bypassPermissions 各发 prompt 抓帧 |
+| 13 | N1 displayName 治理总则（arch react phase 2 浮出）| MAJOR | ✅ | ADR-0011 加 §"server-driven displayName 治理总则"（跨 mini-milestone 总则）；permissionModes §1 fallback 4 项落短名；modelList Round 也算 retroactive applies |
+
+**汇总**：✅ 13 / ⚠️ 0 / 🚫 0 / 🟡 0 → **0 still-disagree → 1 轮收敛**
+
+#### 反向挑战（沉淀）
+
+1. **cross-pollinate 真值**：cross 自升 own BLOCKER + 自撤回 own MAJOR Swift enum——这两个动作没 phase 2 完全做不到。cross 单方面无法看到 arch 的 "recommendedFor 共识对称" 论据
+2. **arch 4-dim lens 对"近端 ADR 文本一致性"仍有 blind spot**：cross 抓 ADR-0011 fallback bullet 残留 wording 是 cross 5-lens 的 unique 贡献。modelList Round 也是 cross 抓出 §3 cost table 矛盾——**两次都验证 cross 跨端对齐 lens 的不可替代性**
+3. **N1 displayName 治理总则的浮出**说明 phase 2 cross-pollinate 不只是收敛 phase 1 finding，还能**浮出跨 mini-milestone 治理空缺**。这个能力比 modelList Round phase 2 的"浮出 phase 1 漏检 finding"更高一级
+
+#### 用户拍板状态
+
+✅ **作者自动收敛**（按用户"按建议"路径）：13 ✅ 接受全部应用到 RFC v1.1 + ADR-0011 (fallback bullet + displayName 治理总则) + ADR-0015 (footnote F1)。0 ⚠️ / 0 🚫 / 0 🟡。
+
+**M0 permissionModes Round 验收 PASS** —— 进入实施阶段（12 步实施清单见 RFC §5）。
+
+---
+
 (后续 Round / Round N ... 在此追加)

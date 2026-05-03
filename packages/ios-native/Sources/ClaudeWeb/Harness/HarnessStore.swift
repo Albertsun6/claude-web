@@ -110,7 +110,7 @@ final class HarnessStore {
             // last-resort hardcoded — should never hit if xcodegen + Bundle copy worked
             assertionFailure("Bundle fallback-config.json missing or unparseable; falling back to single-model emergency hardcode")
             return HarnessConfig(
-                protocolVersion: "1.0",
+                protocolVersion: "1.1",
                 minClientVersion: "1.0",
                 etag: "",
                 modelList: [ModelListItem(
@@ -121,6 +121,13 @@ final class HarnessStore {
                     recommendedFor: ["coding"],
                     isDefault: true,
                     enabled: true,
+                )],
+                permissionModes: [PermissionModeItem(
+                    id: "default",
+                    displayName: "Default",
+                    description: "默认行为",
+                    isDefault: true,
+                    riskLevel: "low",
                 )]
             )
         }
@@ -151,5 +158,41 @@ final class HarnessStore {
     /// previously-saved selection got removed by server). Caller must handle.
     func model(id: String) -> ModelListItem? {
         config.modelList.first(where: { $0.id == id })
+    }
+
+    // MARK: - permissionModes (M0 mini-milestone B, v1.1)
+
+    /// permissionModes (server-driven if available; bundle fallback otherwise).
+    /// Phase 3 BLOCKER 修复要求 store 层兜底 nil → bundle fallback，UI 永远拿到非空数组。
+    var permissionModes: [PermissionModeItem] {
+        if let modes = config.permissionModes, !modes.isEmpty {
+            return modes
+        }
+        // Fallback to bundled v1.1 fallback-config (must always have permissionModes)
+        if let fallbackModes = HarnessStore.bundleFallback().permissionModes {
+            telemetry?.warn("harness_store.partial_payload", props: ["missing": "permissionModes"])
+            return fallbackModes
+        }
+        // Should never reach (drift unit test enforces fallback has permissionModes)
+        return []
+    }
+
+    /// Server default permission mode (exactly one per superRefine).
+    var serverDefaultPermissionMode: PermissionModeItem? {
+        permissionModes.first(where: { $0.isDefault })
+    }
+
+    /// Look up a permission mode by id (e.g. user's currently-selected mode).
+    func permissionMode(id: String) -> PermissionModeItem? {
+        permissionModes.first(where: { $0.id == id })
+    }
+
+    /// Telemetry warn if server sends unknown riskLevel value (UI defaults to neutral color).
+    /// Caller invokes from UI rendering path when encountering unrecognized values.
+    func notifyUnknownRiskLevel(modeId: String, riskLevel: String) {
+        telemetry?.warn("harness_store.unknown_risk_level", props: [
+            "modeId": modeId,
+            "riskLevel": riskLevel,
+        ])
     }
 }
