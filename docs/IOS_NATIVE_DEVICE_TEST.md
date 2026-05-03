@@ -152,6 +152,8 @@ cd /Users/yongqian/Desktop/claude-web/packages/ios-native
 - [ ] **6.3** 4G 下发 prompt → 收到回复
 - [ ] **6.4** 飞行模式 5 秒 → 关闭 → WS 自动重连？
 - [ ] **6.5** 重连后 sessionId 是不是 Claude 还知道刚才聊过啥？
+- [ ] **6.6** （M0 §7 hardened）冷启动+后端断线：启动 Seaidea **后** 关掉 Mac backend（`launchctl unload ~/Library/LaunchAgents/com.claude-web.backend.plist`）→ iOS 应显示断线状态（红点 / 错误提示）而非卡死；重启 backend → iOS 自动重连 + SettingsView 模型/权限模式列表与后端一致（harness config 已 refetch）。
+- [ ] **6.7** （M0 §7 hardened）backend tsx watch 重启场景：改 `packages/shared/fixtures/harness/fallback-config.json` 任一字段 → 保存 → tsx watch 重启 backend → iOS WS 断线重连 → **不重装 iOS app** → SettingsView 显示更新后的 config（confirm ETag 变了）。然后还原 json 验证双向可逆。
 
 ---
 

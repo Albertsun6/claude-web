@@ -48,6 +48,9 @@ final class BackendClient {
             // On reconnect we synthesize them so busy state always clears.
             self?.clearStuckRunsAfterReconnect()
             self?.resubscribeFollowedSessions()
+            // Notify App so it can re-fetch HarnessStore config (tsx watch
+            // restart changes the config; the new WS connection is our signal).
+            self?.onConnectedCallback?()
         }
         startWatchdog()
     }
@@ -127,6 +130,14 @@ final class BackendClient {
     /// side effects (git gate check, future hooks). Runs AFTER the store has
     /// processed sessionEnded but before fireNextQueued.
     var onTurnCompleted: ((_ convId: String, _ cwd: String) -> Void)?
+
+    /// Fires when the WS connection is (re)established. Used by ClaudeWebApp
+    /// to re-fetch HarnessStore config after a tsx watch restart.
+    var onConnectedCallback: (() -> Void)?
+
+    /// Fires when backend broadcasts harness_event{kind:"config_changed"}.
+    /// ClaudeWebApp triggers harnessStore.refetch() in response.
+    var onHarnessConfigChanged: (() -> Void)?
 
     var onConversationDirty: ((String) -> Void)? {
         get { store.onConversationDirty }
@@ -442,6 +453,15 @@ final class BackendClient {
             return
         }
 
+        // harness_event has no runId — handle globally before runId routing.
+        if case .harnessEvent(let kind) = msg {
+            telemetry?.log("harness_event.received", props: ["kind": kind])
+            if kind == "config_changed" {
+                onHarnessConfigChanged?()
+            }
+            return
+        }
+
         // Resolve which conversation this message belongs to. Messages whose
         // runId we don't know — orphan reconnect frames, conversations the
         // user already closed, global errors — silently drop. They must NOT
@@ -464,6 +484,7 @@ final class BackendClient {
 
         switch msg {
         case .sdkMessage(_, let sdk):
+            store.touchLastActivity(convId: convId)
             switch sdk {
             case .systemInit(let sessionId, _):
                 store.handleSystemInit(convId: convId, runId: runId, sessionId: sessionId)
@@ -525,6 +546,10 @@ final class BackendClient {
             // means switch never reaches this case in practice. Listed for
             // exhaustiveness.
             return
+        case .harnessEvent:
+            // Already handled before runId routing — early-return means switch
+            // never reaches this case in practice.
+            return
         case .unknown:
             return
         }
@@ -574,15 +599,17 @@ final class BackendClient {
         for (convId, state) in store.stateByConversation where state.busy {
             // Periodic flush: persist in-progress messages every 30 s.
             onConversationDirty?(convId)
-            // Watchdog: force-clear runs that have been alive too long.
-            guard let startedAt = state.runStartedAt,
-                  now.timeIntervalSince(startedAt) > threshold,
+            // Watchdog: kill only if no server activity for > threshold.
+            // Falls back to runStartedAt when no message has arrived yet
+            // (e.g. WS died before the first response packet).
+            guard let baseline = state.lastActivityAt ?? state.runStartedAt,
+                  now.timeIntervalSince(baseline) > threshold,
                   let runId = state.currentRunId else { continue }
-            let ageSec = Int(now.timeIntervalSince(startedAt))
+            let ageSec = Int(now.timeIntervalSince(baseline))
             _ = store.handleSessionEnded(convId: convId, runId: runId, reason: "interrupted")
             router.release(runId: runId)
             forgetRunAllowlist(runId)
-            store.appendError(toConversation: convId, "运行超时（8分钟），已自动停止")
+            store.appendError(toConversation: convId, "运行超时（8分钟无响应），已自动停止")
             onConversationDirty?(convId)
             telemetry?.warn("stuck_run.watchdog",
                             props: ["runId": runId, "ageSec": String(ageSec)],

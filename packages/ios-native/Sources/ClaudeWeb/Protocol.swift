@@ -77,6 +77,8 @@ enum ServerMessage {
     /// `entryJSON` is the raw JSON of one normalized entry; consumer
     /// decodes it as `TranscriptEntry` and reuses TranscriptParser.
     case sessionEvent(cwd: String, sessionId: String, byteOffset: Int, entryJSON: Data)
+    /// Broadcast from backend when server-driven config changes (or other harness lifecycle events).
+    case harnessEvent(kind: String)
     case unknown(type: String)
 
     /// Used by BackendClient to route a message to the conversation that
@@ -92,8 +94,8 @@ enum ServerMessage {
             return r
         case .error(let r, _):
             return r
-        case .sessionEvent, .unknown:
-            // session_event isn't tied to a runId — routed via (cwd, sessionId).
+        case .sessionEvent, .harnessEvent, .unknown:
+            // session_event and harness_event aren't tied to a runId — handled globally.
             return nil
         }
     }
@@ -107,6 +109,7 @@ enum ServerMessage {
         case .clearRunMessages: return "clear_run_messages"
         case .permissionRequest: return "permission_request"
         case .sessionEvent: return "session_event"
+        case .harnessEvent(let k): return "harness_event:\(k)"
         case .unknown(let t): return "unknown:\(t)"
         }
     }
@@ -150,6 +153,9 @@ enum ServerMessage {
                 byteOffset: (json["byteOffset"] as? Int) ?? 0,
                 entryJSON: entryJSON
             )]
+        case "harness_event":
+            let kind = (json["kind"] as? String) ?? "unknown"
+            return [.harnessEvent(kind: kind)]
         default:
             return [.unknown(type: type)]
         }

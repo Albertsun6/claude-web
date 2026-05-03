@@ -91,4 +91,11 @@ export type ServerMessage =
       sessionId: string;
       byteOffset: number;
       entry: unknown;
+    }
+  | {
+      // Broadcast when server-driven config changes (fallback-config.json
+      // edited + tsx watch restart). Clients should re-fetch /api/harness/config.
+      type: "harness_event";
+      kind: "config_changed" | "stage_changed" | "task_started" | "decision_requested" | "run_appended" | "review_complete";
+      payload?: unknown;
     };

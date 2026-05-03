@@ -18,6 +18,7 @@ import { gitRouter } from "./routes/git.js";
 import { voiceRouter } from "./routes/voice.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { projectsRouter } from "./routes/projects.js";
+import { ensureScratchProject } from "./projects-store.js";
 import { telemetryRouter } from "./routes/telemetry.js";
 import {
   permissionRouter,
@@ -28,6 +29,7 @@ import { inboxRouter } from "./routes/inbox.js";
 import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
 import { harnessConfigRouter } from "./routes/harness-config.js";
+import { harnessConfigEvents } from "./harness-config.js";
 import { worktreesRouter, workRouter } from "./routes/worktrees.js";
 import { buildNotificationHub, type NotificationContext, type SessionEndReason } from "./notifications/index.js";
 import {
@@ -101,6 +103,11 @@ app.route("/api/work", workRouter);
 // Returns NoOpHub if no channels configured.
 const notifyHub = buildNotificationHub();
 heartbeatSetNotificationChannelCount(notifyHub.channelCount);
+
+// Always-on scratch project — sticky-pinned no-cwd chat target.
+ensureScratchProject().catch((err) => {
+  console.warn("[backend] ensureScratchProject failed:", err);
+});
 
 // Track active runs across all WS clients so /health can report.
 const allConnections = new Set<{ runs: Map<string, RunHandle> }>();
@@ -221,6 +228,18 @@ const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) =>
 });
 
 const wss = new WebSocketServer({ noServer: true });
+
+// Broadcast harness_event{config_changed} to all connected WS clients when
+// fallback-config.json is modified in-process (chokidar watch in harness-config.ts).
+// tsx watch restart also reconnects iOS, but this covers the rare in-process path.
+harnessConfigEvents.on("config_changed", () => {
+  const msg: ServerMessage = { type: "harness_event", kind: "config_changed" };
+  const payload = JSON.stringify(msg);
+  for (const ws of wss.clients) {
+    if (ws.readyState === ws.OPEN) ws.send(payload);
+  }
+  console.log("[harness] config_changed broadcast to", wss.clients.size, "client(s)");
+});
 
 server.on("upgrade", (req, socket, head) => {
   if (req.url?.split("?")[0] !== "/ws") {

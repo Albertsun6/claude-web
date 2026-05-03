@@ -149,6 +149,17 @@ struct ClaudeWebApp: App {
             cacheRef.saveConversations(c.conversationsList())
         }
 
+        // Re-fetch HarnessStore config whenever the WS (re)connects (covers tsx
+        // watch restart changing fallback-config.json) or when backend broadcasts
+        // harness_event{config_changed} within an existing connection.
+        let harnessRef = harnessStore
+        client.onConnectedCallback = {
+            Task { @MainActor in await harnessRef.refetch() }
+        }
+        client.onHarnessConfigChanged = {
+            Task { @MainActor in await harnessRef.refetch() }
+        }
+
         let ttsRef = tts
         let voiceRef = voice
         client.onCompletedTurn = { [weak ttsRef, weak clientRef, weak voiceRef] turn in
