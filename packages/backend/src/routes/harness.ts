@@ -1,6 +1,8 @@
 // harness REST routes (M1 minimum slice)
 //
 // Endpoints:
+//   POST /api/harness/scheduler/tick           trigger one scheduler step
+//
 //   GET  /api/harness/initiatives?projectId=  list initiatives
 //   POST /api/harness/initiatives              create initiative
 //   GET  /api/harness/initiatives/:id          get initiative
@@ -28,9 +30,24 @@ import {
   createStage, listStages, setStageStatus,
   createDecision, listPendingDecisions, resolveDecision,
 } from "../harness-queries.js";
+import { EvaScheduler } from "../scheduler.js";
 
-export function buildHarnessRouter(db: Database.Database): Hono {
+export function buildHarnessRouter(
+  db: Database.Database,
+  broadcast: (msg: unknown) => void,
+): Hono {
   const app = new Hono();
+  const scheduler = new EvaScheduler(db, broadcast);
+
+  // -------------------------------------------------------------------------
+  // Scheduler
+  // -------------------------------------------------------------------------
+
+  app.post("/scheduler/tick", async (c) => {
+    const projectId = c.req.query("projectId");
+    const result = await scheduler.tick(projectId);
+    return c.json({ ok: true, data: result });
+  });
 
   // -------------------------------------------------------------------------
   // Initiative

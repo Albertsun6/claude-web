@@ -230,4 +230,48 @@ describe("protocol fixtures — ServerMessage", () => {
       expect(msg.entry).toBeDefined();
     }
   });
+
+  it("server-harness-event-stage-started", () => {
+    const msg = loadFixture<ServerMessage>(
+      "server-harness-event-stage-started.json",
+    );
+    expect(msg.type).toBe("harness_event");
+    if (msg.type === "harness_event") {
+      expect(msg.kind).toBe("stage_started");
+      expect(msg.payload).toBeDefined();
+    }
+  });
+
+  it("server-harness-event-stage-message", () => {
+    const msg = loadFixture<ServerMessage>(
+      "server-harness-event-stage-message.json",
+    );
+    expect(msg.type).toBe("harness_event");
+    if (msg.type === "harness_event") {
+      expect(msg.kind).toBe("stage_message");
+      expect(msg.payload).toBeDefined();
+    }
+  });
+
+  it("server-harness-event-stage-done", () => {
+    const msg = loadFixture<ServerMessage>(
+      "server-harness-event-stage-done.json",
+    );
+    expect(msg.type).toBe("harness_event");
+    if (msg.type === "harness_event") {
+      expect(msg.kind).toBe("stage_done");
+      expect(msg.payload).toBeDefined();
+    }
+  });
+
+  it("server-harness-event-stage-failed", () => {
+    const msg = loadFixture<ServerMessage>(
+      "server-harness-event-stage-failed.json",
+    );
+    expect(msg.type).toBe("harness_event");
+    if (msg.type === "harness_event") {
+      expect(msg.kind).toBe("stage_failed");
+      expect(msg.payload).toBeDefined();
+    }
+  });
 });

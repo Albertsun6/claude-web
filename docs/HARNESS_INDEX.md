@@ -86,6 +86,7 @@
 | M0 mini: permissionModes 试点 | (M0 retro §3 + commit `d037438`) | ✅ 完成（2026-05-03，第一次 minor bump v1.0 → v1.1 真测） |
 | M0 mini: agentProfiles 试点 | (M0 retro §3 + commit `3aabde1`) | ✅ 完成（2026-05-03，第二次 minor bump v1.1 → v1.2 + 三件套补齐） |
 | M1 骨架 | retrospectives/M1.md | — |
+| M1 mini: Scheduler 骨架 | [retrospectives/M1-scheduler-skeleton.md](retrospectives/M1-scheduler-skeleton.md) | ✅ 完成（2026-05-05，retroactive patch 评审示范）|
 | M2 真 agent + dogfood | retrospectives/M2.md | — |
 | M3 质量与可观测 | retrospectives/M3.md | — |
 | M4 方法论沉淀 | retrospectives/M4.md | — |

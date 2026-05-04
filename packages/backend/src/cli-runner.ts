@@ -19,6 +19,8 @@ export interface RunSessionParams {
   /** Called if we restart the run (e.g. stale session) so frontend can wipe state. */
   onClearRunMessages?: () => void;
   signal?: AbortSignal;
+  /** Scheduler task identifier for WS broadcast routing (e.g. "<issueId>/<stageId>"). */
+  taskId?: string;
 }
 
 const CLI_BIN = process.env.CLAUDE_CLI ?? "claude";
