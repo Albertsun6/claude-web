@@ -17,7 +17,7 @@ export const inboxRouter = new Hono();
 
 const VALID_TRIAGE_DESTINATIONS: TriageDestination[] = ["ideas", "archive"];
 
-// POST /api/inbox  body: { body: string, source?: string, meta?: object }
+// POST /api/inbox  body: { body: string, source?: string, cwd?: string, meta?: object }
 // Lowest-friction capture endpoint. body is the only required field.
 // Backend is the sole writer of `status` / `triage` — clients supplying
 // these fields are rejected to prevent round-trip data loss when an old
@@ -44,19 +44,21 @@ inboxRouter.post("/", async (c) => {
   const item = await appendInbox({
     body: payload.body,
     source: payload.source ?? "unknown",
+    cwd: typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd.trim() : undefined,
     meta: payload.meta,
   });
   return c.json({ item }, 201);
 });
 
-// GET /api/inbox/list?unprocessed=1&includeArchived=1&limit=50
+// GET /api/inbox/list?unprocessed=1&includeArchived=1&limit=50&cwd=/path/to/project
 inboxRouter.get("/list", (c) => {
   const unprocessed = c.req.query("unprocessed") === "1";
   const includeArchived = c.req.query("includeArchived") === "1";
   const limitStr = c.req.query("limit");
   const limit = limitStr ? Math.max(1, Math.min(500, parseInt(limitStr, 10) || 50)) : 50;
+  const cwd = c.req.query("cwd") || undefined;
   return c.json({
-    items: listInbox({ unprocessedOnly: unprocessed, includeArchived, limit }),
+    items: listInbox({ unprocessedOnly: unprocessed, includeArchived, limit, cwd }),
     stats: inboxStats(),
   });
 });

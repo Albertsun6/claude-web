@@ -31,6 +31,8 @@ export interface InboxItem {
   body: string;
   source: "voice" | "text" | "web" | "ios" | "unknown";
   capturedAt: number;
+  /** Working directory this idea belongs to. Optional — omitted means global. */
+  cwd?: string;
   /** When set, this item was already converted into a real Issue/conversation. */
   processedIntoConversationId?: string;
   /**
@@ -109,6 +111,7 @@ function loadAll(): InboxItem[] {
 export interface AppendInput {
   body: string;
   source?: InboxItem["source"];
+  cwd?: string;
   meta?: Record<string, unknown>;
 }
 
@@ -120,6 +123,7 @@ export function appendInbox(input: AppendInput): Promise<InboxItem> {
       body: input.body.trim(),
       source: input.source ?? "unknown",
       capturedAt: Date.now(),
+      ...(input.cwd ? { cwd: input.cwd } : {}),
       meta: input.meta,
     };
     await appendFile(STORE_PATH, JSON.stringify(item) + "\n", "utf8");
@@ -135,6 +139,8 @@ export interface ListOptions {
   includeArchived?: boolean;
   /** Max items to return; latest first. Default 50. */
   limit?: number;
+  /** Filter by cwd. If omitted, returns all items regardless of cwd. */
+  cwd?: string;
 }
 
 export function listInbox(opts: ListOptions = {}): InboxItem[] {
@@ -145,6 +151,9 @@ export function listInbox(opts: ListOptions = {}): InboxItem[] {
   }
   if (opts.unprocessedOnly) {
     filtered = filtered.filter((it) => !it.processedIntoConversationId);
+  }
+  if (opts.cwd) {
+    filtered = filtered.filter((it) => it.cwd === opts.cwd);
   }
   // newest first
   return filtered.slice().reverse().slice(0, opts.limit ?? 50);

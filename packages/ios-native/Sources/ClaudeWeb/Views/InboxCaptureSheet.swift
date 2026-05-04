@@ -1,4 +1,4 @@
-// 30-秒-碎想 capture sheet.
+// 30-秒-Idea capture sheet.
 // Goal: tap the 💡 button → this sheet appears focused on the text field →
 // user types or dictates a thought → tap "存入 Inbox" → toast → sheet dismisses.
 // No project / priority / tag selection required (those are processed later).
@@ -24,7 +24,7 @@ struct InboxCaptureSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
-                Text("把刚才想到的事情存下来，回头再处理。")
+                Text("把刚才想到的事情存下来，回头再处理。（完整版 Idea 捕捉）")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
@@ -103,7 +103,7 @@ struct InboxCaptureSheet: View {
                 Spacer()
             }
             .padding(.top, 12)
-            .navigationTitle("💡 碎想 Inbox")
+            .navigationTitle("💡 Idea Inbox")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

@@ -1,4 +1,4 @@
-// Inbox list view — see all 碎想 captured via the 💡 button or web POST.
+// Inbox list view — see all Ideas captured via Idea mode or web POST.
 // Tap an item → "处理为新对话" (turn the captured text into a fresh prompt
 // in a new conversation; backend marks the inbox item processed).
 // Swipe actions:
@@ -9,6 +9,9 @@
 import SwiftUI
 
 struct InboxListView: View {
+    /// When set, list is filtered to only show Ideas for this cwd.
+    var filterCwd: String? = nil
+
     @Environment(InboxAPI.self) private var inboxAPI
     @Environment(BackendClient.self) private var client
     @Environment(AppSettings.self) private var settings
@@ -36,7 +39,7 @@ struct InboxListView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 Picker("", selection: $tab) {
-                    Text("💡 碎想 (\(stats?.total ?? items.count))").tag(Tab.inbox)
+                    Text("💡 Idea (\(stats?.total ?? items.count))").tag(Tab.inbox)
                     Text("📥 当前队列 (\(client.currentPendingQueue.count))").tag(Tab.queue)
                 }
                 .pickerStyle(.segmented)
@@ -49,7 +52,7 @@ struct InboxListView: View {
                     queueBody
                 }
             }
-            .navigationTitle(tab == .inbox ? "💡 碎想 Inbox" : "📥 当前对话队列")
+            .navigationTitle(tab == .inbox ? "💡 Idea Inbox" : "📥 当前对话队列")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -183,10 +186,10 @@ struct InboxListView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .loaded where items.isEmpty:
             VStack(spacing: 12) {
-                Image(systemName: "tray").font(.system(size: 40)).foregroundStyle(.secondary)
-                Text(showOnlyUnprocessed ? "Inbox 空了" : "Inbox 里还没有碎想")
+                Image(systemName: "lightbulb").font(.system(size: 40)).foregroundStyle(.secondary)
+                Text(showOnlyUnprocessed ? "Inbox 空了" : "还没有 Idea")
                     .font(.subheadline).foregroundStyle(.secondary)
-                Text("通过 InputBar 旁的 💡 按钮，或 POST /api/inbox 录入想法")
+                Text("在输入框切换到 Idea 模式录入，或 POST /api/inbox")
                     .font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center).padding(.horizontal, 40)
             }
@@ -320,6 +323,7 @@ struct InboxListView: View {
                 unprocessedOnly: showOnlyUnprocessed,
                 includeArchived: includeArchived,
                 limit: 200,
+                cwd: filterCwd,
             )
             await MainActor.run {
                 items = resp.items
@@ -355,6 +359,7 @@ struct InboxListView: View {
                         body: item.body,
                         source: item.source,
                         capturedAt: item.capturedAt,
+                        cwd: item.cwd,
                         processedIntoConversationId: convId,
                         status: item.status,
                         triage: item.triage,

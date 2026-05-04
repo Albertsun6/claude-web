@@ -14,12 +14,13 @@ struct InboxItem: Codable, Identifiable, Equatable {
     let body: String
     let source: String
     let capturedAt: Int64
+    let cwd: String?
     let processedIntoConversationId: String?
     let status: String?  // "open" | "archived"; nil on legacy records → treat as "open"
     let triage: InboxTriage?
 
     enum CodingKeys: String, CodingKey {
-        case id, body, source, capturedAt, processedIntoConversationId, status, triage
+        case id, body, source, capturedAt, cwd, processedIntoConversationId, status, triage
     }
 }
 
@@ -41,13 +42,14 @@ final class InboxAPI {
         self.baseURL = baseURL
     }
 
-    /// Submit a new 碎想. Returns immediately on success.
-    func capture(body: String, source: String = "ios") async throws -> InboxItem {
+    /// Submit a new Idea. Returns immediately on success.
+    func capture(body: String, source: String = "ios", cwd: String? = nil) async throws -> InboxItem {
         let url = baseURL().appendingPathComponent("api/inbox")
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let payload = ["body": body, "source": source]
+        var payload: [String: String] = ["body": body, "source": source]
+        if let cwd { payload["cwd"] = cwd }
         req.httpBody = try JSONEncoder().encode(payload)
         req.timeoutInterval = 6
         let (data, resp) = try await URLSession.shared.data(for: req)
@@ -69,13 +71,16 @@ final class InboxAPI {
         unprocessedOnly: Bool = false,
         includeArchived: Bool = false,
         limit: Int = 50,
+        cwd: String? = nil,
     ) async throws -> InboxListResponse {
         var comps = URLComponents(url: baseURL().appendingPathComponent("api/inbox/list"), resolvingAgainstBaseURL: false)!
-        comps.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "unprocessed", value: unprocessedOnly ? "1" : "0"),
             URLQueryItem(name: "includeArchived", value: includeArchived ? "1" : "0"),
             URLQueryItem(name: "limit", value: String(limit)),
         ]
+        if let cwd { queryItems.append(URLQueryItem(name: "cwd", value: cwd)) }
+        comps.queryItems = queryItems
         var req = URLRequest(url: comps.url!)
         req.timeoutInterval = 6
         let (data, _) = try await URLSession.shared.data(for: req)

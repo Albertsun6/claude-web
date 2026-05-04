@@ -38,6 +38,9 @@ struct InputBar: View {
     @State private var showContextSheet = false
     @State private var showPhotosPicker = false
     @State private var showInboxSheet = false
+    @State private var ideaMode = false             // Chat vs Idea mode toggle
+    @State private var ideaSaving = false
+    @State private var ideaToast: String? = nil
 
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
@@ -104,20 +107,60 @@ struct InputBar: View {
                 }
             }
 
-            // Model chip — shows current model at a glance; hidden while typing
-            // (keyboard tools row is more useful then) or recording.
+            // Mode/model row — hidden while keyboard is up (history row takes over)
+            // or while recording.
             if !inputFocused && recorder.state == .idle {
-                HStack {
+                HStack(spacing: 8) {
+                    // Chat / Idea toggle pill
+                    HStack(spacing: 0) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) { ideaMode = false }
+                        } label: {
+                            Text("Chat")
+                                .font(.caption2.weight(.medium))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 3)
+                                .background(ideaMode ? Color.clear : Color.accentColor, in: .capsule)
+                                .foregroundStyle(ideaMode ? Color.secondary : Color.white)
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) { ideaMode = true }
+                        } label: {
+                            Text("Idea")
+                                .font(.caption2.weight(.medium))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 3)
+                                .background(ideaMode ? Color.purple : Color.clear, in: .capsule)
+                                .foregroundStyle(ideaMode ? Color.white : Color.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .background(.secondary.opacity(0.1), in: .capsule)
+
                     Spacer()
-                    Text(shortModelName)
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.secondary.opacity(0.1), in: .capsule)
+
+                    // Idea toast
+                    if let ideaToast {
+                        Text(ideaToast)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.purple)
+                            .transition(.opacity)
+                    }
+
+                    // Model chip (only in Chat mode)
+                    if !ideaMode {
+                        Text(shortModelName)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(.secondary.opacity(0.1), in: .capsule)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 4)
+                .animation(.easeInOut(duration: 0.2), value: ideaToast)
                 .transition(.opacity)
             }
 
@@ -148,7 +191,7 @@ struct InputBar: View {
                     Button {
                         showInboxSheet = true
                     } label: {
-                        Label("碎想 Inbox（不发送，先存）", systemImage: "lightbulb")
+                        Label("查看 Idea 列表", systemImage: "lightbulb")
                     }
                 } label: {
                     Image(systemName: attachIconName)
@@ -166,8 +209,13 @@ struct InputBar: View {
                     Task { await loadPickedImages(items) }
                 }
 
-                TextField("输入指令，或按住麦克风说话…", text: $draft, axis: .vertical)
+                TextField(ideaMode ? "记一个 Idea…" : "输入指令，或按住麦克风说话…", text: $draft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
+                    .tint(ideaMode ? .purple : .accentColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(ideaMode ? Color.purple.opacity(0.6) : Color.clear, lineWidth: 1.5)
+                    )
                     .lineLimit(1...4)
                     .submitLabel(.send)
                     .onSubmit(doSend)
@@ -203,16 +251,26 @@ struct InputBar: View {
                         .presentationDragIndicator(.visible)
                     }
                     .sheet(isPresented: $showInboxSheet) {
-                        InboxCaptureSheet(api: inboxAPI) {
-                            showInboxSheet = false
-                        }
+                        InboxListView(filterCwd: cwd.isEmpty ? nil : cwd)
                         .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
                     }
 
                 pttButton
 
-                if busy {
+                if ideaMode {
+                    Button(action: doSaveIdea) {
+                        if ideaSaving {
+                            ProgressView()
+                                .frame(width: 44, height: 44)
+                        } else {
+                            Image(systemName: "lightbulb.fill")
+                                .frame(width: 44, height: 44)
+                                .foregroundStyle(canSend ? Color.purple : .secondary)
+                        }
+                    }
+                    .disabled(!canSend || ideaSaving)
+                } else if busy {
                     if canSend {
                         Button(action: doQueue) {
                             HStack(spacing: 3) {
@@ -291,6 +349,40 @@ struct InputBar: View {
     }
 
     // MARK: - Send
+
+    private func doSaveIdea() {
+        let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty, !ideaSaving else { return }
+        ideaSaving = true
+        let cwdToSave = cwd.isEmpty ? nil : cwd
+        Task {
+            do {
+                _ = try await inboxAPI.capture(body: body, source: "ios", cwd: cwdToSave)
+                await MainActor.run {
+                    draft = ""
+                    ideaSaving = false
+                    ideaMode = false
+                    showIdeaToast("💡 Idea 已记录")
+                }
+            } catch {
+                await MainActor.run {
+                    ideaSaving = false
+                    showIdeaToast("保存失败")
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func showIdeaToast(_ msg: String) {
+        ideaToast = msg
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            await MainActor.run {
+                if ideaToast == msg { ideaToast = nil }
+            }
+        }
+    }
 
     private func doSend() {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
