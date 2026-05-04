@@ -68,6 +68,9 @@ struct ConversationChatState: Equatable {
     /// When the current run started. Set in `startTurn`, cleared in
     /// `handleSessionEnded`. Used by the H1 run dashboard for "running for 2m".
     var runStartedAt: Date? = nil
+    /// Updated on every server-driven SDK message. Watchdog uses this (falling
+    /// back to runStartedAt) so actively-streaming runs are never killed.
+    var lastActivityAt: Date? = nil
 }
 
 struct ChatLine: Identifiable, Codable, Equatable {

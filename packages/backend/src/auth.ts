@@ -15,15 +15,21 @@
 
 import path from "node:path";
 import type { Context, Next } from "hono";
+import { SCRATCH_CWD } from "./projects-store.js";
 
 const TOKEN = (process.env.CLAUDE_WEB_TOKEN ?? "").trim();
 const RAW_ROOTS = (process.env.CLAUDE_WEB_ALLOWED_ROOTS ?? "").trim();
 
 const ALLOWED_ROOTS: string[] = RAW_ROOTS
-  ? RAW_ROOTS.split(":")
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .map((p) => path.resolve(p))
+  ? Array.from(new Set([
+      ...RAW_ROOTS.split(":")
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .map((p) => path.resolve(p)),
+      // Always permit the scratch project's cwd so the always-on "💬 随手问"
+      // entry works even with a strict allowlist.
+      SCRATCH_CWD,
+    ]))
   : [];
 
 let warnedToken = false;

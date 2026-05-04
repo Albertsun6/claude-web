@@ -159,17 +159,21 @@ final class WebSocketClient {
 
     private func startPingTimer() {
         pingTimer?.invalidate()
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+        // 30s tick + 90s pong-stale threshold tuned for Tailscale + cellular:
+        // telemetry showed 92% of ping.timeout events fired at 60s/80s
+        // sinceLastPongSec under the old 20s/50s settings (false positives
+        // during wifi↔cellular handover or transient Tailscale relay churn).
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.tickPing() }
         }
     }
 
     /// Send a WS ping. If the pong handler errors OR no pong has come back in
-    /// 50 s, the connection is half-dead — force a reconnect, which then
+    /// 90 s, the connection is half-dead — force a reconnect, which then
     /// triggers `clearStuckRunsAfterReconnect` upstream to clear stuck runs.
     private func tickPing() {
         guard let t = task else { return }
-        if Date().timeIntervalSince(lastPongAt) > 50 {
+        if Date().timeIntervalSince(lastPongAt) > 90 {
             telemetry?.warn("ws.ping.timeout",
                             props: ["sinceLastPongSec": String(Int(Date().timeIntervalSince(lastPongAt)))])
             scheduleReconnect()

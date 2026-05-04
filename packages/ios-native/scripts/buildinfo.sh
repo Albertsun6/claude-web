@@ -31,7 +31,7 @@ GIT_DIRTY=""
 if ! git -C "$PROJECT_DIR" diff --quiet 2>/dev/null; then GIT_DIRTY="+dirty"; fi
 if ! git -C "$PROJECT_DIR" diff --cached --quiet 2>/dev/null; then GIT_DIRTY="+dirty"; fi
 GIT_COMMIT_TIME="$(git -C "$PROJECT_DIR" log -1 --format=%cI 2>/dev/null || echo unknown)"
-GIT_COMMIT_SUBJECT="$(git -C "$PROJECT_DIR" log -1 --format=%s 2>/dev/null | head -c 100 | sed 's/"/\\"/g' || echo unknown)"
+GIT_COMMIT_SUBJECT="$(git -C "$PROJECT_DIR" log -1 --format=%s 2>/dev/null | head -c 100 | iconv -c -f UTF-8 -t UTF-8 | sed 's/"/\\"/g' || echo unknown)"
 
 # 3) Build time.
 BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"

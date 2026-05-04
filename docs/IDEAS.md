@@ -196,6 +196,48 @@ iOS 已有完整 inbox（[InboxCaptureSheet.swift](packages/ios-native/Sources/C
 
 ---
 
+### P7. 随手问 scratch 项目自动清理
+"💬 随手问" 项目（`~/.claude-web/scratch/`）会无限累积对话。需要后台定期清理超过 N 天无活动的对话（jsonl + cache），避免抽屉里翻历史时被低价值临时问答淹没。
+
+**实现**：
+- backend `projects-store.ts` 加 `cleanupScratchSessions(olderThanDays = 30)` —— 扫描 scratch project 的 jsonl，按 mtime 删除
+- launchd 触发或 backend 启动时跑一次（idempotent）
+- iOS Cache LRU 自然会跟上（已限 50 个 session 文件）
+- 不删 scratch dir 本身，也不删 sticky 项目记录
+
+**何时做**：用 1-2 个月真实使用后看堆积速度再决定阈值（30 天可能太长/太短）。
+
+---
+
+### P8. 随手问接 web search / 在线查询
+当前 scratch project 只能依赖 Claude 训练知识。用户想"查一下最新版 X 怎么用"时模型会提示 cutoff。
+
+**两条路径**：
+- **A. CLI 启用 WebSearch tool**：在 spawn `claude --print` 时通过 settings.json 开 WebSearch，scratch project 专用 settings（不影响其他项目）
+- **B. 调本地工具**：在 scratch cwd 放一个 `bin/search` 脚本（curl + jq），Claude 用 Bash 调用。免费但要自己接 search API
+
+**为什么不优先**：日常问题 80% 模型自带知识能答；查最新文档可以临时手动跳浏览器。
+
+---
+
+### P9. WS 断线 grace period 不杀 CLI（"不丢任务"重连）
+当前 WS 一断，backend `index.ts:431-443` 立即 `abort.abort()` 所有 in-flight CLI；iOS 重连后只能给每个 busy 对话 append "连接中断，操作已停止"。Tier 2 调 ping 阈值后误报会少，但**真断网仍丢任务**。
+
+**实现**：
+- backend WS close 时不立即 abort，把每个 run 挂到 conversationId/sessionId 索引的"游离 run 池"，启 30s 倒计时
+- iOS 重连时带上 `claim_runs: [conversationId]` 让 backend 把对应 run 重新绑回新 socket
+- 倒计时内被认领 → 续 stream；超时未认领 → 才 abort
+- CLI 端输出在游离期间 buffer 到内存（cap N MB），重连后 replay
+
+**Sharp edges**：
+- 跨设备所有权：A 设备 reconnect claim 了，B 设备又来 claim 怎么办（last-write-wins？拒绝？）
+- buffer 上限：长 run 期间断网 30s 可能堆 MB 级输出
+- 协议变更：`session_resume` 类的新消息要加进 shared schema，跨端协调
+
+**为什么不立即做**：工程量大、要设计 resume 协议、跨设备语义需要想清楚。Tier 2 调阈值已经能把 92% 的误报砍掉，先观察一段。
+
+---
+
 ### 5. `--add-dir` 多目录支持
 项目可能依赖隔壁目录（monorepo 兄弟包、共享配置）。Claude 需要能 Read 这些目录。
 

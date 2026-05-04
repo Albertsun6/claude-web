@@ -388,26 +388,43 @@ final class TTSPlayer: NSObject {
                     else { continue }
 
                     if let sentence = json["sentence"] as? String, !sentence.isEmpty {
-                        let idx = sentenceIndex
-                        sentenceIndex += 1
-                        // Grow the queue total and fire TTS for this sentence.
-                        if var q = queue, q.generation == gen {
-                            q.total = sentenceIndex
-                            queue = q
+                        // /tts has a 2000-char hard cap and a 30s timeout — if Haiku
+                        // emits a long comma-separated sentence with no early period,
+                        // a single SSE payload can exceed both. Run the same splitter
+                        // verbatim path uses so each /tts call stays bounded.
+                        let chunks = splitSentencesForTTS(sentence)
+                        for chunk in chunks {
+                            let idx = sentenceIndex
+                            sentenceIndex += 1
+                            if var q = queue, q.generation == gen {
+                                q.total = sentenceIndex
+                                queue = q
+                            }
+                            Task { [weak self] in
+                                guard let self else { return }
+                                let mp3 = await self.fetchTTS(chunk)
+                                await self.handleChunkResult(idx: idx, mp3: mp3, gen: gen)
+                            }
+                            if idx == 0 { state = .fetching }
+                            telemetry?.log(
+                                "tts.stream.sentence",
+                                props: ["idx": String(idx), "len": String(chunk.count)],
+                                conversationId: conversationId
+                            )
                         }
-                        Task { [weak self] in
-                            guard let self else { return }
-                            let mp3 = await self.fetchTTS(sentence)
-                            await self.handleChunkResult(idx: idx, mp3: mp3, gen: gen)
-                        }
-                        // First sentence: transition to fetching so UI shows activity.
-                        if idx == 0 { state = .fetching }
-                        telemetry?.log(
-                            "tts.stream.sentence",
-                            props: ["idx": String(idx), "len": String(sentence.count)],
-                            conversationId: conversationId
-                        )
                     } else if (json["done"] as? Bool) == true {
+                        // If the backend stream finished without ever emitting a
+                        // sentence (Haiku errored, claude CLI mis-spawned, etc),
+                        // fall back to verbatim instead of silently going idle.
+                        if sentenceIndex == 0 {
+                            telemetry?.warn(
+                                "tts.stream.empty",
+                                props: ["sourceLen": String(text.count)],
+                                conversationId: conversationId
+                            )
+                            await fallbackVerbatim(text, conversationId: conversationId, gen: gen)
+                            return
+                        }
                         // Mark stream complete so finalizeTurn can fire.
                         if var q = queue, q.generation == gen {
                             q.isDone = true
@@ -459,36 +476,6 @@ final class TTSPlayer: NSObject {
                 let mp3 = await self.fetchTTS(sentence)
                 await self.handleChunkResult(idx: idx, mp3: mp3, gen: gen)
             }
-        }
-    }
-
-    private func fetchSummary(_ text: String) async -> String? {
-        var req = URLRequest(url: backendURL().appendingPathComponent("/api/voice/summarize"))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        authorize(&req)
-        req.timeoutInterval = 35
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
-        do {
-            let (data, response) = try await URLSession.shared.data(for: req)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                telemetry?.warn("tts.summary.http_error", props: ["status": String(code)])
-                return nil
-            }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                telemetry?.warn("tts.summary.bad_json")
-                return nil
-            }
-            if (json["fallback"] as? Bool) == true {
-                let err = json["error"] as? String ?? "unknown"
-                telemetry?.warn("tts.summary.fallback_from_backend", props: ["reason": err])
-                return nil
-            }
-            return (json["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
-            telemetry?.warn("tts.summary.request_failed", props: ["error": error.localizedDescription])
-            return nil
         }
     }
 

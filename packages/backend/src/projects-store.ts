@@ -5,10 +5,10 @@
 
 import { mkdir, readFile, rename, writeFile, copyFile, stat } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import { randomUUID } from "node:crypto";
+import { DATA_DIR } from "./data-dir.js";
 
-const STORE_DIR = path.join(os.homedir(), ".claude-web");
+const STORE_DIR = DATA_DIR;
 const STORE_PATH = path.join(STORE_DIR, "projects.json");
 const BACKUP_PATH = STORE_PATH + ".bak";
 const TMP_PATH = STORE_PATH + ".tmp";
@@ -21,7 +21,11 @@ export interface Project {
   cwd: string;
   createdAt: string;
   updatedAt: string;
+  sticky?: boolean;
 }
+
+export const SCRATCH_CWD = path.join(STORE_DIR, "scratch");
+const SCRATCH_DEFAULT_NAME = "💬 随手问";
 
 interface Store {
   version: number;
@@ -171,6 +175,40 @@ export async function forgetProject(id: string): Promise<boolean> {
  * exists (moved, deleted, external drive unmounted). Caller decides whether
  * to forget them — we never auto-forget.
  */
+/**
+ * Idempotent boot-time setup for the always-available scratch project.
+ * Creates the directory + a sticky-pinned project entry so the user always has
+ * a "no-cwd" chat target. If a non-sticky entry for the same cwd already
+ * exists (e.g. user previously registered it manually), we mark it sticky
+ * but leave the user-chosen name alone.
+ */
+export async function ensureScratchProject(): Promise<Project> {
+  await mkdir(SCRATCH_CWD, { recursive: true });
+  return withLock(async () => {
+    const store = await loadFromDisk();
+    const existing = store.projects.find((p) => path.resolve(p.cwd) === SCRATCH_CWD);
+    if (existing) {
+      if (existing.sticky === true) return existing;
+      const idx = store.projects.indexOf(existing);
+      store.projects[idx] = { ...existing, sticky: true, updatedAt: new Date().toISOString() };
+      await saveToDisk(store);
+      return store.projects[idx];
+    }
+    const now = new Date().toISOString();
+    const project: Project = {
+      id: randomUUID(),
+      name: SCRATCH_DEFAULT_NAME,
+      cwd: SCRATCH_CWD,
+      createdAt: now,
+      updatedAt: now,
+      sticky: true,
+    };
+    store.projects.push(project);
+    await saveToDisk(store);
+    return project;
+  });
+}
+
 export async function findMissingProjects(): Promise<Project[]> {
   const projects = await listProjects();
   const checks = await Promise.all(

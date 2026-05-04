@@ -11,6 +11,9 @@ struct ProjectDTO: Identifiable, Codable, Equatable {
     let cwd: String
     let createdAt: String   // ISO8601 strings — Date conversion done on use
     var updatedAt: String
+    /// Server-pinned project (e.g. the always-on "💬 随手问" scratch entry).
+    /// Sorted to the top of the project list regardless of activity date.
+    var sticky: Bool? = nil
 }
 
 struct ProjectsListResponse: Decodable {

@@ -68,6 +68,18 @@ final class HarnessAPI {
         self.authToken = authToken
     }
 
+    // MARK: Project resolution
+
+    /// If we only have a cwd path (not a UUID), fetch /api/projects and find the matching id.
+    func resolveProjectId(cwd: String) async throws -> String {
+        struct ProjectsResponse: Codable {
+            struct Project: Codable { let id: String; let cwd: String }
+            let projects: [Project]
+        }
+        let resp = try await get("api/projects", ProjectsResponse.self)
+        return resp.projects.first(where: { $0.cwd == cwd })?.id ?? cwd
+    }
+
     // MARK: Initiatives
 
     func listInitiatives(projectId: String) async throws -> [HarnessInitiative] {

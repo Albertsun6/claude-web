@@ -455,6 +455,12 @@ final class ConversationStore {
         stateByConversation[convId] = s
     }
 
+    func touchLastActivity(convId: String) {
+        guard var s = stateByConversation[convId], s.busy else { return }
+        s.lastActivityAt = Date()
+        stateByConversation[convId] = s
+    }
+
     // MARK: - Receive-side mutations (called by BackendClient.handle after route)
 
     func handleSystemInit(convId: String, runId: String, sessionId: String?) {
