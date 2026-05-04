@@ -18,9 +18,9 @@ import Database from "better-sqlite3";
 import { readFileSync, readdirSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { homedir } from "node:os";
+import { DATA_DIR } from "./data-dir.js";
 
-const HARNESS_DIR = join(homedir(), ".claude-web");
+const HARNESS_DIR = DATA_DIR;
 const DB_PATH = join(HARNESS_DIR, "harness.db");
 
 // PRAGMA user_version 编码：major*100 + minor，patch 不计

@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import { mkdir, rename, writeFile, appendFile } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
+import { DATA_DIR } from "./data-dir.js";
 
 export type WorkStatus =
   | "active"
@@ -35,7 +35,7 @@ export interface WorkRecord {
   createdAt: number;
 }
 
-const STORE_DIR = path.join(os.homedir(), ".claude-web");
+const STORE_DIR = DATA_DIR;
 const STORE_PATH = path.join(STORE_DIR, "work.jsonl");
 const TMP_PATH = STORE_PATH + ".tmp";
 

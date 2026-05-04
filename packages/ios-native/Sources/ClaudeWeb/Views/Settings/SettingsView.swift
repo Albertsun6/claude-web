@@ -95,17 +95,27 @@ struct SettingsView: View {
                 } footer: {
                     Text("Claude 跑完一轮后，如果当前对话的 cwd 是 git 仓库且工作区有未提交修改，弹半屏 sheet 显示分支 + 已暂存 / 已修改 / 未跟踪文件清单。出门前快速回顾改了什么。仅监听 `completed` reason，被打断或失败不弹。")
                 }
-                Section("Backend") {
+                Section {
                     TextField("https://mymac.tailcf3ccf.ts.net", text: $draftURL)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
-                    Button("用模拟器默认 (localhost:3030)") {
+                    Button("Prod — 模拟器 (localhost:3030)") {
                         draftURL = "http://localhost:3030"
                     }
-                    Button("用 Tailscale 默认") {
+                    Button("Prod — Tailscale") {
                         draftURL = "https://mymac.tailcf3ccf.ts.net"
                     }
+                    Button("Dev — 模拟器 (localhost:3031)") {
+                        draftURL = "http://localhost:3031"
+                    }
+                    Button("Dev — Tailscale (:8443)") {
+                        draftURL = "https://mymac.tailcf3ccf.ts.net:8443"
+                    }
+                } header: {
+                    Text("Backend")
+                } footer: {
+                    Text("Prod = launchd 跑的稳定副本（:3030）。Dev = 你正在编辑的工作树（:3031），watch 模式，改了就重启。dogfood 时连 Prod，验证新代码时切 Dev。")
                 }
                 Section {
                     TextField("/Users/you/Desktop", text: $draftCwd)

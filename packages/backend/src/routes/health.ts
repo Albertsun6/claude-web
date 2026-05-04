@@ -9,6 +9,7 @@ import { stat, access } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { DATA_DIR } from "../data-dir.js";
 import {
   getAllowedRoots,
   isAuthEnabled,
@@ -181,7 +182,7 @@ async function checkEdgeTts(): Promise<HealthItem> {
 }
 
 async function checkProjectsStore(): Promise<HealthItem> {
-  const dir = path.join(os.homedir(), ".claude-web");
+  const dir = DATA_DIR;
   const filePath = path.join(dir, "projects.json");
   // Test write access: directory must be writable so atomic-rename + .bak
   // can succeed. If the file doesn't exist yet, that's fine — first write

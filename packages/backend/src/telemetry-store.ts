@@ -9,9 +9,9 @@
 
 import { appendFile, mkdir, rename, stat } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
+import { DATA_DIR } from "./data-dir.js";
 
-const STORE_DIR = path.join(os.homedir(), ".claude-web");
+const STORE_DIR = DATA_DIR;
 const STORE_PATH = path.join(STORE_DIR, "telemetry.jsonl");
 const ROLLED_PATH = STORE_PATH + ".1";
 const MAX_SIZE = 10 * 1024 * 1024;   // 10 MB

@@ -10,9 +10,9 @@ import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { DATA_DIR } from "./data-dir.js";
 
-const AUDIT_PATH = join(homedir(), ".claude-web", "harness-audit.jsonl");
+const AUDIT_PATH = join(DATA_DIR, "harness-audit.jsonl");
 
 function audit(db: Database.Database, action: string, entity: string, id: string, data: unknown): void {
   const entry = JSON.stringify({ ts: Date.now(), action, entity, id, data }) + "\n";

@@ -14,8 +14,8 @@
 import fs from "node:fs";
 import { rename, writeFile, appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import { randomUUID } from "node:crypto";
+import { DATA_DIR } from "./data-dir.js";
 
 export type InboxStatus = "open" | "archived";
 export type TriageDestination = "ideas" | "archive";
@@ -45,7 +45,7 @@ export interface InboxItem {
   meta?: Record<string, unknown>;
 }
 
-const STORE_DIR = path.join(os.homedir(), ".claude-web");
+const STORE_DIR = DATA_DIR;
 const STORE_PATH = path.join(STORE_DIR, "inbox.jsonl");
 const TMP_PATH = STORE_PATH + ".tmp";
 

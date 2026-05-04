@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Dev backend. Listens on :3031, writes to ~/.claude-web-dev.
+  Runs `pnpm dev:backend` (tsx watch) — auto-reloads on src/ edits.
+  Schema migrations / writes here CANNOT touch the prod data dir.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.claude-web.backend.dev</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>exec /usr/bin/caffeinate -is /Users/yongqian/.nvm/versions/node/v24.12.0/bin/pnpm dev:backend</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/yongqian/Desktop/claude-web</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/yongqian/.nvm/versions/node/v24.12.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>/Users/yongqian</string>
+    <key>PORT</key>
+    <string>3031</string>
+    <key>CLAUDE_WEB_DATA_DIR</key>
+    <string>/Users/yongqian/.claude-web-dev</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/yongqian/Library/Logs/claude-web-backend.dev.stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/yongqian/Library/Logs/claude-web-backend.dev.stderr.log</string>
+</dict>
+</plist>

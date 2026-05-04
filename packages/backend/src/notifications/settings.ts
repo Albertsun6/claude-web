@@ -5,8 +5,8 @@
 // File takes precedence so users can update without restarting.
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import { DATA_DIR } from "../data-dir.js";
 
 export interface NotificationSettings {
   serverchan?: {
@@ -21,7 +21,7 @@ export interface NotificationSettings {
   // Future: bark, apns ...
 }
 
-const SETTINGS_PATH = path.join(os.homedir(), ".claude-web", "notify.json");
+const SETTINGS_PATH = path.join(DATA_DIR, "notify.json");
 
 export function loadNotificationSettings(): NotificationSettings {
   const fromFile = loadFromFile();
