@@ -66,7 +66,7 @@ claude-web 当前是"Claude CLI 的远程控制台"——iOS/Web 通过 WS 把 p
 1. **现阶段单用户**——自己用，不做权限/多租户/认证升级。
 2. **MVP 必须打通全链**——每个 SDLC Stage 至少有最小骨架可跑通。
 3. **在 claude-web 上演进**——保留 Hono+WS+spawn `claude` CLI 这一根技术栈，绝不引入 Anthropic Agent SDK。
-4. **dogfood 验证**——在 claude-web 项目自身的迭代上跑这个 harness。
+4. **dogfood 验证**——在 Eva 项目自身的迭代上跑这个 harness。
 5. **iOS 是 thin shell + 高优先级**——iOS 改一次锁死，业务全靠 server-driven。
 6. **每个 SDLC 阶段方法论需独立讨论敲定**——不是套用通用模板，要为企业管理系统垂直定制；进入新 Stage 第一次执行前必须先产出 `methodology.md` 并由人 + 评审 AI 通过。
 7. **架构与框架先敲定再实现**——目录结构、模块分层、协议骨架、PR 规约、上下文协议在 M-1 一次性奠基。
@@ -94,7 +94,7 @@ claude-web 当前是"Claude CLI 的远程控制台"——iOS/Web 通过 WS 把 p
 9. **上下文严格管理**：agent 看到的输入 = 精挑过的 Artifact bundle，由 Context Manager 按 Stage 类型 + Issue 范围 + 显式依赖编排。绝不"把整个 repo 塞进去"。
 10. **每个里程碑可独立 ship + 一键回滚**——不允许"改一半要等下一 M"。
 11. **不引入新基础组件**（Redis/NATS/BullMQ/Postgres/launchd/Routines/RN/Flutter）。SQLite + better-sqlite3 是除 Hono+WS 之外唯一允许的新依赖。个人自用规模下绝不需要这些。
-12. **harness 自身 dogfood 自己**：M2 起 claude-web 项目自身就是 harness 的第一个 Project。
+12. **harness 自身 dogfood 自己**：M2 起 Eva 项目自身就是 harness 的第一个 Project。
 13. **不做日历时间估算**——AI 协作下"几周完成"已失效。所有里程碑用 **准入条件 + 退出条件 + kill switch** 推进；任何"周/月"概念只用于描述阶段顺序，不附带具体周数。完成度由门槛达成判定，不由时钟判定。
 14. **想法捕捉零门槛 + 延迟实现**——用户思维发散、碎片化，需要随时记录但不立即实现。Harness 必须提供"30 秒内能存下一个想法"的入口（语音直接落库），不强迫立刻分类、估优先级、拆 Stage。
 15. **进化是副产物而非独立组件**——不建独立"进化引擎"。所有进化（方法论迭代、成功 pattern 提炼成 skill、失败 anti-pattern 收集）都内嵌在 Stage 退出 ritual + Retrospective 里。直接复用 Claude CLI 已有的 `.claude/skills/` 自动激活机制，不重复造轮。

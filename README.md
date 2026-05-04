@@ -1,4 +1,4 @@
-# claude-web
+# Eva (formerly claude-web)
 
 Personal mobile-friendly web UI for the `claude` CLI — uses your Claude Pro/Max **subscription** by spawning the CLI as a subprocess (no API key billing).
 

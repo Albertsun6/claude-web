@@ -1,4 +1,4 @@
-# claude-web
+# Eva (formerly claude-web)
 
 Personal mobile-friendly UI for the `claude` CLI. Reuses the user's Claude Pro/Max
 subscription by **spawning the CLI as a subprocess** (`child_process.spawn` →
