@@ -96,6 +96,17 @@ export type ServerMessage =
       // Broadcast when server-driven config changes (fallback-config.json
       // edited + tsx watch restart). Clients should re-fetch /api/harness/config.
       type: "harness_event";
-      kind: "config_changed" | "stage_changed" | "task_started" | "decision_requested" | "run_appended" | "review_complete";
+      kind:
+        | "config_changed"
+        | "stage_changed"
+        | "task_started"
+        | "decision_requested"
+        | "run_appended"
+        | "review_complete"
+        // Scheduler events (M1+)
+        | "stage_started"
+        | "stage_message"
+        | "stage_done"
+        | "stage_failed";
       payload?: unknown;
     };

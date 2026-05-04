@@ -101,7 +101,10 @@ app.route("/api/harness/config", harnessConfigRouter);
 app.route("/api/worktrees", worktreesRouter);
 app.route("/api/work", workRouter);
 
-// Harness M1: open SQLite DB — routes are mounted after wss is ready (scheduler needs broadcastToAll).
+// Harness M1: open SQLite DB here (early), but mount CRUD+scheduler routes after wss init
+// (scheduler needs broadcastToAll which references wss.clients).
+// Exception: error/disabled 503 handlers are still registered here (before wss) — that is intentional,
+// since they don't use broadcastToAll and Hono matches them only when the success path is absent.
 // HARNESS_DISABLED=1 skips DB init and returns 503 for all /api/harness/* routes
 // except /api/harness/config (already mounted above).
 let _harnessDb: ReturnType<typeof openHarnessDb> | null = null;

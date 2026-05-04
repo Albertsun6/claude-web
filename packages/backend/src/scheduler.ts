@@ -1,16 +1,15 @@
 // EvaScheduler — L3 Orchestration 骨架 (M1 minimum slice)
 //
-// 职责：从 harness.db 读 pending Issue → 推进 Stage 状态机 → spawn claude CLI agent
+// 职责：从 harness.db 读待处理 Issue → 推进 Stage 状态机 → spawn claude CLI agent
 //
 // M1 scope：
-//   - computeNextStage：只实现 strategy → implement → done 三段
+//   - computeNextStage：strategy → implement 两段，完成后 issue 置 done
 //   - ContextBundle：最简化，只把 issue title+body 作为 prompt 前缀
-//   - 调用现有 runSession()，新增 taskId 字段
+//   - 权限模式：M1 用 bypassPermissions（scheduler 无交互 UI）；M2 接 permission hub
 //
-// M2 交付：ContextManager 真实编排、Review-Orchestrator、worktree 自动创建
+// M2 交付：ContextManager 真实编排、Review-Orchestrator、worktree 自动创建、permission hub 接入
 
 import type Database from "better-sqlite3";
-import { randomUUID } from "node:crypto";
 import { runSession } from "./cli-runner.js";
 import { getHarnessConfig } from "./harness-config.js";
 import {
@@ -21,6 +20,12 @@ import {
 // Stage kind → agentProfile.stage 映射（M1 只走两段）
 const STAGE_SEQUENCE: StageKind[] = ["strategy", "implement"];
 type StageKind = "strategy" | "implement" | "done";
+
+// Issue 状态枚举（与 migrations/0001_initial.sql CHECK 约束一致）
+type IssueStatus = "inbox" | "triaged" | "planned" | "in_progress" | "blocked" | "done" | "wont_fix";
+// Stage 完成状态（无 "done"；M1 用 "approved" 表示完成，跳过 review gate）
+const STAGE_COMPLETE_STATUSES = new Set(["approved", "rejected", "skipped"]);
+const STAGE_ACTIVE_STATUSES = new Set(["pending", "running", "awaiting_review"]);
 
 export interface SchedulerTickResult {
   issued: boolean;
@@ -38,61 +43,71 @@ export class EvaScheduler {
 
   // POST /api/harness/scheduler/tick — 手动触发一次推进
   async tick(projectId?: string): Promise<SchedulerTickResult> {
-    // 1. 取 pending Issue（最旧的先跑）
+    // 1. 取待处理 Issue（triaged/planned/in_progress，最旧的先跑）
+    const ELIGIBLE: IssueStatus[] = ["triaged", "planned", "in_progress"];
     const issues = listIssues(this.db, { projectId }).filter(
-      (i) => i.status === "pending" || i.status === "open",
+      (i) => ELIGIBLE.includes(i.status as IssueStatus),
     );
     if (!issues.length) {
-      return { issued: false, reason: "no pending issues" };
+      return { issued: false, reason: "no eligible issues (triaged/planned/in_progress)" };
     }
 
     const issue = issues[0];
 
-    // 2. 计算下一个 Stage
+    // 2. 计算下一个 Stage（跳过已完成和进行中的）
     const stages = listStages(this.db, issue.id);
     const nextKind = this.computeNextStage(stages);
     if (nextKind === "done") {
       updateIssueStatus(this.db, issue.id, "done");
-      return { issued: false, reason: `issue ${issue.id} already done` };
+      return { issued: false, reason: `issue ${issue.id} all stages complete → marked done` };
     }
 
-    // 3. 取对应 AgentProfile
+    // 3. 防止并发：已有 active stage 则拒绝
+    const hasActive = stages.some(
+      (s) => s.kind === nextKind && STAGE_ACTIVE_STATUSES.has(s.status),
+    );
+    if (hasActive) {
+      return { issued: false, reason: `stage ${nextKind} already active for issue ${issue.id}` };
+    }
+
+    // 4. 取对应 AgentProfile
     const profile = this.resolveProfile(nextKind);
     if (!profile) {
       return { issued: false, reason: `no enabled profile for stage: ${nextKind}` };
     }
 
-    // 4. 创建 Stage 记录
+    // 5. 查 project cwd（agent 必须在 project 目录跑）
+    const projectCwd = this.getProjectCwd(issue.project_id);
+    if (!projectCwd) {
+      return { issued: false, reason: `no cwd found for project ${issue.project_id}` };
+    }
+
+    // 6. 创建 Stage 记录并置 running
     const stage = createStage(this.db, {
       issueId: issue.id,
       kind: nextKind,
       agentProfileId: profile.id,
     });
     setStageStatus(this.db, stage.id, "running");
+    updateIssueStatus(this.db, issue.id, "in_progress");
 
     const taskId = `${issue.id}/${stage.id}`;
 
-    // 5. 广播 stage_started
+    // 7. 广播 stage_started（符合 ServerMessage protocol）
     this.broadcast({
       type: "harness_event",
-      event: "stage_started",
-      issueId: issue.id,
-      stageId: stage.id,
-      stageKind: nextKind,
-      taskId,
+      kind: "stage_started",
+      payload: { issueId: issue.id, stageId: stage.id, stageKind: nextKind, taskId },
     });
 
-    // 6. 异步 spawn agent（不 await，让 tick 立即返回）
-    this.spawnAgent(issue, stage, taskId).catch((err) => {
+    // 8. 异步 spawn agent（fire-and-forget；tick 立即返回）
+    this.spawnAgent(issue, stage, taskId, projectCwd).catch((err) => {
       console.error(`[EvaScheduler] agent error for ${taskId}:`, err);
       setStageStatus(this.db, stage.id, "failed");
       this.broadcast({
         type: "harness_event",
-        event: "stage_failed",
-        issueId: issue.id,
-        stageId: stage.id,
-        taskId,
-        error: String(err),
+        kind: "stage_failed",
+        payload: { issueId: issue.id, stageId: stage.id, taskId, error: String(err) },
       });
     });
 
@@ -100,34 +115,43 @@ export class EvaScheduler {
   }
 
   private computeNextStage(existingStages: StageRow[]): StageKind {
-    const doneKinds = new Set(
+    const completedKinds = new Set(
       existingStages
-        .filter((s) => s.status === "done")
+        .filter((s) => STAGE_COMPLETE_STATUSES.has(s.status))
         .map((s) => s.kind as StageKind),
     );
     for (const kind of STAGE_SEQUENCE) {
-      if (!doneKinds.has(kind)) return kind;
+      if (!completedKinds.has(kind)) return kind;
     }
     return "done";
   }
 
   private resolveProfile(stageKind: string) {
     const config = getHarnessConfig();
-    // 找第一个 enabled + stage 匹配的 profile
-    return (
-      config.agentProfiles.find(
-        (p) => p.stage === stageKind && p.enabled,
-      ) ??
-      // 找任意 enabled profile 作为 fallback（M1 宽松）
-      config.agentProfiles.find((p) => p.enabled) ??
-      null
-    );
+    const matched = config.agentProfiles.find((p) => p.stage === stageKind && p.enabled);
+    if (matched) return matched;
+    // Fallback: 任意 enabled profile（M1 宽松）
+    const fallback = config.agentProfiles.find((p) => p.enabled) ?? null;
+    if (fallback) {
+      console.warn(
+        `[EvaScheduler] no enabled profile for stage "${stageKind}", falling back to "${fallback.id}"`,
+      );
+    }
+    return fallback;
+  }
+
+  private getProjectCwd(projectId: string): string | null {
+    const row = this.db
+      .prepare("SELECT cwd FROM harness_project WHERE id = ?")
+      .get(projectId) as { cwd: string } | undefined;
+    return row?.cwd ?? null;
   }
 
   private async spawnAgent(
     issue: IssueRow,
     stage: StageRow,
     taskId: string,
+    cwd: string,
   ): Promise<void> {
     const config = getHarnessConfig();
     const profile = config.agentProfiles.find((p) => p.id === stage.assigned_agent_profile);
@@ -150,36 +174,30 @@ export class EvaScheduler {
           ? "claude-haiku-4-5-20251001"
           : "claude-sonnet-4-6";
 
-    const messages: unknown[] = [];
-
+    // M1: bypassPermissions — scheduler 无交互 UI，无法走 permission hub。
+    // M2 改造点：注册 scheduler permission channel，广播 decision_requested 事件。
     await runSession({
       prompt,
-      cwd: process.cwd(),
+      cwd,
       model: model as any,
-      permissionMode: "default",
+      permissionMode: "bypassPermissions",
       taskId,
       onMessage: (msg) => {
-        messages.push(msg);
         this.broadcast({
           type: "harness_event",
-          event: "stage_message",
-          issueId: issue.id,
-          stageId: stage.id,
-          taskId,
-          msg,
+          kind: "stage_message",
+          payload: { issueId: issue.id, stageId: stage.id, taskId, msg },
         });
       },
     });
 
-    setStageStatus(this.db, stage.id, "done");
-    updateIssueStatus(this.db, issue.id, "in_progress");
+    // Stage 完成：用 "approved" 表示 M1 无 review gate 的完成状态
+    setStageStatus(this.db, stage.id, "approved");
 
     this.broadcast({
       type: "harness_event",
-      event: "stage_done",
-      issueId: issue.id,
-      stageId: stage.id,
-      taskId,
+      kind: "stage_done",
+      payload: { issueId: issue.id, stageId: stage.id, taskId },
     });
   }
 }
