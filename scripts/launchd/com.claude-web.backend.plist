@@ -19,7 +19,7 @@
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/yongqian/Desktop/claude-web</string>
+  <string>/Users/yongqian/Desktop/claude-web-prod</string>
 
   <key>EnvironmentVariables</key>
   <dict>
