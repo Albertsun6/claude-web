@@ -101,24 +101,22 @@ app.route("/api/harness/config", harnessConfigRouter);
 app.route("/api/worktrees", worktreesRouter);
 app.route("/api/work", workRouter);
 
-// Harness M1: open SQLite DB + mount CRUD routes.
+// Harness M1: open SQLite DB — routes are mounted after wss is ready (scheduler needs broadcastToAll).
 // HARNESS_DISABLED=1 skips DB init and returns 503 for all /api/harness/* routes
 // except /api/harness/config (already mounted above).
+let _harnessDb: ReturnType<typeof openHarnessDb> | null = null;
 if (!process.env.HARNESS_DISABLED) {
   try {
-    const harnessDb = openHarnessDb();
-    app.route("/api/harness", buildHarnessRouter(harnessDb.db));
-    console.log(`[harness] SQLite ready (schema v${harnessDb.schemaVersion})`);
+    _harnessDb = openHarnessDb();
+    console.log(`[harness] SQLite ready (schema v${_harnessDb.schemaVersion})`);
   } catch (err) {
     console.error("[harness] DB init failed — harness routes unavailable:", err);
-    // Mount a 503 so clients get a clear error instead of a frontend 404.
     app.all("/api/harness/*", (c) =>
       c.json({ ok: false, error: "harness unavailable (DB init failed)" }, 503)
     );
   }
 } else {
   app.all("/api/harness/*", (c) => {
-    // /api/harness/config is already handled above; only CRUD routes land here.
     return c.json({ ok: false, error: "harness disabled (HARNESS_DISABLED=1)" }, 503);
   });
 }
@@ -252,6 +250,19 @@ const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) =>
 });
 
 const wss = new WebSocketServer({ noServer: true });
+
+// Lazy broadcast — safe to call before any WS client connects.
+function broadcastToAll(msg: unknown): void {
+  const payload = JSON.stringify(msg);
+  for (const ws of wss.clients) {
+    if (ws.readyState === ws.OPEN) ws.send(payload);
+  }
+}
+
+// Mount harness CRUD + scheduler routes (needs broadcastToAll, so wss must be ready first).
+if (_harnessDb) {
+  app.route("/api/harness", buildHarnessRouter(_harnessDb.db, broadcastToAll));
+}
 
 // Broadcast harness_event{config_changed} to all connected WS clients when
 // fallback-config.json is modified in-process (chokidar watch in harness-config.ts).
