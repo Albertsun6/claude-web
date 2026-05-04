@@ -1,0 +1,10 @@
+{
+  "type": "harness_event",
+  "kind": "stage_started",
+  "payload": {
+    "issueId": "issue-01HJK5XD0CDEF05",
+    "stageId": "stage-01HJK5XD0CDEF06",
+    "stageKind": "strategy",
+    "taskId": "issue-01HJK5XD0CDEF05/stage-01HJK5XD0CDEF06"
+  }
+}
