@@ -128,13 +128,26 @@ description: Unified Review Mechanism v2 orchestrator. Runs phase 1 (2 independe
 #### Reviewer A — architecture-fit lens（Claude 可接）
 - 实施：Agent tool subagent_type=`general-purpose`，prompt 包含 `.claude/skills/harness-architecture-review/SKILL.md` 内容
 - 评审维度：架构-fit / 里程碑 fit / 垂直 fit / 风险计划 / 方向
-- 输出文件：`docs/reviews/<topic>-arch-YYYY-MM-DD.md`
+- 输出文件：`docs/reviews/<topic>-arch-YYYY-MM-DD-HHmm.md`（与 Reviewer B 格式一致，便于 phase 2 自动化检索）
 
 #### Reviewer B — cross-correctness lens（**必须 cursor-agent，非 Claude**）
 - 实施：**用 `cursor-agent` CLI**（`/Users/yongqian/.local/bin/cursor-agent`），不能用 Agent tool 起 Claude subagent
-- 调用模板参考 [scripts/run-debate-phase.sh](scripts/run-debate-phase.sh)；为 phase 1 写一个 sibling 脚本 `scripts/run-phase1-cross.sh` 或直接 inline `cursor-agent -p <prompt-file>`
+- **调用命令**（2026-05-05 验证通过）：
+  ```bash
+  # 1. 把 SKILL.md + LEARNINGS.md + artifact 内容写入 prompt 文件
+  cat > /tmp/<topic>-cross-prompt.md << 'EOF'
+  <reviewer-cross SKILL.md 内容>
+  <LEARNINGS.md 内容>
+  <要评审的 artifact 文件内容>
+  EOF
+  
+  # 2. 调用 cursor-agent，输出重定向到 verdict 文件
+  /Users/yongqian/.local/bin/cursor-agent --print -p /tmp/<topic>-cross-prompt.md \
+    2>&1 | tee docs/reviews/<topic>-cross-YYYY-MM-DD-HHmm.md
+  ```
+- **注意**：`--print` 是非交互模式必需参数（与 claude CLI 的 `--print` 同义）；`-p` 指定 prompt 文件路径；不要用 stdin pipe（cursor-agent 不支持）
 - 评审维度：correctness / cross-end alignment / irreversibility / security / simplification
-- 输出文件：`docs/reviews/<topic>-cross-YYYY-MM-DD.md`
+- 输出文件：`docs/reviews/<topic>-cross-YYYY-MM-DD-HHmm.md`
 
 **为什么非 Claude 是硬要求**：reviewer-cross skill 自身就写了 "Heterogeneity：本 skill prompt 是 model-agnostic 的，意图被喂给**非 Claude 模型**（cursor-agent gpt-5.5-medium / gpt-5.3-codex）以最大化集体盲区防护"。M-1 retrospective 第 1 条教训："**异质性（不同模型）是独立性的floor**，同模型 + 同 prompt = 表演"。**双 Claude reviewer = phase 1 失效**——会一致性盲到 schema 事实错误（如 2026-05-03 PARALLEL_WORK_ORCHESTRATOR v0.1→v0.2 都没抓到 `Issue.metadata_json` 不存在的事实，外部 GPT-5.5 一秒命中）。
 
@@ -271,10 +284,13 @@ description: Unified Review Mechanism v2 orchestrator. Runs phase 1 (2 independe
    - 旧数据兼容性测试
 
 #### patch mode
-contract 全部 +：
-3. **PR template 对齐**：按 [HARNESS_PR_GUIDE.md](docs/HARNESS_PR_GUIDE.md) 模板填 PR description（包含：what / why / risk / rollback）
-4. **链回所有 review 文件**到 PR description（Phase 1/2/3 verdict + arbitration log + ADR），让 reviewer 在 GitHub 一键追溯到本地评审
-5. **不可逆操作前确认用户**：force-push、schema migration on production、prod 配置 release——一律先口头授权再执行
+继承 contract mode 步骤 1/2（ADR-lite + dogfood gate），在此基础上额外跑：
+
+3. **是否经过计划阶段检查**（2026-05-05 教训）：
+   - 该 patch 是否由 plan mode 产出的 plan 执行而来？若否（="retroactive patch"）：先补出 proposal 文档 + 跑完整 phase 1+2+3 评审再决定合并/重写，不允许直接 merge。
+4. **PR template 对齐**：按 [HARNESS_PR_GUIDE.md](docs/HARNESS_PR_GUIDE.md) 模板填 PR description（包含：what / why / risk / rollback）
+5. **链回所有 review 文件**到 PR description（Phase 1/2/3 verdict + arbitration log + ADR），让 reviewer 在 GitHub 一键追溯到本地评审
+6. **不可逆操作前确认用户**：force-push、schema migration on production、prod 配置 release——一律先口头授权再执行
 
 ### 用户报告（最终交付）
 
@@ -333,6 +349,7 @@ contract 全部 +：
 - ❌ 报告写完直接进 plan mode——必须先评审收敛 + 交用户
 - ❌ contract mode 跳过 ADR-lite —— 不可逆决策无审计 trail，未来回查无依据
 - ❌ patch mode 跳过 dogfood gate —— 上线后崩了再回头修代价大
+- ❌ **L3+ 产品功能（Scheduler、ContextManager 等）没走 plan + review 直接实现** —— 只能 retroactive patch mode 补救（见 patch mode Step 3），成本高于事先走流程（Scheduler M1 骨架 2026-05-05 实证）
 
 ## Examples
 

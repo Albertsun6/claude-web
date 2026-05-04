@@ -1,0 +1,21 @@
+{
+  "type": "harness_event",
+  "kind": "stage_message",
+  "payload": {
+    "issueId": "issue-01HJK5XD0CDEF05",
+    "stageId": "stage-01HJK5XD0CDEF06",
+    "taskId": "issue-01HJK5XD0CDEF05/stage-01HJK5XD0CDEF06",
+    "msg": {
+      "type": "assistant",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "正在分析 Issue 需求…"
+          }
+        ]
+      }
+    }
+  }
+}
