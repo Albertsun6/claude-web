@@ -103,6 +103,8 @@ claude-web 当前是"Claude CLI 的远程控制台"——iOS/Web 通过 WS 把 p
 18. **多模型集体盲区防护**——多 AI 评审默认全是 Claude 系列，对同类盲点会一致漏看。每个 Stage 至少有一个 reviewer 用**不同 prompt 视角**（如 ultrareview / 安全 / 性能 / 业务规则反推）。M4 远期可选引入一个非 Claude 模型（OpenAI / Gemini / Kimi）做 read-only 终审，个人自用不强制。
 19. **L1/L2 不与已有强对手卷**——iOS native + Web + Tailscale 在跨设备控制台层级已和 hapi (3.8k star) / Paseo 持平。**plan 不在 L1/L2 增加新形态功能**（如 Telegram 通道 / 自建加密中继 / Web 聊天美化），把预算集中到 L3+L7。需要的 L1/L2 能力可以**直接代码级搬运** hapi/Paseo（个人自用不触发 AGPL 限制，详见 §0 #13）。详见 [docs/HARNESS_LANDSCAPE.md](docs/HARNESS_LANDSCAPE.md)。
 20. **代码搬运的版权礼仪**——从开源项目搬代码时，文件顶部注释保留 `// borrowed from <project> v<version> (<license>), <url>`。这是版权法基本要求，也给未来自己留余地（万一改变项目定位）。
+21. **元工作冻结默认开**（v0.2 2026-05-04 Meta-Freeze P1-7 引入）——`HARNESS_EVOLUTION_FROZEN=1` 是项目默认状态。冻结期内不写新 ADR / proposal / methodology / framework 升级，启动批豁免（[HARNESS_META_FREEZE_v0.2 §1 P0-1](proposals/HARNESS_META_FREEZE_v0.1.md)）。解冻条件硬卡：M1 跑出 ≥1 个真 dogfood Issue。冻结期方法论缺陷登记到 `~/.claude-web/telemetry.jsonl` event=`methodology.debt`，**不新增 store**。详细机制见 [HARNESS_RISKS.md R7.1](HARNESS_RISKS.md)。
+22. **输出侧仪式预算**（v0.2 2026-05-04 Meta-Freeze P1-7 引入）——§0 #14 保护输入侧 30s 入口；本条对称保护输出侧。评审 / 决策 / arbitration 不得无上限拖延：fast-path 分级（[harness-review-workflow SKILL.md](../.claude/skills/harness-review-workflow/SKILL.md)）按改动规模分微 / 中 / 大三档评审；用户跳过 ritual 不视为失败而是信号，记入 telemetry 触发 #21 冻结。详细机制见 [HARNESS_RISKS.md R7.2](HARNESS_RISKS.md)。
 
 ---
 

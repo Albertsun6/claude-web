@@ -25,8 +25,9 @@
 |---|---|---|
 | [HARNESS_INDEX.md](HARNESS_INDEX.md) | **本文** — 所有 harness 文件总入口 | 维护中 |
 | [HARNESS_ARCHITECTURE.md](HARNESS_ARCHITECTURE.md) | 完整分层架构图（6 层 + L7 横切）+ 每层职责 + 跨层数据流 + 关键不变量 | M-1 第 1 项交付物，已建首版 |
-| [HARNESS_ROADMAP.md](HARNESS_ROADMAP.md) | plan v4 主文档：Context、20 条设计原则、里程碑（M-1 → M4，M4 终点）、Open Questions、§18 评审 skill 草案、评审辩论流水 | 待办路线图，单一文件 |
+| [HARNESS_ROADMAP.md](HARNESS_ROADMAP.md) | plan v4 主文档：Context、22 条设计原则（v0.2 加 #21 元工作冻结 / #22 输出侧仪式预算）、里程碑（M-1 → M4，M4 终点）、Open Questions、§18 评审 skill 草案、评审辩论流水 | 待办路线图，单一文件 |
 | [HARNESS_LANDSCAPE.md](HARNESS_LANDSCAPE.md) | 竞品全景图：hapi / Paseo / Multica / OpenHands 等横向对比 + 战略含义（L1/L2 不卷、L3+L7 集中投入）+ 代码搬运规则（个人自用情形）| 维护中 |
+| [STORE_MAP.md](STORE_MAP.md) | **持久化点 source-of-truth 速查表**（v0.2 2026-05-04 Meta-Freeze P0-2a）— 8 backend store + 读侧引用 + 新增 store 的 ADR-lite 模板 + 元工作冻结 env var 约定 | v0.1 |
 
 ### 子主题（从 ROADMAP 拆分出的独立详档）
 

@@ -10,13 +10,14 @@
 
 ## 0. 总览
 
-18 条风险，按主题分 6 组：
+20 条风险，按主题分 7 组：
 1. **Agent 行为** — agent 自由度过高、CLI 长链路稳定性、上下文失败、多 AI 分歧瘫痪
 2. **流程与节奏** — 卡点过多、MVP 战线过长、奠基 ritual 不收敛、方法论无限拖延
 3. **多 Agent 协作** — 资源争抢、Reviewer 被污染、集体盲区
 4. **不可逆与生产** — 不可逆操作、dogfood 改坏自己
 5. **演化与垂直** — 企业垂直贴谱、schema 演化失败
 6. **运维** — 离线 fallback、成本失控/波动
+7. **框架自身**（v0.2 2026-05-04 新增，Meta-Freeze P1-7）— 元工作螺旋、用户审批疲劳
 
 ---
 
@@ -236,7 +237,40 @@
 
 ---
 
-## 7. 风险按里程碑分布
+## 7. 框架自身风险（v0.2 2026-05-04 新增，Meta-Freeze P1-7）
+
+### R7.1 元工作螺旋
+
+**描述**：framework-of-framework 膨胀。评审 mechanism / ADR / proposal / methodology / harness landscape 这些"框架的框架"在反复改进，比真业务工作量大得多（debate-review → harness-review-workflow → reviewer-cross → cursor-agent 异质对 → review-mechanism v2 五代演化）。
+
+**信号**：
+- harness 文档 + reviews 行数 / harness 真实代码行数 ≥ 4
+- 每个里程碑期间新增 framework 文档数 > 真业务功能数
+- 单条小改（≤50 行 diff）的 review 产物 > 1 个
+
+**缓解**（[HARNESS_ROADMAP.md §0 #21](HARNESS_ROADMAP.md)）：
+- 默认开 `HARNESS_EVOLUTION_FROZEN=1`（自律性约束，参见 [docs/STORE_MAP.md §5](STORE_MAP.md)）
+- 冻结期内不写新 ADR / proposal / methodology / framework 升级；启动批豁免
+- 解冻条件硬卡：M1 跑出 ≥1 个真 dogfood Issue（不靠主观判断）
+- 冻结期方法论缺陷登记到 `telemetry.jsonl` event=`methodology.debt`，**不新增 store**
+
+### R7.2 用户审批疲劳
+
+**描述**：plan §0 #14 强调"30 秒入口"保护输入侧低门槛，但**输出侧（评审 / 决策 / arbitration / phase 3 author）耗时无上限**。R1.4 多 AI 分歧是技术原因；用户主动跳过 ritual（M0-C 跳评审 / v0.5 PARALLEL "先评审再决策"纠正）是另一种瘫痪，但更隐蔽。
+
+**信号**：
+- 用户主动跳过自己定的 ritual ≥1 次
+- Decision queue 堆积主因是"用户没看"而非"reviewer 真分歧"
+- 用户对评审产物的 acceptance time 持续增长
+
+**缓解**（[HARNESS_ROADMAP.md §0 #22](HARNESS_ROADMAP.md)）：
+- fast-path 分级（[harness-review-workflow SKILL.md fast-path 表](../.claude/skills/harness-review-workflow/SKILL.md)）：≤50 行 / 治理 / 文档 类不必走完整三层
+- Decision timeout 默认决策 + 同类决议沿用（参见 R1.4 / R2.1 缓解）
+- **用户跳过 ritual 不视为失败而是信号**——记录到 telemetry，触发 R7.1 缓解
+
+---
+
+## 8. 风险按里程碑分布
 
 | M | 主要风险 | 关键缓解 |
 |---|---|---|
@@ -247,18 +281,19 @@
 | M3 | R5.3 进化反向恶化、R3.3 集体盲区 | 多 AI 评审 + ritual gate；HARNESS_EVOLUTION_FROZEN |
 | M4 | R5.3 持续 | audit 报表月度跑 |
 | M4 远期 | R3.3 集体盲区（可选） | 引入非 Claude 终审；个人自用不强制 |
+| **跨 M（贯穿）** | **R7.1 元工作螺旋、R7.2 用户审批疲劳** | **fast-path 分级 + HARNESS_EVOLUTION_FROZEN + telemetry methodology.debt** |
 
 ---
 
-## 8. 维护规则
+## 9. 维护规则
 
-### 8.1 何时更新
+### 9.1 何时更新
 
 - 新增风险（dogfood 暴露 / 评审反馈）→ 加到对应主题段
 - 缓解策略升级 → 更新缓解段
 - 风险消除 → 标 ✅ deprecated（不删）
 
-### 8.2 与其他文档同步
+### 9.2 与其他文档同步
 
 - 每条风险必须对应 [HARNESS_ROADMAP.md §0](HARNESS_ROADMAP.md) 的某条原则
 - 缓解涉及代码模块的，必须在 [HARNESS_ARCHITECTURE.md](HARNESS_ARCHITECTURE.md) 的 L7 横切段提及
