@@ -47,22 +47,29 @@ harness/<issueId>-<3-5-word-slug>
 
 ---
 
-## 4. 人工分支（非 harness 流水线）
+## 4. 人工分支（Eva 日常开发）
 
 格式更宽松，但仍不允许：
 - ❌ 空格 / 中文（git 兼容性）
-- ❌ `master` / `main` / `head` / `tag` 作为名（reserved）
+- ❌ `master` / `main` / `dev` / `head` / `tag` 作为名（reserved）
 - ❌ `..` / `~` / `^` / `:` / `?` / `*` / `[` 等 git ref 非法字符
 
 推荐格式：
 ```
-<type>/<short-desc>
+<type>/eva-<milestone>-<slug>
 ```
 
 例：
-- `feat/voice-recorder`
-- `fix/keyboard-overlap`
-- `refactor/conversation-store`
+- `feat/eva-M1-context-manager`
+- `feat/eva-M2-review-orchestrator`
+- `fix/eva-ws-reconnect-loop`
+- `chore/eva-ci-gates`
+
+`type`: `feat` | `fix` | `chore` | `docs` | `refactor` | `test`
+`milestone`: `M1` | `M2` | `M3` …（无里程碑归属的零散 fix 可省略）
+
+PR 流向：`feat/*` → `dev`（squash merge）→ `main`（merge commit + tag）
+worktree 并行任务见 [WORKTREE_LOCK.md](../WORKTREE_LOCK.md)。
 
 ---
 
