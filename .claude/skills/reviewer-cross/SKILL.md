@@ -49,6 +49,27 @@ description: Independent cross-reviewer for harness contracts, designs, and patc
 5. 写到 `docs/reviews/<artifact>-cross-<YYYY-MM-DD-HHmm>.md`
 6. 评审后把可复用的新规则追加到 LEARNINGS.md
 
+### cursor-agent 调用方式（2026-05-05 验证）
+
+本 skill 设计为被喂给 cursor-agent（非 Claude）。调用者（`harness-review-workflow` Step 3）通过以下命令调用：
+
+```bash
+# 准备 prompt 文件（包含 SKILL.md + LEARNINGS.md + artifact 内容）
+# 注意：路径从项目根起，不是 skills/ 目录起
+cat .claude/skills/reviewer-cross/SKILL.md \
+    .claude/skills/reviewer-cross/LEARNINGS.md \
+    > /tmp/<topic>-cross-prompt.md
+# 追加 artifact 内容
+echo "## Files to review" >> /tmp/<topic>-cross-prompt.md
+cat <artifact-files> >> /tmp/<topic>-cross-prompt.md
+
+# 调用 cursor-agent（非交互模式）
+/Users/yongqian/.local/bin/cursor-agent --print -p /tmp/<topic>-cross-prompt.md \
+  2>&1 | tee docs/reviews/<topic>-cross-YYYY-MM-DD-HHmm.md
+```
+
+**关键参数**：`--print`（非交互输出模式，2026-05-05 验证通过）、`-p <file>`（prompt 文件路径）。stdin pipe 未测试，推荐 `-p` 方式。不支持 `-m`（model override）。
+
 ---
 
 ## Review Stance
@@ -66,9 +87,14 @@ description: Independent cross-reviewer for harness contracts, designs, and patc
 
 聚焦：CHECK 约束 / NOT NULL / FK / unique / off-by-one / 类型边界 / migration 幂等性 / 触发器顺序
 
+**Schema fact-check（必须，2026-05-05 教训）**：
+- 评审代码引用的枚举值（如 issue.status / stage.status）**必须对照实际 migration SQL** 核实，不能引 docs/HARNESS_DATA_MODEL.md 摘要——文档描述的可能是未来设计，migration 才是落地事实
+- 具体路径：`packages/backend/src/migrations/*.sql`，每次 review 前打开核对
+- **confabulation 红线**：Scheduler M1 骨架评审中，Sonnet reviewer 在没读 migration SQL 的情况下接受了 `"pending"/"open"` 状态，而实际约束是 `"inbox"/"triaged"/"planned"/"in_progress"/"blocked"/"done"/"wont_fix"`，cursor-agent GPT 通过读 migration 原文命中此 BLOCKER
+
 具体问 7 个问题：
 1. 每个 NOT NULL 列是否真的"不可能为空"？哪些应该 NULLABLE？
-2. CHECK 约束是否覆盖所有非法状态？枚举值是否漏？
+2. CHECK 约束是否覆盖所有非法状态？枚举值是否漏？**（必须对照 migration SQL 核实，不能信 docs 摘要）**
 3. FK 引用顺序是否环依赖？SQLite 是否支持？应用层如何 enforce？
 4. UNIQUE 约束是否覆盖业务唯一性？
 5. 索引是否覆盖最常见的查询路径？有无冗余 index？
@@ -197,6 +223,7 @@ description: Independent cross-reviewer for harness contracts, designs, and patc
 - ❌ 不允许 "looks good overall, just some minor suggestions" 这种廉价批准——必须列出**至少 3 条** minor 或显式说"5 lens 都搜了，0 finding"
 - ❌ 不允许引用"best practice"或"industry standard"作为单一论据——必须给具体 claude-web / harness 上下文
 - ❌ 不允许提议解决问题之外的范围（如"建议把 spec 写成 RFC"）—— scope creep 是 reviewer-cross 不该做的
+- ❌ **不允许凭 docs 摘要断言"schema 字段 X 存在 / 状态值 Y 合法"**——必须打开 `packages/backend/src/migrations/*.sql` 原文核实，docs 可能比实现超前（confabulation 风险，Scheduler M1 评审实证）
 - ❌ 不修改任何文件
 - ❌ 不调用工具改写 / 跑命令（plan/ask 模式 enforce）
 
