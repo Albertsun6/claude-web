@@ -1,4 +1,4 @@
-# claude-web
+# Eva (formerly claude-web)
 
 Personal mobile-friendly UI for the `claude` CLI. Reuses the user's Claude Pro/Max
 subscription by **spawning the CLI as a subprocess** (`child_process.spawn` →
@@ -98,6 +98,22 @@ Tailscale serve already wired to expose :3030 on `https://<your-mac-hostname>.<t
 ```bash
 tailscale serve --bg --https=443 http://localhost:3030
 ```
+
+## Branch & Release
+
+分支模型：`main` → `dev` → `feat/eva-Mx-xxx`
+- `feat/*` 从 `dev` 开，PR 回 `dev`（squash merge）
+- `dev` 稳定后 PR 到 `main`（merge commit），打版本 tag
+- 禁止直接 push `main` 或 `dev`（GitHub branch protection 保护）
+
+版本格式：`v<MAJOR>.<MINOR>.<PATCH>[-Mx]`
+示例：`v0.4.0-M1`（M1 里程碑完成）、`v0.4.1`（hotfix）
+
+worktree 并行规则：见 [WORKTREE_LOCK.md](WORKTREE_LOCK.md)（端口隔离 + 文件锁登记）
+
+GitHub Branch Protection（需在 GitHub UI 手动配置）：
+- `main`：require PR + require CI job `test` pass + no force push
+- `dev`：require PR + require CI job `test` pass + no force push
 
 ## Required external tools
 
