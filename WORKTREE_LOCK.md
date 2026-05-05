@@ -11,17 +11,49 @@ pnpm eva:status        # CLI 一屏状态表
 cat eva.json | jq .   # raw JSON
 ```
 
+## Lifecycle hooks (H13 v1)
+
+每个 worktree 可在 `eva.json` 配 4 个 hooks：
+
+```json
+{
+  "name": "M2-mini-3-2",
+  "hooks": {
+    "pre-start": "pnpm install --frozen-lockfile",
+    "post-start": "PORT=3033 CLAUDE_WEB_DATA_DIR=~/.claude-web-mini32 pnpm dev:backend &",
+    "post-merge": "echo 'PR merged - manually run pre-remove for cleanup'",
+    "pre-remove": "pkill -f mini32-backend; rm -rf ~/.claude-web-mini32"
+  }
+}
+```
+
+手动触发：
+
+```bash
+pnpm eva:hook pre-start <worktreeName>                # blocking 等结束
+pnpm eva:hook post-start <worktreeName>
+pnpm eva:hook post-merge <worktreeName>
+pnpm eva:hook pre-remove --dry-run <worktreeName>     # cross M4：高危 hook 先 dry-run
+pnpm eva:hook pre-remove --yes <worktreeName>         # 含 rm -rf/pkill/git push --force 等模式必须 --yes 确认
+pnpm eva:hook --verbose pre-start <worktreeName>      # 默认隐藏 cmd 字面，--verbose 才打印（含 secret redact）
+```
+
+**Env 处理**（cross M3 修）：hook 命令在 **curated env** 下跑（仅透传 `HOME` / `PATH` / `USER` / `SHELL` / `TMPDIR` / `LANG` / `LC_*` / `TERM` / `NVM_DIR` / `PNPM_HOME` 等白名单），强制 strip `BASH_ENV` / `ENV` / `SHELLOPTS` / `CDPATH`，避免 ambient injection。`CLAUDE_WEB_TOKEN` / `GH_TOKEN` 等 secret **不默认透传** — 需要时在 hook 命令内显式 `export TOKEN=...` 或加白名单。
+
+> **v1 范围**：手动触发 only，4 个 hooks 全 blocking（含 `&` 让命令后台跑也合法）。git 操作（worktree add/remove/PR merge）**不会**自动触发 hooks — user 自己决定何时调。**自动 trigger** 留 H13 v2 / M2 ResourceLock。
+
 > **⚠️ 多机器使用警告（v1）**：`eva.json` 当前直接进 git，但其中 `path` / `port` / `dataDir` 字段是**本机绝对值**（如 `~/Desktop/claude-web-mini3` / `:3032` / `~/.claude-web-track2`）。其他机器拉到 repo 后这些值大概率不对路径。**v1 单用户单机器 scope**，不保证 cross-machine clone 可用。多机 / 团队场景需要 H13+ 拆 `eva.json`（repo policy）+ `eva.local.json`（本机覆盖，gitignore），现在不预先拆。
 
 `eva.json` 字段 schema：
 - `version: 1`（schema 版本，bump 必须 ADR + migration）
-- `worktrees: [{ name, branch, path, port?, dataDir?, owns: [], status, since?, note? }]`
+- `worktrees: [{ name, branch, path, port?, dataDir?, owns: [], status, since?, note?, hooks? }]`
 - `status` 枚举：`active` / `done` / `released`（**append-only**，永不删行）
+- `hooks` (H13 v1)：`{ "pre-start"?, "post-start"?, "post-merge"?, "pre-remove"? }` — 命令字符串，手动 CLI 触发（`pnpm eva:hook ...`）
 
 ## 与 H12 v1 范围
 
 H12 v1 **只做** schema + status reader + 本文件降级。**不做** auto-lock / 冲突阻止 / hooks 执行 — 留给：
-- **H13** lifecycle hooks（pre-start / post-start / pre-merge / post-merge ...）
+- **H13 v1**（已 ship）lifecycle hooks 4 个：`pre-start` / `post-start` / `post-merge` / `pre-remove`（手动 CLI 触发，见上方"Lifecycle hooks"段）。**不含** `pre-merge` / `post-switch` / `pre-commit`（v2/v3 范围，需要时 bump schema version）
 - **M2 ResourceLock** 模块（真锁定 + 自动加解锁）
 
 参见 [docs/IDEAS.md](docs/IDEAS.md) H12-H17 段。

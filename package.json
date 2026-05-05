@@ -9,7 +9,8 @@
     "dev:frontend": "pnpm --filter @claude-web/frontend dev",
     "test:cli": "pnpm --filter @claude-web/backend test:cli",
     "test:protocol": "pnpm --filter @claude-web/shared test",
-    "eva:status": "node scripts/eva-status.mjs"
+    "eva:status": "node scripts/eva-status.mjs",
+    "eva:hook": "node scripts/eva-hook.mjs"
   },
   "packageManager": "pnpm@9.0.0"
 }
