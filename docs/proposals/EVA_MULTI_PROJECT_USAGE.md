@@ -1,10 +1,12 @@
-# Eva 多项目使用与短期调整建议 — 调研报告 v0.2
+# Eva 多项目使用与短期调整建议 — 调研报告 v0.3 (final)
 
-> **Status**: research / proposal · **Date**: 2026-05-05 · **Author**: Claude Sonnet 4.6
+> **Status**: ✅ **用户拍板收敛** · **Date**: 2026-05-05 · **Author**: Claude Sonnet 4.6
 > **Review depth**: Phase 1+2+3 完整三相评审完成（[arch verdict](../reviews/eva-multi-project-usage-arch-2026-05-05-2342.md) + [cross verdict](../reviews/eva-multi-project-usage-cross-2026-05-05-2342.md) + [react-arch](../reviews/eva-multi-project-usage-react-arch-2026-05-05-2348.md) + [react-cross](../reviews/eva-multi-project-usage-react-cross-2026-05-05-2348.md) + [arbitration log](../reviews/eva-multi-project-usage-arbitration-2026-05-05.md)）
 > **不可逆度**: **中-高** — P0-1 spawn env 改动是单点行为切换可一键回滚；P0-2 加 PreToolUse hook 进程可下线；**P0-4b methodology.applies_to schema-rebuild migration 不可逆（一旦 ship，回滚 = 反向 schema-rebuild）**；P0-4 跨端契约（ProjectDTO + Swift Codable + TS Zod）一旦 ship 进 iOS 装包对老客户端长期兼容
 > **范围边界**：本 proposal 只覆盖**短期 / 即将做**的多项目使用 + 风险 + P0/P1/P2 调整。**长期"Eva 演化为私人贾维斯"愿景**走独立 proposal `EVA_AS_PERSONAL_JARVIS.md`（Phase D）。两份 proposal 必须分别评审分别收敛。
 > **v0.1 → v0.2 收敛信号**：4 BLOCKER 全部接受（含 sibling 升级 2 + sibling 揭示完整盲区 2）+ 10 MAJOR + 1 partial + 3 MINOR + 0 反驳 + 3 用户决定（满足 ≤3 硬约束）。详见 [arbitration log](../reviews/eva-multi-project-usage-arbitration-2026-05-05.md)。
+>
+> **v0.2 → v0.3 用户拍板**（2026-05-05 23:58）：U1-A（5 选粗类型 + business_domain 进 PM spec）+ U2-C（software-enterprise + needs_user_review flag）+ U3-defer（等 spike 跑完看结果，默认 author 推荐 U3-B = permission-hook 内置黑名单）。3 个拍板与 author 推荐 / 默认一致，**不触发 round 2**。详见 §12 用户拍板记录。
 
 ---
 
@@ -589,3 +591,61 @@ Phase 1+2+3 review trail：
 - [docs/reviews/eva-multi-project-usage-react-arch-2026-05-05-2348.md](../reviews/eva-multi-project-usage-react-arch-2026-05-05-2348.md) — phase 2 react arch
 - [docs/reviews/eva-multi-project-usage-react-cross-2026-05-05-2348.md](../reviews/eva-multi-project-usage-react-cross-2026-05-05-2348.md) — phase 2 react cross
 - [docs/reviews/eva-multi-project-usage-arbitration-2026-05-05.md](../reviews/eva-multi-project-usage-arbitration-2026-05-05.md) — phase 3 author arbitration
+
+---
+
+## 12. 用户拍板记录 (v0.2 → v0.3)
+
+**Date**: 2026-05-05 23:58
+**Decision**: 用户对 §8 三条决定全部拍板
+
+| ID | 决定 | author 推荐 | 用户拍板 | 是否一致 |
+|---|---|---|---|---|
+| U1 | domain_profile enum 是否拆"粗类型 + 业务子领域"两层？ | U1-A | **U1-A** | ✅ 一致 |
+| U2 | legacy harness_project rows 的 domain_profile backfill 策略？ | U2-C | **U2-C** | ✅ 一致 |
+| U3 | P0-2 hook spike 失败时 fallback 路径？ | U3-B | **U3-defer**（等 spike 跑完看结果，默认 U3-B） | ✅ 兼容 |
+
+**3 拍板与 author 推荐 / 默认一致，按 SKILL.md L262-268 不触发 round 2 phase 1。v0.3 = 收敛 final**。
+
+### 落地实施约束
+
+按 §10 v0.X+1 收敛判断的"例外触发条件"：U1-A / U2-C / U3-defer 都未触发 round 2 局部评审。可直接进 §13 落地（不在本 proposal 范围，由后续 plan 跑 P0-1 / P0-2 / P0-4 实施）。
+
+**U3-defer 特别说明**：
+
+- P0-2-spike 实施时（前置 1 天），跑完后必须立即决定走 U3-A / U3-B / U3-C
+- 如果 spike 通过（CLI 取严格语义"任一 deny 即拒"）→ 不需要 fallback，直接走 §5 P0-2 主实施
+- 如果 spike 失败 → 默认走 U3-B（permission-hook 内置黑名单），与 author 推荐一致
+- U3 真正需要用户重新拍板的时机：spike 失败 + 用户希望走 U3-A 而非 U3-B（极小概率）
+
+---
+
+## 13. 后续落地（不在本 proposal 范围）
+
+本 proposal 收敛 final 后，后续工作分两条线，**不在本文范围**：
+
+### 13.1 短期 P0/P1/P2 落地实施（独立 plan）
+
+按 §5 优先级顺序：
+
+1. **P0-1** spawn env 白名单 + injectEnv denylist（cli-runner.ts 改 + AgentProfile fixture 升级）
+2. **P0-2-spike**（1 天）→ 根据结果走 §5 P0-2 主实施 或 U3 fallback
+3. **P0-4a + P0-4b** migration（0004 additive + 0005 schema-rebuild）
+4. **P0-4 跨端契约段**（ProjectDTO + Swift Codable + TS Zod + projects.json 同步规则）
+5. **P1-4-spike**（1 小时）→ skill activation 三选一路径
+6. **P1-1 / P1-2a / P1-2b / P1-3** P1 一周内补
+7. **P2-3** 长期演进
+
+每条 P0 / P0-spike 独立走 contract mode 评审（schema 改动 + ADR-lite + dogfood gate）；P1 走 patch mode（按 [HARNESS_PR_GUIDE.md](../HARNESS_PR_GUIDE.md)）。
+
+### 13.2 同步修订其他文档（独立 PR）
+
+按 §7 合并建议：
+
+- [docs/HARNESS_RISKS.md](../HARNESS_RISKS.md) 加 §8（R8.1-R8.15 共 15 条）
+- [docs/IDEAS.md](../IDEAS.md) 加 H18-H25 共 8 条
+- [docs/HARNESS_ROADMAP.md](../HARNESS_ROADMAP.md) §0 #16 / #17 加注 + §0 加新原则 #23
+- [docs/HARNESS_DATA_MODEL.md](../HARNESS_DATA_MODEL.md) §1.1 / §1.6 / §2 修订
+- [docs/HARNESS_INDEX.md](../HARNESS_INDEX.md) 加本 proposal 入口
+
+每个文档修订独立 PR 进 dev，避免单 PR 改动面过大。
