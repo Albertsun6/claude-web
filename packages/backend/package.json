@@ -16,6 +16,8 @@
     "test:scheduler-cleanup": "tsx src/test-scheduler-orphan-cleanup.ts",
     "test:scheduler-failed-reasons": "tsx src/test-scheduler-failed-reasons.ts",
     "test:e2e-pipeline": "tsx src/test-e2e-pipeline.ts",
+    "test:e2e-failures": "tsx src/test-e2e-pipeline-failures.ts",
+    "test:e2e-all": "pnpm test:e2e-pipeline && pnpm test:e2e-failures",
     "test:inbox-concurrent": "tsx src/test-inbox-concurrent.ts"
   },
   "dependencies": {
