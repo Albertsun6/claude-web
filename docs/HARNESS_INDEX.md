@@ -90,6 +90,9 @@
 | M1 mini #2: Stage-Aware Prompts | [retrospectives/M1-mini2-stage-aware-prompts.md](retrospectives/M1-mini2-stage-aware-prompts.md) | ✅ 完成（2026-05-05，cursor-agent 评审 1 BLOCKER + 3 MAJOR + 3 MINOR 全应用，prod v0.4.2 已部署）|
 | **M1 双轨并行实验**（一次性，非常态化）| [retrospectives/M1-parallel-tracks-experiment.md](retrospectives/M1-parallel-tracks-experiment.md) | ✅ **PASS**（2026-05-05，强信号 #1 lock 文件语义漂移 + 5 条 M2 prioritized + 看板退出删除）|
 | **M2 H14 dispatched stage status — prod migration failure & hot-fix** | [retrospectives/M2-h14-prod-migration-failure.md](retrospectives/M2-h14-prod-migration-failure.md) | ✅ **ship**（2026-05-05，v0.4.4 prod migration FK 失败 → v0.4.5 schema-rebuild mode + prod-shape gate；§0.5 anchor gate #1 加强）|
+| **M2 Loop 1 — failed_reason + failed_at additive schema** | [retrospectives/M2-Loop1-failed-reason-schema.md](retrospectives/M2-Loop1-failed-reason-schema.md) | ✅ **ship**（2026-05-05，schema v102 additive；M2 master plan v2 loop-by-loop approval 第一圈，charter compliance held，cross-review 4.8/5 0 major）|
+| **M2 Loop 2 — failed_reason write paths in scheduler catch** | [retrospectives/M2-Loop2-failed-reason-write-paths.md](retrospectives/M2-Loop2-failed-reason-write-paths.md) | ✅ **ship**（2026-05-06，5 catch path + setStageFailed helper + 4 canonical reasons distribution-locked；charter held，cross-review 4.6/5 0 major；Loop 3 trigger 满足）|
+| **M2 Loop 3 — minimal skip API** | [retrospectives/M2-Loop3-minimal-skip-api.md](retrospectives/M2-Loop3-minimal-skip-api.md) | ✅ **ship**（2026-05-06，POST /stages/:id/skip failed→skipped only + 23 项 invariant/charter assertion + e2e dogfood 4/4；charter held，cross-review 4.64/5 0 major；M2 #1 pipeline stability coverage 推到 ~40-45%）|
 | M2 真 agent + dogfood | retrospectives/M2.md | — |
 | M3 质量与可观测 | retrospectives/M3.md | — |
 | M4 方法论沉淀 | retrospectives/M4.md | — |

@@ -13,6 +13,8 @@
     "test:strip": "tsx src/test-strip-speech.ts",
     "test:convo": "tsx src/test-convo-commands.ts",
     "test:harness-schema": "tsx src/test-harness-schema.ts",
+    "test:scheduler-cleanup": "tsx src/test-scheduler-orphan-cleanup.ts",
+    "test:scheduler-failed-reasons": "tsx src/test-scheduler-failed-reasons.ts",
     "test:inbox-concurrent": "tsx src/test-inbox-concurrent.ts"
   },
   "dependencies": {

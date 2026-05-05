@@ -204,6 +204,12 @@ export const StageDtoSchema = z.object({
   startedAt: EpochMsSchema.optional(),
   endedAt: EpochMsSchema.optional(),
   createdAt: EpochMsSchema,
+  // M2 Loop 1 (schema v102): 失败可诊断字段。Loop 1 仅落 schema + DTO；写入路径留 Loop 2。
+  // 老客户端兼容：Zod 此 schema 是 default non-strict，未设 .strict() → 接受并 strip
+  // unknown keys；老 v0.4.5 客户端遇到 v0.4.6+ payload 含 failedReason / failedAt 不会
+  // 报错。同步 iOS Codable 默认 ignore unknown keys。
+  failedReason: z.string().optional(),
+  failedAt: EpochMsSchema.optional(),
 });
 export type StageDto = z.infer<typeof StageDtoSchema>;
 

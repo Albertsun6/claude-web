@@ -256,6 +256,94 @@ export function setStageStatus(
   return result.changes > 0;
 }
 
+/**
+ * M2 Loop 2: 标 stage 为 failed 并持久化失败原因 + 时间戳。
+ *
+ * 与 setStageStatus(stageId, "failed") 区别：本方法**显式写入** failed_reason / failed_at，
+ * 让失败可从 DB 持久化 state 区分（orphan / spawn_setup / cli / spec_harvest 等）。
+ *
+ * Loop 1 (schema v102) 加了 nullable 列；Loop 2 写入。
+ *
+ * Reason 当前枚举（自由文本，但建议用以下 canonical 值，便于 future 查询 / dashboard）：
+ *   - 'orphan_after_restart'   — backend 重启清理 active stage（cleanupOrphanStages）
+ *   - 'spawn_setup_failed'     — buildContextBundle / createTask 期间 throw
+ *   - 'cli_failed'             — runSession 期间 throw（CLI subprocess 错）
+ *   - 'spec_harvest_failed'    — harvestSpecArtifact 期间 throw（strategy stage only）
+ *
+ * Idempotent guard: 如果 stage 已经是 failed 且已有 failed_reason，**不重写**——保留首次失败 reason
+ * （v.s. 后续兜底 catch 重写覆盖）。
+ */
+export function setStageFailed(
+  db: Database.Database,
+  stageId: string,
+  reason: string,
+  failedAt: number = Date.now(),
+): boolean {
+  // Idempotent first-write-wins guard 下沉到单条 SQL（cross m1 应用）：
+  // - status='failed' AND failed_reason IS NOT NULL → WHERE 不命中，UPDATE 0 行（首次 reason 保留）
+  // - status='failed' AND failed_reason IS NULL → WHERE 命中（旧路径遗漏的 failed 行可补写）
+  // - status != 'failed' → WHERE 命中（首次失败写入）
+  // 这样跨进程 / 跨 connection 的并发也是原子（SQLite UPDATE 单语句）。
+  const result = db.prepare(`
+    UPDATE stage
+    SET status = 'failed',
+        failed_reason = ?,
+        failed_at = ?,
+        ended_at = COALESCE(ended_at, ?)
+    WHERE id = ?
+      AND NOT (status = 'failed' AND failed_reason IS NOT NULL)
+  `).run(reason, failedAt, failedAt, stageId);
+
+  if (result.changes > 0) {
+    audit(db, "set_failed", "stage", stageId, { reason, failedAt });
+  }
+  return result.changes > 0;
+}
+
+/**
+ * M2 Loop 3: minimal skip API helper — operator unblock failed stage.
+ *
+ * 严格语义（plan v2 OQ-G）：
+ *   - 仅允许 `failed → skipped` 单向转换
+ *   - 已经是 `skipped` 的 stage 视为 idempotent no-op（200 OK）
+ *   - 其他 status 拒绝（返回 'invalid_state'，调用方应回 409）
+ *
+ * **不**做：retry / resume / auto-retry / reset pending / attempt count /
+ * parentTaskId / 自动触发 tick。operator skip 后需显式调用
+ * `POST /api/harness/scheduler/tick` 推进。
+ *
+ * Returns:
+ *   - { ok: true, alreadySkipped?: true }  — failed → skipped or already skipped
+ *   - { ok: false, error: 'not_found' }    — stageId 不存在
+ *   - { ok: false, error: 'invalid_state', currentStatus } — 不是 failed/skipped
+ */
+export function skipFailedStage(
+  db: Database.Database,
+  stageId: string,
+):
+  | { ok: true; alreadySkipped?: boolean }
+  | { ok: false; error: "not_found" }
+  | { ok: false; error: "invalid_state"; currentStatus: string }
+{
+  const row = db
+    .prepare("SELECT status FROM stage WHERE id = ?")
+    .get(stageId) as { status: string } | undefined;
+  if (!row) return { ok: false, error: "not_found" };
+
+  // Idempotent: already skipped → no-op
+  if (row.status === "skipped") return { ok: true, alreadySkipped: true };
+
+  // Strict charter: only failed → skipped
+  if (row.status !== "failed") {
+    return { ok: false, error: "invalid_state", currentStatus: row.status };
+  }
+
+  // failed → skipped
+  setStageStatus(db, stageId, "skipped");
+  audit(db, "skip", "stage", stageId, { from: "failed" });
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Task — M1 mini #3.1: 真 task 行（cross M1 修：避免 context_bundle.task_id orphan）
 // ---------------------------------------------------------------------------

@@ -13,12 +13,13 @@ import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { type ModelHint, modelIdForHint } from "@claude-web/shared";
 import { runSession } from "./cli-runner.js";
 import { getHarnessConfig } from "./harness-config.js";
 import { buildContextBundle } from "./context-manager.js";
 import {
   createArtifact,
-  listIssues, listStages, createStage, createTask, setStageStatus, updateIssueStatus,
+  listIssues, listStages, createStage, createTask, setStageStatus, setStageFailed, updateIssueStatus,
   type IssueRow, type StageRow,
 } from "./harness-queries.js";
 
@@ -50,7 +51,82 @@ export class EvaScheduler {
   constructor(
     private db: Database.Database,
     private broadcast: (msg: unknown) => void,
-  ) {}
+  ) {
+    this.cleanupOrphanStages();
+  }
+
+  /**
+   * F (M2 螺旋圈): backend 启动时清理 orphan active stages。
+   *
+   * 场景：scheduler.spawnAgent 是 fire-and-forget（tick 立即返回，spawn 后台跑）。
+   * backend 在 spawn 中途崩溃（OOM / SIGKILL / launchd kickstart）→ stage 留在
+   * pending / dispatched / running，但已无进程会推进它。下次 tick 时这些行被
+   * STAGE_ACTIVE_STATUSES 检查阻塞 → 死锁。
+   *
+   * 修：实例化 EvaScheduler（每次 backend 启动一次）时扫描 active stages，
+   * 标 failed + 广播 stage_changed。awaiting_review 不动（合法人审暂停，不是 orphan）。
+   *
+   * H14 dispatched 状态特别相关：dispatched 是 ContextBundle 写盘 / createTask 阶段，
+   * spawn 真起来前如果 backend 崩了就会留下 dispatched orphan。
+   *
+   * 原子性（cross M1 应用）：所有 DB 更新包在 db.transaction()，整体 all-or-none。
+   * broadcast 在 commit 后跑，单条失败 try/catch 吞掉（broadcast 是 UX 通知，不影响
+   * DB 已修复的真相；客户端重连时应靠轮询 stage 列表 reconcile —— 见 cross M5 列入
+   * M2 master plan）。
+   *
+   * Boot ordering: 本类在 routes/harness.ts createHarnessRoutes 内实例化，routes 注册
+   * 完成才接受 HTTP tick；构造函数同步跑完 cleanup 才返回，单 backend 单 scheduler 假设
+   * 下不会发生 cleanup 中途有外部 tick 调用 → 不需要额外锁。多实例场景见 M2 master plan。
+   *
+   * 注：本方法 mutates DB —— 不是 pure construction。每次 new EvaScheduler 都跑一次。
+   * cross m1 列入 M2 master plan：以后改成 explicit init() 由 boot 序列调用。
+   */
+  private cleanupOrphanStages(): void {
+    const orphans = this.db
+      .prepare(
+        `SELECT id, kind, status FROM stage
+         WHERE status IN ('pending', 'dispatched', 'running')`,
+      )
+      .all() as Array<{ id: string; kind: string; status: string }>;
+
+    if (orphans.length === 0) return;
+
+    // 1. DB 更新走 transaction（all-or-none）—— cross M1 应用
+    // M2 Loop 2：写入 failed_reason='orphan_after_restart' 让失败可从 DB 区分
+    const cleanupAt = Date.now();
+    const applyAll = this.db.transaction(() => {
+      for (const stage of orphans) {
+        setStageFailed(this.db, stage.id, "orphan_after_restart", cleanupAt);
+      }
+    });
+    applyAll();
+
+    // 2. 广播在 commit 后；单条失败吞掉，不影响其他事件 + 不回滚 DB
+    for (const stage of orphans) {
+      try {
+        this.broadcast({
+          type: "harness_event",
+          kind: "stage_changed",
+          stageId: stage.id,
+          status: "failed",
+        });
+      } catch (e) {
+        console.warn(
+          `[EvaScheduler] cleanup broadcast failed for ${stage.id}: ${e}`,
+        );
+      }
+    }
+
+    // 3. 日志在最后（transaction 已 commit + broadcast 已尝试 → 状态稳定再 log）
+    for (const stage of orphans) {
+      console.warn(
+        `[EvaScheduler] orphan stage ${stage.id} (${stage.kind}, was ${stage.status}) → failed (backend restart cleanup)`,
+      );
+    }
+    console.log(
+      `[EvaScheduler] cleaned up ${orphans.length} orphan active stage(s) on init`,
+    );
+  }
 
   // POST /api/harness/scheduler/tick — 手动触发一次推进
   async tick(projectId?: string): Promise<SchedulerTickResult> {
@@ -133,7 +209,10 @@ export class EvaScheduler {
     // 8. 异步 spawn agent（fire-and-forget；tick 立即返回）
     this.spawnAgent(issue, stage, taskId, projectCwd).catch((err) => {
       console.error(`[EvaScheduler] agent error for ${taskId}:`, err);
-      setStageStatus(this.db, stage.id, "failed");
+      // M2 Loop 2: spawnAgent 内层三 try/catch 已经写了 setStageFailed(reason)；
+      // 外层 catch 用 idempotent setStageFailed 兜底（如果内层 setStageFailed 自己抛错，
+      // 内层 reason 没写进 DB → 兜底用 'unknown_error'；如果内层已写，guard 让它无副作用）。
+      setStageFailed(this.db, stage.id, "unknown_error");
       this.broadcast({ type: "harness_event", kind: "stage_changed", stageId: stage.id, status: "failed" });
       this.broadcast({
         type: "harness_event",
@@ -193,9 +272,9 @@ export class EvaScheduler {
     const config = getHarnessConfig();
     const profile = config.agentProfiles.find((p) => p.id === stage.assigned_agent_profile);
 
-    const modelHint = profile?.modelHint ?? "sonnet";
-    const model: "opus" | "sonnet" | "haiku" =
-      modelHint === "opus" ? "opus" : modelHint === "haiku" ? "haiku" : "sonnet";
+    const rawHint = profile?.modelHint ?? "sonnet";
+    const model: ModelHint =
+      rawHint === "opus" ? "opus" : rawHint === "haiku" ? "haiku" : "sonnet";
 
     // Cross M1 修：context_bundle.task_id 必须指向真 task 行（schema 注释明文 "外键
     // 回指 Task"），过去 M1 #3.1 用 synthetic `<issueId>/<stageId>` 留下 orphan 行。
@@ -205,26 +284,38 @@ export class EvaScheduler {
     // 是两个不同概念，scheduler 内部双 ID。
     const taskUuid = randomUUID();
 
-    const bundle = buildContextBundle(this.db, {
-      issue,
-      stage,
-      taskId: taskUuid,
-      agentProfileId: profile?.id ?? stage.assigned_agent_profile,
-    });
+    // M2 Loop 2：spawnAgent 拆三个 phase + 各自 catch 写 failed_reason，外层 tick catch 仅
+    // 兜底通知（失败 reason 已在内层写好；外层 catch 再调 setStageFailed 时 idempotent guard
+    // 让首次 reason 不被覆盖）。
+    //
+    // Phase A — dispatched 窗口：bundle / createTask setup
+    let bundle: ReturnType<typeof buildContextBundle>;
+    try {
+      bundle = buildContextBundle(this.db, {
+        issue,
+        stage,
+        taskId: taskUuid,
+        agentProfileId: profile?.id ?? stage.assigned_agent_profile,
+      });
 
-    createTask(this.db, {
-      id: taskUuid,
-      stageId: stage.id,
-      agentProfileId: profile?.id ?? stage.assigned_agent_profile,
-      model,
-      cwd,
-      prompt: bundle.prompt,
-      permissionMode: "bypassPermissions",
-      contextBundleId: bundle.bundleId,
-    });
+      createTask(this.db, {
+        id: taskUuid,
+        stageId: stage.id,
+        agentProfileId: profile?.id ?? stage.assigned_agent_profile,
+        model,
+        cwd,
+        prompt: bundle.prompt,
+        permissionMode: "bypassPermissions",
+        contextBundleId: bundle.bundleId,
+      });
+    } catch (err) {
+      setStageFailed(this.db, stage.id, "spawn_setup_failed");
+      throw err;
+    }
 
-    const modelClaudeId =
-      model === "opus" ? "claude-opus-4-5" : model === "haiku" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+    // modelHint → CLI --model 字符串映射的 single source 在 [model-registry.ts]
+    // (../../shared/src/model-registry.ts)。下次模型升级只改 registry + 同步 fallback-config.json。
+    const modelClaudeId = modelIdForHint(model);
 
     // H14 v1: 真正 spawn CLI 之前再翻 dispatched → running
     // 在此之前 bundle 写盘 / createTask INSERT 失败 → stage 留 dispatched，外层 catch 标 failed。
@@ -232,29 +323,41 @@ export class EvaScheduler {
     setStageStatus(this.db, stage.id, "running");
     this.broadcast({ type: "harness_event", kind: "stage_changed", stageId: stage.id, status: "running" });
 
+    // Phase B — CLI 执行：runSession spawn claude CLI subprocess
     // M1: bypassPermissions — scheduler 无交互 UI，无法走 permission hub。
     // M2 改造点：注册 scheduler permission channel，广播 decision_requested 事件。
-    await runSession({
-      prompt: bundle.prompt,
-      cwd,
-      model: modelClaudeId as any,
-      permissionMode: "bypassPermissions",
-      taskId,
-      onMessage: (msg) => {
-        this.broadcast({
-          type: "harness_event",
-          kind: "stage_message",
-          payload: { issueId: issue.id, stageId: stage.id, taskId, msg },
-        });
-      },
-    });
+    try {
+      await runSession({
+        prompt: bundle.prompt,
+        cwd,
+        model: modelClaudeId as any,
+        permissionMode: "bypassPermissions",
+        taskId,
+        onMessage: (msg) => {
+          this.broadcast({
+            type: "harness_event",
+            kind: "stage_message",
+            payload: { issueId: issue.id, stageId: stage.id, taskId, msg },
+          });
+        },
+      });
+    } catch (err) {
+      setStageFailed(this.db, stage.id, "cli_failed");
+      throw err;
+    }
 
+    // Phase C — harvest（仅 strategy stage）
     // M2 v1 (3.2-A')：strategy stage 必须产出 spec artifact 才能 approved（cross M1 修）
     // 之前是 best-effort + 只 warn — 但 strategy 的 declared output 就是 spec，
     // 缺 spec 还 approved 会让 implement 的 mustHave 才 fail，制造"过 gate 但流水线不可执行"。
     // 现在改 fail-loud：harvest 失败 → throw → spawnAgent catch 把 stage 标 failed。
     if (stage.kind === "strategy") {
-      this.harvestSpecArtifact(issue, stage, cwd);
+      try {
+        this.harvestSpecArtifact(issue, stage, cwd);
+      } catch (err) {
+        setStageFailed(this.db, stage.id, "spec_harvest_failed");
+        throw err;
+      }
     }
 
     setStageStatus(this.db, stage.id, "approved");

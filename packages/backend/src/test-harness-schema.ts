@@ -7,12 +7,13 @@
 // - cross M6: 修测试 setup 顺序，先 methodology 后 stage，避免 FK 错误掩盖 CHECK 测试
 // - BLOCKER-2: 加重启回归用例（重新打开同一 db 不报错且不重跑 migration）
 
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { openHarnessDb, HARNESS_SCHEMA_VERSION } from "./harness-store.js";
+import { setStageFailed, skipFailedStage } from "./harness-queries.js";
 
 // 复制 harness-store.ts 的 MIGRATIONS_DIR 解析（保持一致即可，避免再 export 一份内部常量）
 const __filename = fileURLToPath(import.meta.url);
@@ -171,8 +172,12 @@ try {
     .prepare("SELECT file FROM schema_migrations ORDER BY file")
     .all()
     .map((r: any) => r.file as string);
-  // H14 v1：再加 migration 时 expected 同步增长（assertion 与实际 migration 文件目录一一对应）
-  const expected = ["0001_initial.sql", "0002_stage_status_dispatched.sql"];
+  // 每加 migration 时 expected 同步增长（assertion 与实际 migration 文件目录一一对应）
+  const expected = [
+    "0001_initial.sql",
+    "0002_stage_status_dispatched.sql",
+    "0003_stage_failed_reason.sql",
+  ];
   assert(
     applied.length === expected.length && applied.every((f, i) => f === expected[i]),
     `schema_migrations records exactly ${expected.length} rows: ${JSON.stringify(applied)}`,
@@ -325,6 +330,612 @@ try {
   );
 
   prodHandle.close();
+
+  // === Phase 4: 负面 — schema-rebuild 留 FK violations 时 metadata 不应推进
+  //
+  // H14 hot-fix retrospective M2 follow-up：cross-review m2 finding —— 验证 runner
+  // 在 schema-rebuild migration 留下 FK 完整性问题时，schema_migrations 不写、
+  // user_version 不动、下次启动重试。
+  //
+  // 流程：
+  //   1. tmp migrationsDir 写入真实 0001 + 故意 broken 0002（rebuild 但只拷一半 stage rows）
+  //   2. 用 migrationsDir option 打开 DB → 0001 应用 + 种 prod-shape 数据（5 stages + 5 decisions）
+  //   3. 关 DB
+  //   4. 重新打开同 DB 同 migrationsDir → runner 跑 0002 → foreign_key_check 检测到 violations
+  //      → throw → transaction 回滚 → schema_migrations 不写 + user_version 仍 100
+  //   5. 第三次打开（仅校验）→ 仍 v100，确认状态稳定，下次启动仍可重试
+  console.log("\n--- Phase 4: negative — runner rolls back on FK violation (H follow-up) ---");
+
+  const negPath = join(tmp, "neg-shape.db");
+  const negMigrationsDir = join(tmp, "neg-migrations");
+  const realMigrationsDir = MIGRATIONS_DIR; // 引用真实 0001
+  // 创建 tmp migrations dir
+  rmSync(negMigrationsDir, { recursive: true, force: true });
+  mkdirSync(negMigrationsDir, { recursive: true });
+  copyFileSync(join(realMigrationsDir, "0001_initial.sql"), join(negMigrationsDir, "0001_initial.sql"));
+
+  // broken 0002：schema-rebuild + 仅拷 ROWID 奇数的 stage rows，造成偶数 ROWID 对应的
+  // decision/task FK 引用悬空。foreign_key_check 必须报告 violations，runner throw + rollback。
+  const brokenSql = `-- TARGET_VERSION = 102
+-- MIGRATION_MODE = schema-rebuild
+--
+-- INTENTIONALLY BROKEN — used by Phase 4 negative test only.
+-- Pattern: rebuild stage but copy ONLY half the rows (奇数 ROWID), 让 decision FK 悬空。
+
+CREATE TABLE stage_new (
+  id                       TEXT PRIMARY KEY,
+  issue_id                 TEXT NOT NULL REFERENCES issue(id),
+  kind                     TEXT NOT NULL,
+  status                   TEXT NOT NULL,
+  weight                   TEXT NOT NULL,
+  gate_required            INTEGER NOT NULL DEFAULT 1,
+  assigned_agent_profile   TEXT NOT NULL,
+  methodology_id           TEXT NOT NULL REFERENCES methodology(id),
+  input_artifact_ids_json  TEXT NOT NULL DEFAULT '[]',
+  output_artifact_ids_json TEXT NOT NULL DEFAULT '[]',
+  review_verdict_ids_json  TEXT NOT NULL DEFAULT '[]',
+  started_at               INTEGER,
+  ended_at                 INTEGER,
+  created_at               INTEGER NOT NULL
+);
+
+INSERT INTO stage_new
+  (id, issue_id, kind, status, weight, gate_required, assigned_agent_profile,
+   methodology_id, input_artifact_ids_json, output_artifact_ids_json,
+   review_verdict_ids_json, started_at, ended_at, created_at)
+SELECT id, issue_id, kind, status, weight, gate_required, assigned_agent_profile,
+       methodology_id, input_artifact_ids_json, output_artifact_ids_json,
+       review_verdict_ids_json, started_at, ended_at, created_at
+FROM stage
+WHERE ROWID % 2 = 1;
+
+DROP TABLE stage;
+ALTER TABLE stage_new RENAME TO stage;
+
+CREATE UNIQUE INDEX idx_stage_issue_kind ON stage(issue_id, kind);
+CREATE INDEX idx_stage_running ON stage(status) WHERE status = 'running';
+`;
+
+  // 关键：先种 prod-shape 数据（这里走 0001 only），再写 broken 0002 到同 dir 重开
+  // Step 1: 用 migrationsDir 打开 DB（仅 0001 在 dir 里）→ schema 全建好
+  {
+    const handle = openHarnessDb({ dbPath: negPath, migrationsDir: negMigrationsDir });
+    assert(handle.schemaVersion === 100, `step 1: schemaVersion=100 (only 0001 applied)`);
+
+    const now = Date.now();
+    handle.db.prepare(
+      "INSERT INTO methodology(id,stage_kind,version,applies_to,content_ref,approved_by,approved_at) VALUES(?,?,?,?,?,?,?)",
+    ).run("m-neg", "spec", "1.0", "universal", "x", "user", now);
+    handle.db.prepare(
+      "INSERT INTO harness_project(id,cwd,name,worktree_root,created_at) VALUES(?,?,?,?,?)",
+    ).run("p-neg", "/tmp/neg", "neg", "/tmp/neg/.worktrees", now);
+    handle.db.prepare(
+      `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    ).run("i-neg", "p-neg", "manual", "neg issue", "body", "[]", "normal", "in_progress", now, now);
+
+    const insertStage = handle.db.prepare(
+      `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+       VALUES(?,?,?,?,?,?,?,?,?)`,
+    );
+    const stageKinds = ["strategy", "discovery", "spec", "compliance", "design"] as const;
+    for (const kind of stageKinds) {
+      insertStage.run(`s-neg-${kind}`, "i-neg", kind, "approved", "heavy", 1, "PM", "m-neg", now);
+    }
+
+    const insertDecision = handle.db.prepare(
+      `INSERT INTO decision(id,stage_id,requested_by,options_json,created_at) VALUES(?,?,?,?,?)`,
+    );
+    for (const kind of stageKinds) {
+      insertDecision.run(`d-neg-${kind}`, `s-neg-${kind}`, "user", "[]", now);
+    }
+    handle.close();
+  }
+
+  // Step 2: 把 broken 0002 写进同 migrationsDir
+  writeFileSync(join(negMigrationsDir, "0002_bad_rebuild.sql"), brokenSql);
+
+  // Step 3: 重新打开 DB → runner 跑 broken 0002 → 应该 throw
+  let threw = false;
+  let errMsg = "";
+  try {
+    const handle = openHarnessDb({ dbPath: negPath, migrationsDir: negMigrationsDir });
+    handle.close(); // 不应该到这
+  } catch (e: any) {
+    threw = true;
+    errMsg = String(e.message || e);
+  }
+  assert(threw, `broken 0002 throws on reopen (err: ${errMsg.slice(0, 80)})`);
+  assert(
+    /FK violations|foreign_key/i.test(errMsg),
+    `error message mentions FK violation (got: ${errMsg.slice(0, 80)})`,
+  );
+
+  // Step 4: 第三次打开仅 inspect — user_version 必须仍 100，schema_migrations 仅 0001
+  // 但每次 open 都会重新尝试 broken 0002 并 throw。要校验 metadata，得用 raw better-sqlite3
+  // 直接 SELECT（不走 runner）。这恰好也证明了：broken 状态没有持久化，下次重启仍可重试。
+  {
+    const raw = new Database(negPath);
+    raw.pragma("foreign_keys = ON");
+    const userVersion = raw.pragma("user_version", { simple: true }) as number;
+    assert(userVersion === 100, `step 3: user_version still 100 after broken migration (was ${userVersion})`);
+
+    const applied = raw
+      .prepare("SELECT file FROM schema_migrations ORDER BY file")
+      .all()
+      .map((r: any) => r.file as string);
+    assert(
+      applied.length === 1 && applied[0] === "0001_initial.sql",
+      `step 3: schema_migrations only records 0001 (got: ${JSON.stringify(applied)})`,
+    );
+
+    // 验证 stage 数据完整（5 行未被 broken rebuild 偷走 — transaction 回滚正确）
+    const stageCount = raw.prepare("SELECT count(*) as n FROM stage").get() as { n: number };
+    assert(stageCount.n === 5, `step 3: stage rows preserved across rolled-back rebuild (got: ${stageCount.n})`);
+
+    // 验证 FK 仍然完整：5 decisions 仍能 JOIN 到 5 stages
+    const fkCount = raw.prepare(
+      `SELECT count(*) as n FROM decision d JOIN stage s ON s.id = d.stage_id`,
+    ).get() as { n: number };
+    assert(fkCount.n === 5, `step 3: decision FK refs intact (got: ${fkCount.n})`);
+
+    raw.close();
+  }
+
+  // === Phase 5: M2 Loop 1 — prod-shape v101 → v102 additive migration（cross M3 收紧）
+  //
+  // 验证 0003_stage_failed_reason.sql 是真 additive：
+  //   - 父表 stage 既有数据保留（5 个 stage 覆盖代表性 status/kind，模拟 v0.4.5 prod 状态）
+  //   - 子表 decision 既有 FK refs 保留
+  //   - 既有 CHECK enum / index (idx_stage_issue_kind, idx_stage_running) 不动
+  //   - migration mode = default（runner 不关 FK，不 rebuild table）
+  //   - failed_reason / failed_at 列加进去后默认 NULL
+  //   - foreign_key_check 仍为空
+  //
+  // **prod-shape fixture 最小集**（按 cross M3 verdict）：v101 DB + 多 stage 覆盖现有
+  // status / kind + 子表 FK ref + 现有 index 可查询
+  //
+  // 加 charter compliance assertion（cross m1 应用）：机械 lock "0003 必须 default mode"
+  // —— 防止后续误改成 schema-rebuild 仍通过 Phase 5 测试。
+  console.log("\n--- Phase 5: prod-shape v101 → v102 additive (M2 Loop 1) ---");
+
+  // Charter compliance lock — 静态读 0003 SQL 文件，assert 它是 minimal additive
+  {
+    const sql0003 = readFileSync(
+      join(MIGRATIONS_DIR, "0003_stage_failed_reason.sql"),
+      "utf-8",
+    );
+    const header = sql0003.split("\n").slice(0, 20).join("\n");
+    assert(
+      !/MIGRATION_MODE\s*=\s*schema-rebuild/.test(header),
+      `Charter: 0003 must NOT declare MIGRATION_MODE = schema-rebuild`,
+    );
+    assert(
+      !/DROP\s+TABLE\s+stage\b/i.test(sql0003),
+      `Charter: 0003 must NOT DROP TABLE stage`,
+    );
+    assert(
+      !/CREATE\s+TABLE\s+stage_new\b/i.test(sql0003),
+      `Charter: 0003 must NOT CREATE TABLE stage_new (rebuild pattern)`,
+    );
+    assert(
+      /ALTER\s+TABLE\s+stage\s+ADD\s+COLUMN\s+failed_reason/i.test(sql0003),
+      `Charter: 0003 must add failed_reason via ALTER TABLE ADD COLUMN`,
+    );
+    assert(
+      /ALTER\s+TABLE\s+stage\s+ADD\s+COLUMN\s+failed_at/i.test(sql0003),
+      `Charter: 0003 must add failed_at via ALTER TABLE ADD COLUMN`,
+    );
+  }
+
+  const loop1Path = join(tmp, "loop1-shape.db");
+  // 用真实 0001 + 0002 跑到 v101，模拟 v0.4.5 prod 状态
+  const loop1MigrationsDir = join(tmp, "loop1-migrations");
+  rmSync(loop1MigrationsDir, { recursive: true, force: true });
+  mkdirSync(loop1MigrationsDir, { recursive: true });
+  copyFileSync(
+    join(MIGRATIONS_DIR, "0001_initial.sql"),
+    join(loop1MigrationsDir, "0001_initial.sql"),
+  );
+  copyFileSync(
+    join(MIGRATIONS_DIR, "0002_stage_status_dispatched.sql"),
+    join(loop1MigrationsDir, "0002_stage_status_dispatched.sql"),
+  );
+
+  // Step 1：开 DB → 跑 0001 + 0002 → 到 v101
+  {
+    const handle = openHarnessDb({
+      dbPath: loop1Path,
+      migrationsDir: loop1MigrationsDir,
+    });
+    assert(handle.schemaVersion === 101, `Step 1: at v101 (got ${handle.schemaVersion})`);
+
+    // Seed prod-shape：1 project + methodology + 1 issue + 5 stages（覆盖现有 status/kind）
+    // + 3 decisions FK ref → stage.id
+    const now = Date.now();
+    handle.db.prepare(
+      "INSERT INTO methodology(id,stage_kind,version,applies_to,content_ref,approved_by,approved_at) VALUES(?,?,?,?,?,?,?)",
+    ).run("m-l1", "spec", "1.0", "universal", "x", "user", now);
+    handle.db.prepare(
+      "INSERT INTO harness_project(id,cwd,name,worktree_root,created_at) VALUES(?,?,?,?,?)",
+    ).run("p-l1", "/tmp/loop1", "loop1", "/tmp/loop1/.worktrees", now);
+    handle.db.prepare(
+      `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    ).run("i-l1", "p-l1", "manual", "loop1 issue", "x", "[]", "normal", "in_progress", now, now);
+
+    // 5 stages 覆盖现有所有 status（pending / dispatched / running / awaiting_review / approved）
+    // 用不同 kind 避开 idx_stage_issue_kind UNIQUE 约束
+    const stageMix = [
+      ["s-l1-pend", "strategy",   "pending"],
+      ["s-l1-disp", "discovery",  "dispatched"],
+      ["s-l1-run",  "spec",       "running"],
+      ["s-l1-rev",  "compliance", "awaiting_review"],
+      ["s-l1-app",  "design",     "approved"],
+    ] as const;
+    const insertStage = handle.db.prepare(
+      `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+       VALUES(?,?,?,?,?,?,?,?,?)`,
+    );
+    for (const [id, kind, status] of stageMix) {
+      insertStage.run(id, "i-l1", kind, status, "heavy", 1, "PM", "m-l1", now);
+    }
+    const insertDecision = handle.db.prepare(
+      `INSERT INTO decision(id,stage_id,requested_by,options_json,created_at) VALUES(?,?,?,?,?)`,
+    );
+    insertDecision.run("d-l1-1", "s-l1-pend", "user", "[]", now);
+    insertDecision.run("d-l1-2", "s-l1-disp", "user", "[]", now);
+    insertDecision.run("d-l1-3", "s-l1-app",  "user", "[]", now);
+    handle.close();
+  }
+
+  // Step 2：把 0003 写进 migrationsDir，重开 → runner 应跑 0003 additive 成功
+  copyFileSync(
+    join(MIGRATIONS_DIR, "0003_stage_failed_reason.sql"),
+    join(loop1MigrationsDir, "0003_stage_failed_reason.sql"),
+  );
+
+  const loop1Handle = openHarnessDb({
+    dbPath: loop1Path,
+    migrationsDir: loop1MigrationsDir,
+  });
+  assert(
+    loop1Handle.schemaVersion === 102,
+    `Step 2: prod-shape DB upgraded to v102 (got ${loop1Handle.schemaVersion})`,
+  );
+
+  // 验证 1：5 stages 全部保留（既有数据未触动）
+  const loop1Stages = loop1Handle.db
+    .prepare("SELECT id, kind, status FROM stage ORDER BY id")
+    .all() as Array<{ id: string; kind: string; status: string }>;
+  assert(
+    loop1Stages.length === 5,
+    `prod-shape stages preserved (${loop1Stages.length}/5)`,
+  );
+
+  // 验证 2：FK 完整性 — 3 decisions 仍能 JOIN 到 stage
+  const loop1FkCount = loop1Handle.db.prepare(
+    `SELECT count(*) as n FROM decision d JOIN stage s ON s.id = d.stage_id`,
+  ).get() as { n: number };
+  assert(loop1FkCount.n === 3, `decision FK refs intact (${loop1FkCount.n}/3)`);
+
+  const loop1Violations = loop1Handle.db.pragma("foreign_key_check") as Array<unknown>;
+  assert(
+    Array.isArray(loop1Violations) && loop1Violations.length === 0,
+    `foreign_key_check empty after additive migration`,
+  );
+
+  // 验证 3：新列存在且默认 NULL
+  const cols = loop1Handle.db
+    .prepare("SELECT name FROM pragma_table_info('stage')")
+    .all()
+    .map((r: any) => r.name as string);
+  assert(cols.includes("failed_reason"), `stage.failed_reason column added`);
+  assert(cols.includes("failed_at"), `stage.failed_at column added`);
+
+  const oldStageReason = loop1Handle.db
+    .prepare("SELECT failed_reason, failed_at FROM stage WHERE id = 's-l1-pend'")
+    .get() as { failed_reason: string | null; failed_at: number | null };
+  assert(
+    oldStageReason.failed_reason === null && oldStageReason.failed_at === null,
+    `existing stage rows have NULL failed_reason / failed_at`,
+  );
+
+  // 验证 4：现有 indexes 仍存在（idx_stage_issue_kind / idx_stage_running）
+  const indexes = loop1Handle.db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'stage'")
+    .all()
+    .map((r: any) => r.name as string);
+  assert(
+    indexes.includes("idx_stage_issue_kind"),
+    `idx_stage_issue_kind preserved across additive migration`,
+  );
+  assert(
+    indexes.includes("idx_stage_running"),
+    `idx_stage_running preserved across additive migration`,
+  );
+
+  // 验证 5：现有 stage.status CHECK enum 仍 enforce（包含 H14 dispatched）
+  let invalidStatusThrew = false;
+  try {
+    loop1Handle.db.prepare(
+      `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+       VALUES(?,?,?,?,?,?,?,?,?)`,
+    ).run("s-l1-bad", "i-l1", "implement", "INVALID", "heavy", 1, "PM", "m-l1", Date.now());
+  } catch (e: any) {
+    invalidStatusThrew = String(e.message || e).includes("CHECK");
+  }
+  assert(invalidStatusThrew, `stage.status CHECK enum still enforced after additive migration`);
+
+  // 验证 6：可写入 failed_reason / failed_at（虽然 Loop 1 不做写入路径，但 schema 必须可用）
+  loop1Handle.db.prepare(
+    `UPDATE stage SET failed_reason = ?, failed_at = ? WHERE id = ?`,
+  ).run("orphan_after_restart", Date.now(), "s-l1-pend");
+  const updatedReason = loop1Handle.db
+    .prepare("SELECT failed_reason FROM stage WHERE id = 's-l1-pend'")
+    .get() as { failed_reason: string };
+  assert(
+    updatedReason.failed_reason === "orphan_after_restart",
+    `failed_reason column writable after migration`,
+  );
+
+  // 验证 7：二次 reopen — schema_migrations 含 0003，未重跑
+  loop1Handle.close();
+  const loop1Reopen = openHarnessDb({
+    dbPath: loop1Path,
+    migrationsDir: loop1MigrationsDir,
+  });
+  assert(
+    loop1Reopen.schemaVersion === 102,
+    `Step 7: reopen still at v102 (idempotent)`,
+  );
+  const reopenApplied = loop1Reopen.db
+    .prepare("SELECT file FROM schema_migrations ORDER BY file")
+    .all()
+    .map((r: any) => r.file as string);
+  assert(
+    reopenApplied.length === 3 &&
+      reopenApplied[2] === "0003_stage_failed_reason.sql",
+    `schema_migrations contains 0003 (no re-exec)`,
+  );
+  loop1Reopen.close();
+
+  // === Phase 6: M2 Loop 2 — setStageFailed helper invariants
+  //
+  // 验证 setStageFailed:
+  //   1. 写入 status='failed' + failed_reason + failed_at
+  //   2. 同时设置 ended_at（COALESCE 不覆盖既有 ended_at）
+  //   3. **Idempotent guard**: 已有 failed_reason 时不覆盖（首次写赢）
+  //   4. audit log 写入 set_failed 事件
+  console.log("\n--- Phase 6: setStageFailed helper invariants (M2 Loop 2) ---");
+
+  const phase6Path = join(tmp, "phase6.db");
+  const phase6Handle = openHarnessDb({ dbPath: phase6Path });
+
+  // Seed
+  const ph6Now = Date.now();
+  phase6Handle.db.prepare(
+    "INSERT INTO methodology(id,stage_kind,version,applies_to,content_ref,approved_by,approved_at) VALUES(?,?,?,?,?,?,?)",
+  ).run("m-p6", "spec", "1.0", "universal", "x", "user", ph6Now);
+  phase6Handle.db.prepare(
+    "INSERT INTO harness_project(id,cwd,name,worktree_root,created_at) VALUES(?,?,?,?,?)",
+  ).run("p-p6", "/tmp/p6", "p6", "/tmp/p6/.worktrees", ph6Now);
+  phase6Handle.db.prepare(
+    `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+  ).run("i-p6", "p-p6", "manual", "p6", "x", "[]", "normal", "in_progress", ph6Now, ph6Now);
+
+  const insertS = phase6Handle.db.prepare(
+    `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+     VALUES(?,?,?,?,?,?,?,?,?)`,
+  );
+  insertS.run("s-p6-a", "i-p6", "strategy", "running", "heavy", 1, "PM", "m-p6", ph6Now);
+  insertS.run("s-p6-b", "i-p6", "implement", "dispatched", "heavy", 1, "PM", "m-p6", ph6Now);
+
+  // 1. 第一次 setStageFailed 应写入完整 reason + failed_at
+  const first = setStageFailed(phase6Handle.db, "s-p6-a", "cli_failed", ph6Now);
+  assert(first === true, `first setStageFailed returns true (changes > 0)`);
+
+  const row1 = phase6Handle.db
+    .prepare("SELECT status, failed_reason, failed_at, ended_at FROM stage WHERE id = 's-p6-a'")
+    .get() as { status: string; failed_reason: string; failed_at: number; ended_at: number };
+  assert(row1.status === "failed", `setStageFailed sets status='failed'`);
+  assert(row1.failed_reason === "cli_failed", `failed_reason persisted = 'cli_failed'`);
+  assert(row1.failed_at === ph6Now, `failed_at persisted = ${ph6Now}`);
+  assert(row1.ended_at === ph6Now, `ended_at also set when not previously set`);
+
+  // 2. **Idempotent guard**: 第二次 setStageFailed 不覆盖首次 reason
+  const second = setStageFailed(phase6Handle.db, "s-p6-a", "unknown_error", ph6Now + 1000);
+  assert(second === false, `second setStageFailed (already has reason) returns false (no changes)`);
+
+  const row1Again = phase6Handle.db
+    .prepare("SELECT failed_reason, failed_at FROM stage WHERE id = 's-p6-a'")
+    .get() as { failed_reason: string; failed_at: number };
+  assert(
+    row1Again.failed_reason === "cli_failed",
+    `Idempotent: failed_reason still 'cli_failed' (not overwritten by 'unknown_error')`,
+  );
+  assert(
+    row1Again.failed_at === ph6Now,
+    `Idempotent: failed_at still original timestamp`,
+  );
+
+  // 3. 不同 stage 独立工作（覆盖不被串扰）
+  setStageFailed(phase6Handle.db, "s-p6-b", "spawn_setup_failed", ph6Now + 2000);
+  const row2 = phase6Handle.db
+    .prepare("SELECT status, failed_reason, failed_at FROM stage WHERE id = 's-p6-b'")
+    .get() as { status: string; failed_reason: string; failed_at: number };
+  assert(
+    row2.status === "failed" && row2.failed_reason === "spawn_setup_failed",
+    `Independent stage gets its own failed_reason ('spawn_setup_failed')`,
+  );
+
+  phase6Handle.close();
+
+  // === Phase 7: M2 Loop 3 — skipFailedStage helper invariants
+  //
+  // 严格 charter (plan v2 OQ-G): 仅 failed → skipped 单向；
+  //   - 其他 status: invalid_state
+  //   - 已 skipped: idempotent OK
+  //   - 不存在: not_found
+  //   - **不**做 retry / reset pending / auto-tick
+  console.log("\n--- Phase 7: skipFailedStage helper invariants (M2 Loop 3) ---");
+
+  const phase7Path = join(tmp, "phase7.db");
+  const phase7Handle = openHarnessDb({ dbPath: phase7Path });
+
+  const ph7Now = Date.now();
+  phase7Handle.db.prepare(
+    "INSERT INTO methodology(id,stage_kind,version,applies_to,content_ref,approved_by,approved_at) VALUES(?,?,?,?,?,?,?)",
+  ).run("m-p7", "spec", "1.0", "universal", "x", "user", ph7Now);
+  phase7Handle.db.prepare(
+    "INSERT INTO harness_project(id,cwd,name,worktree_root,created_at) VALUES(?,?,?,?,?)",
+  ).run("p-p7", "/tmp/p7", "p7", "/tmp/p7/.worktrees", ph7Now);
+  phase7Handle.db.prepare(
+    `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+  ).run("i-p7", "p-p7", "manual", "p7", "x", "[]", "normal", "in_progress", ph7Now, ph7Now);
+
+  const insertS7 = phase7Handle.db.prepare(
+    `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+     VALUES(?,?,?,?,?,?,?,?,?)`,
+  );
+  // 8 stages 覆盖**全部** stage.status enum 值的 skip 行为（cross m1 应用）
+  insertS7.run("s-failed",     "i-p7", "strategy",   "failed",          "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-skipped",    "i-p7", "discovery",  "skipped",         "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-pending",    "i-p7", "spec",       "pending",         "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-dispatched", "i-p7", "compliance", "dispatched",      "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-running",    "i-p7", "design",     "running",         "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-approved",   "i-p7", "implement",  "approved",        "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-rejected",   "i-p7", "test",       "rejected",        "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-review",     "i-p7", "review",     "awaiting_review", "heavy", 1, "PM", "m-p7", ph7Now);
+  // 也写一个 failed_reason 防 set guard 漏洞
+  setStageFailed(phase7Handle.db, "s-failed", "cli_failed", ph7Now);
+
+  // 1. failed → skipped 成功
+  const r1 = skipFailedStage(phase7Handle.db, "s-failed");
+  assert(r1.ok === true, `skipFailedStage('s-failed' / status=failed) returns ok=true`);
+  assert(
+    !("alreadySkipped" in r1) || r1.alreadySkipped === false || r1.alreadySkipped === undefined,
+    `first skip is NOT alreadySkipped`,
+  );
+  const newStatus = (phase7Handle.db
+    .prepare("SELECT status FROM stage WHERE id = 's-failed'")
+    .get() as { status: string }).status;
+  assert(newStatus === "skipped", `s-failed: status now 'skipped' (was 'failed')`);
+
+  // 2. 已 skipped → idempotent ok + alreadySkipped=true
+  const r2 = skipFailedStage(phase7Handle.db, "s-skipped");
+  assert(r2.ok === true, `skipFailedStage('s-skipped' / status=skipped) returns ok=true`);
+  assert(
+    r2.ok === true && r2.alreadySkipped === true,
+    `s-skipped: idempotent — alreadySkipped=true`,
+  );
+
+  // 3. 第二次 skip 已 skipped 的 stage（前面 skip 完的 s-failed 现在是 skipped）
+  const r3 = skipFailedStage(phase7Handle.db, "s-failed");
+  assert(
+    r3.ok === true && r3.alreadySkipped === true,
+    `s-failed (now skipped) re-skip: idempotent`,
+  );
+
+  // 4-9. 全部非 failed/skipped status 应返回 invalid_state（cross m1 应用：覆盖完整 stage.status enum）
+  // pending / dispatched / running / awaiting_review / approved / rejected — 6 个
+  for (const stageId of [
+    "s-pending", "s-dispatched", "s-running", "s-approved", "s-rejected", "s-review",
+  ] as const) {
+    const r = skipFailedStage(phase7Handle.db, stageId);
+    assert(
+      r.ok === false && r.error === "invalid_state",
+      `${stageId}: invalid_state (cannot skip non-failed)`,
+    );
+  }
+
+  // 8. 不存在的 stage: not_found
+  const r8 = skipFailedStage(phase7Handle.db, "s-nonexistent");
+  assert(
+    r8.ok === false && r8.error === "not_found",
+    `non-existent stage: not_found`,
+  );
+
+  // 9. failed_reason 在 skip 后不变（保留诊断信息）
+  const reasonAfterSkip = (phase7Handle.db
+    .prepare("SELECT failed_reason FROM stage WHERE id = 's-failed'")
+    .get() as { failed_reason: string }).failed_reason;
+  assert(
+    reasonAfterSkip === "cli_failed",
+    `failed_reason preserved after skip (still 'cli_failed' for diagnostic value)`,
+  );
+
+  phase7Handle.close();
+
+  // === Phase 7 charter mechanical lock（cross m2 应用）
+  //
+  // Loop 3 charter (plan v2 OQ-G) 严格排除 retry / resume / auto-retry / reset pending /
+  // attempt count / parentTaskId / 自动 tick。本节静态读取 skip route + helper 实现段，
+  // 机器 assert forbidden patterns 不出现。注释段也要扫到 — 但注释里的"不做 retry"等
+  // 是显式排除说明，不算偷渡，所以 assert 只针对 forbidden 实现 token：
+  //   - scheduler.tick(   ← 自动触发 tick（实现）
+  //   - .retry(           ← retry 调用（实现）
+  //   - reset_pending     ← reset to pending（实现）
+  //   - attempt_count     ← attempt counter 字段
+  //   - parent_task_id    ← parent task tracking
+  // 注释里的 "retry" 自然语言说"不做 retry"是合法的；只 ban 实现层 token。
+  console.log("\n--- Phase 7 charter lock — Loop 3 forbidden pattern scan ---");
+
+  const skipHelperSrc = readFileSync(
+    join(__dirname, "harness-queries.ts"),
+    "utf-8",
+  );
+  const harnessRouteSrc = readFileSync(
+    join(__dirname, "routes", "harness.ts"),
+    "utf-8",
+  );
+
+  // 提取 skipFailedStage 函数体（从 export function skipFailedStage 到下一个 // ----- 段分隔）
+  const skipHelperMatch = skipHelperSrc.match(
+    /export function skipFailedStage[\s\S]+?\n\}\n/,
+  );
+  assert(
+    skipHelperMatch != null,
+    `Charter: can locate skipFailedStage in harness-queries.ts`,
+  );
+
+  // 提取 skip route handler（POST "/stages/:id/skip" 到下一个 app. 调用）
+  const skipRouteMatch = harnessRouteSrc.match(
+    /app\.post\("\/stages\/:id\/skip"[\s\S]+?\}\);[\s\S]*?(?=\n\n  \/\/ ---|\n\n  app\.|\n  return)/,
+  );
+  assert(
+    skipRouteMatch != null,
+    `Charter: can locate POST /stages/:id/skip route handler`,
+  );
+
+  const combinedSrc = (skipHelperMatch![0] ?? "") + "\n" + (skipRouteMatch![0] ?? "");
+
+  // 实现层 forbidden patterns（不扫注释里的自然语言）
+  const forbiddenImplPatterns = [
+    /scheduler\s*\.\s*tick\s*\(/,
+    /\.retry\s*\(/,
+    /reset_pending/,
+    /attempt_count|attemptCount/,
+    /parent_task_id|parentTaskId/,
+    /setStageStatus\s*\([^)]*"pending"\s*\)/, // 不允许 reset to pending
+    /setStageStatus\s*\([^)]*"running"\s*\)/, // 不允许 reset to running
+  ];
+
+  for (const pattern of forbiddenImplPatterns) {
+    const matched = pattern.test(combinedSrc);
+    assert(
+      !matched,
+      `Charter: skip path implementation must NOT contain pattern ${pattern}`,
+    );
+  }
+
+  // 反向 sanity check: skip route 必须 invoke skipFailedStage helper（确保我们扫的是真路径）
+  assert(
+    /skipFailedStage\s*\(/.test(combinedSrc),
+    `Charter sanity: skip route invokes skipFailedStage`,
+  );
 
   console.log("\nharness schema OK ✅");
 } finally {

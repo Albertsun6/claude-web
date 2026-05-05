@@ -25,7 +25,10 @@ const DB_PATH = join(HARNESS_DIR, "harness.db");
 
 // PRAGMA user_version 编码：major*100 + minor，patch 不计
 // 1.0 → 100, 1.2 → 102, 2.0 → 200
-export const HARNESS_SCHEMA_VERSION = 101;
+// v100: 0001_initial.sql (M-1 初始 13 实体)
+// v101: 0002_stage_status_dispatched.sql (H14 dispatched 加 stage.status enum)
+// v102: 0003_stage_failed_reason.sql (M2 Loop 1 additive failed_reason + failed_at)
+export const HARNESS_SCHEMA_VERSION = 102;
 
 // migrations 目录定位（Round 2 cross m3 边界注释）：
 // - 当前 backend 用 `tsx watch src/index.ts` 直接跑源码，不打包，不复制 dist
@@ -77,8 +80,13 @@ export interface HarnessDb {
  * 适用：rebuild 父表来改 CHECK enum / 字段类型等，父表被子表 FK 引用时 schema-level
  * 检查会阻塞 DROP TABLE（v0.4.4 prod 失败的根因）。
  */
-export function openHarnessDb(opts: { dbPath?: string } = {}): HarnessDb {
+export function openHarnessDb(
+  opts: { dbPath?: string; migrationsDir?: string } = {},
+): HarnessDb {
   const path = opts.dbPath ?? DB_PATH;
+  // migrationsDir 默认指向 packages/backend/src/migrations；test 用 inject 路径跑
+  // broken / scenario migrations，避免污染源码目录或动态写文件到 fixed dir。
+  const migrationsDir = opts.migrationsDir ?? MIGRATIONS_DIR;
   mkdirSync(dirname(path), { recursive: true });
 
   const db = new Database(path);
@@ -86,7 +94,7 @@ export function openHarnessDb(opts: { dbPath?: string } = {}): HarnessDb {
   db.pragma("foreign_keys = ON");
 
   bootstrapMigrationsTable(db);
-  runPendingMigrations(db);
+  runPendingMigrations(db, migrationsDir);
 
   const schemaVersion = db.pragma("user_version", { simple: true }) as number;
 
@@ -108,8 +116,8 @@ function bootstrapMigrationsTable(db: Database.Database): void {
   `);
 }
 
-function runPendingMigrations(db: Database.Database): void {
-  const files = readdirSync(MIGRATIONS_DIR)
+function runPendingMigrations(db: Database.Database, migrationsDir: string): void {
+  const files = readdirSync(migrationsDir)
     .filter((f) => /^\d{4}_.*\.sql$/.test(f))
     .sort();
 
@@ -120,7 +128,7 @@ function runPendingMigrations(db: Database.Database): void {
   for (const file of files) {
     if (applied.has(file)) continue;
 
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
+    const sql = readFileSync(join(migrationsDir, file), "utf-8");
     const header = sql.split("\n").slice(0, 20).join("\n");
 
     const tv = TARGET_VERSION_RE.exec(header);
