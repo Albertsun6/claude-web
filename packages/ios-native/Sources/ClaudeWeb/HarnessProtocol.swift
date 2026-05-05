@@ -182,6 +182,10 @@ struct StageDto: Codable {
     let startedAt: Int64?
     let endedAt: Int64?
     let createdAt: Int64
+    // M2 Loop 1 (schema v102): 失败可诊断字段（additive，optional）。
+    // 老 server (v0.4.5) 不发这两个字段 → Swift Codable 默认 nil；不会 decode fail。
+    let failedReason: String?
+    let failedAt: Int64?
 }
 
 struct MethodologyDto: Codable {
