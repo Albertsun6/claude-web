@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "worktrees": [
+    {
+      "name": "M1-mini2-stage-aware-prompts",
+      "branch": "feat/eva-M1-context-stage-aware-prompts",
+      "path": "~/Desktop/claude-web",
+      "port": 3031,
+      "dataDir": "~/.claude-web-dev",
+      "owns": [
+        "packages/backend/src/scheduler.ts#spawnAgent",
+        "packages/backend/src/scheduler.ts#STAGE_PROMPTS"
+      ],
+      "status": "done",
+      "since": "2026-05-05T08:00:00Z",
+      "note": "PR #9 → dev → v0.4.2 main → prod deploy"
+    },
+    {
+      "name": "M1-experiment-board",
+      "branch": "feat/eva-M1-experiment-board",
+      "path": "~/Desktop/claude-web",
+      "port": 3031,
+      "dataDir": "~/.claude-web-dev",
+      "owns": [
+        "packages/backend/src/routes/experiments-parallel-board.ts",
+        "packages/backend/public/experiments-parallel-board.html",
+        "packages/backend/src/index.ts#PARALLEL_EXPERIMENT_ON"
+      ],
+      "status": "done",
+      "since": "2026-05-05T15:00:00Z",
+      "note": "PR #11 → dev (merged). 实验后 cleanup PR #14 删了源文件（kanban exit decision: delete），但 status='done' 表 \"曾合并\"，不是 released（released 留给 PR 关闭未合 / superseded 场景）"
+    },
+    {
+      "name": "M1-defects-fix-and-retro",
+      "branch": "feat/eva-M1-defects-fix-and-retro",
+      "path": "~/Desktop/claude-web",
+      "port": 3031,
+      "dataDir": "~/.claude-web-dev",
+      "owns": [
+        "packages/backend/src/scheduler.ts#computeNextStage",
+        "packages/shared/fixtures/harness/fallback-config.json#agentProfiles",
+        "packages/shared/src/__tests__/m0-agent-profiles.test.ts",
+        "packages/ios-native/Sources/ClaudeWeb/Views/Settings/SettingsView.swift",
+        "docs/retrospectives/M1-mini2-stage-aware-prompts.md"
+      ],
+      "status": "done",
+      "since": "2026-05-05T16:00:00Z",
+      "note": "PR #12 → dev (Track 1 of M1 双轨实验)"
+    },
+    {
+      "name": "M1-context-manager-skeleton",
+      "branch": "feat/eva-M1-context-manager-skeleton",
+      "path": "~/Desktop/claude-web-mini3",
+      "port": 3032,
+      "dataDir": "~/.claude-web-track2",
+      "owns": [
+        "packages/backend/src/context-manager.ts",
+        "packages/backend/src/harness-queries.ts#createTask",
+        "packages/backend/src/harness-queries.ts#context_bundle",
+        "packages/backend/src/scheduler.ts#spawnAgent"
+      ],
+      "status": "done",
+      "since": "2026-05-05T16:10:00Z",
+      "note": "PR #13 → dev (Track 2 of M1 双轨实验). Worktree + DATA_DIR 已 cleanup PR #14 删除。**信号 #1 来源**：rebase 后 lock 行落 OLD 表 / Historical 段而非 Active 段（commit e8d2f81 修复）。"
+    },
+    {
+      "name": "M1-experiment-cleanup-and-retro",
+      "branch": "chore/eva-M1-experiment-cleanup-and-retro",
+      "path": "~/Desktop/claude-web",
+      "port": 3031,
+      "dataDir": "~/.claude-web-dev",
+      "owns": [
+        "WORKTREE_LOCK.md",
+        "docs/retrospectives/M1-parallel-tracks-experiment.md",
+        "packages/backend/src/index.ts",
+        "packages/backend/src/routes/experiments-parallel-board.ts",
+        "packages/backend/public/experiments-parallel-board.html"
+      ],
+      "status": "done",
+      "since": "2026-05-05T17:00:00Z",
+      "note": "PR #14 → dev. Stage 4-5：retrospective 写出 + 看板代码删除 + 临时资源清理"
+    }
+  ]
+}

@@ -30,6 +30,7 @@ import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
 import { harnessConfigRouter } from "./routes/harness-config.js";
 import { harnessConfigEvents } from "./harness-config.js";
+import { loadEvaConfig } from "./eva-config-loader.js";
 import { buildHarnessRouter } from "./routes/harness.js";
 import { openHarnessDb } from "./harness-store.js";
 import { worktreesRouter, workRouter } from "./routes/worktrees.js";
@@ -81,6 +82,10 @@ app.get("/api/auth/info", (c) =>
     allowedRoots: isPathAllowlistEnabled() ? getAllowedRoots() : [],
   }),
 );
+
+// H12 v1: load eva.json (parallel-work declarative config). Soft fail — backend
+// behavior 不依赖 eva.json，仅 status reader / 后续 H13 / ResourceLock 用。
+loadEvaConfig();
 
 // Everything else under /api requires the token (when CLAUDE_WEB_TOKEN is set).
 app.use("/api/*", authMiddleware);

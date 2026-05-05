@@ -8,7 +8,8 @@
     "start:backend": "pnpm --filter @claude-web/backend start",
     "dev:frontend": "pnpm --filter @claude-web/frontend dev",
     "test:cli": "pnpm --filter @claude-web/backend test:cli",
-    "test:protocol": "pnpm --filter @claude-web/shared test"
+    "test:protocol": "pnpm --filter @claude-web/shared test",
+    "eva:status": "node scripts/eva-status.mjs"
   },
   "packageManager": "pnpm@9.0.0"
 }
