@@ -27,7 +27,7 @@ import type Database from "better-sqlite3";
 import {
   createInitiative, listInitiatives, getInitiative,
   createIssue, listIssues, getIssue, updateIssueStatus,
-  createStage, listStages, setStageStatus,
+  createStage, listStages, setStageStatus, skipFailedStage,
   createDecision, listPendingDecisions, resolveDecision,
 } from "../harness-queries.js";
 import { EvaScheduler } from "../scheduler.js";
@@ -137,6 +137,27 @@ export function buildHarnessRouter(
     if (!body.status) return c.json({ ok: false, error: "status required" }, 400);
     const ok = setStageStatus(db, c.req.param("id"), body.status);
     return ok ? c.json({ ok: true }) : c.json({ ok: false, error: "not found" }, 404);
+  });
+
+  // M2 Loop 3 — minimal skip API：operator unblock failed stage
+  // 严格语义：仅 failed → skipped 单向（plan v2 OQ-G）；其他 status 返回 409。
+  // 已 skipped 视为 idempotent no-op。**不**自动触发 tick — operator 须显式调
+  // POST /scheduler/tick 推进。
+  // 全局 authMiddleware 已强制 CLAUDE_WEB_TOKEN bearer auth（cross m3 from plan v2）。
+  app.post("/stages/:id/skip", (c) => {
+    const result = skipFailedStage(db, c.req.param("id"));
+    if (result.ok) {
+      return c.json({ ok: true, alreadySkipped: result.alreadySkipped ?? false });
+    }
+    if (result.error === "not_found") {
+      return c.json({ ok: false, error: "stage not found" }, 404);
+    }
+    // invalid_state
+    return c.json({
+      ok: false,
+      error: `cannot skip stage in status='${result.currentStatus}' (only 'failed' allowed)`,
+      currentStatus: result.currentStatus,
+    }, 409);
   });
 
   // -------------------------------------------------------------------------

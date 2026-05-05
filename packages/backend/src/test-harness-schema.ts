@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { openHarnessDb, HARNESS_SCHEMA_VERSION } from "./harness-store.js";
-import { setStageFailed } from "./harness-queries.js";
+import { setStageFailed, skipFailedStage } from "./harness-queries.js";
 
 // 复制 harness-store.ts 的 MIGRATIONS_DIR 解析（保持一致即可，避免再 export 一份内部常量）
 const __filename = fileURLToPath(import.meta.url);
@@ -771,6 +771,171 @@ CREATE INDEX idx_stage_running ON stage(status) WHERE status = 'running';
   );
 
   phase6Handle.close();
+
+  // === Phase 7: M2 Loop 3 — skipFailedStage helper invariants
+  //
+  // 严格 charter (plan v2 OQ-G): 仅 failed → skipped 单向；
+  //   - 其他 status: invalid_state
+  //   - 已 skipped: idempotent OK
+  //   - 不存在: not_found
+  //   - **不**做 retry / reset pending / auto-tick
+  console.log("\n--- Phase 7: skipFailedStage helper invariants (M2 Loop 3) ---");
+
+  const phase7Path = join(tmp, "phase7.db");
+  const phase7Handle = openHarnessDb({ dbPath: phase7Path });
+
+  const ph7Now = Date.now();
+  phase7Handle.db.prepare(
+    "INSERT INTO methodology(id,stage_kind,version,applies_to,content_ref,approved_by,approved_at) VALUES(?,?,?,?,?,?,?)",
+  ).run("m-p7", "spec", "1.0", "universal", "x", "user", ph7Now);
+  phase7Handle.db.prepare(
+    "INSERT INTO harness_project(id,cwd,name,worktree_root,created_at) VALUES(?,?,?,?,?)",
+  ).run("p-p7", "/tmp/p7", "p7", "/tmp/p7/.worktrees", ph7Now);
+  phase7Handle.db.prepare(
+    `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+  ).run("i-p7", "p-p7", "manual", "p7", "x", "[]", "normal", "in_progress", ph7Now, ph7Now);
+
+  const insertS7 = phase7Handle.db.prepare(
+    `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+     VALUES(?,?,?,?,?,?,?,?,?)`,
+  );
+  // 8 stages 覆盖**全部** stage.status enum 值的 skip 行为（cross m1 应用）
+  insertS7.run("s-failed",     "i-p7", "strategy",   "failed",          "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-skipped",    "i-p7", "discovery",  "skipped",         "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-pending",    "i-p7", "spec",       "pending",         "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-dispatched", "i-p7", "compliance", "dispatched",      "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-running",    "i-p7", "design",     "running",         "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-approved",   "i-p7", "implement",  "approved",        "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-rejected",   "i-p7", "test",       "rejected",        "heavy", 1, "PM", "m-p7", ph7Now);
+  insertS7.run("s-review",     "i-p7", "review",     "awaiting_review", "heavy", 1, "PM", "m-p7", ph7Now);
+  // 也写一个 failed_reason 防 set guard 漏洞
+  setStageFailed(phase7Handle.db, "s-failed", "cli_failed", ph7Now);
+
+  // 1. failed → skipped 成功
+  const r1 = skipFailedStage(phase7Handle.db, "s-failed");
+  assert(r1.ok === true, `skipFailedStage('s-failed' / status=failed) returns ok=true`);
+  assert(
+    !("alreadySkipped" in r1) || r1.alreadySkipped === false || r1.alreadySkipped === undefined,
+    `first skip is NOT alreadySkipped`,
+  );
+  const newStatus = (phase7Handle.db
+    .prepare("SELECT status FROM stage WHERE id = 's-failed'")
+    .get() as { status: string }).status;
+  assert(newStatus === "skipped", `s-failed: status now 'skipped' (was 'failed')`);
+
+  // 2. 已 skipped → idempotent ok + alreadySkipped=true
+  const r2 = skipFailedStage(phase7Handle.db, "s-skipped");
+  assert(r2.ok === true, `skipFailedStage('s-skipped' / status=skipped) returns ok=true`);
+  assert(
+    r2.ok === true && r2.alreadySkipped === true,
+    `s-skipped: idempotent — alreadySkipped=true`,
+  );
+
+  // 3. 第二次 skip 已 skipped 的 stage（前面 skip 完的 s-failed 现在是 skipped）
+  const r3 = skipFailedStage(phase7Handle.db, "s-failed");
+  assert(
+    r3.ok === true && r3.alreadySkipped === true,
+    `s-failed (now skipped) re-skip: idempotent`,
+  );
+
+  // 4-9. 全部非 failed/skipped status 应返回 invalid_state（cross m1 应用：覆盖完整 stage.status enum）
+  // pending / dispatched / running / awaiting_review / approved / rejected — 6 个
+  for (const stageId of [
+    "s-pending", "s-dispatched", "s-running", "s-approved", "s-rejected", "s-review",
+  ] as const) {
+    const r = skipFailedStage(phase7Handle.db, stageId);
+    assert(
+      r.ok === false && r.error === "invalid_state",
+      `${stageId}: invalid_state (cannot skip non-failed)`,
+    );
+  }
+
+  // 8. 不存在的 stage: not_found
+  const r8 = skipFailedStage(phase7Handle.db, "s-nonexistent");
+  assert(
+    r8.ok === false && r8.error === "not_found",
+    `non-existent stage: not_found`,
+  );
+
+  // 9. failed_reason 在 skip 后不变（保留诊断信息）
+  const reasonAfterSkip = (phase7Handle.db
+    .prepare("SELECT failed_reason FROM stage WHERE id = 's-failed'")
+    .get() as { failed_reason: string }).failed_reason;
+  assert(
+    reasonAfterSkip === "cli_failed",
+    `failed_reason preserved after skip (still 'cli_failed' for diagnostic value)`,
+  );
+
+  phase7Handle.close();
+
+  // === Phase 7 charter mechanical lock（cross m2 应用）
+  //
+  // Loop 3 charter (plan v2 OQ-G) 严格排除 retry / resume / auto-retry / reset pending /
+  // attempt count / parentTaskId / 自动 tick。本节静态读取 skip route + helper 实现段，
+  // 机器 assert forbidden patterns 不出现。注释段也要扫到 — 但注释里的"不做 retry"等
+  // 是显式排除说明，不算偷渡，所以 assert 只针对 forbidden 实现 token：
+  //   - scheduler.tick(   ← 自动触发 tick（实现）
+  //   - .retry(           ← retry 调用（实现）
+  //   - reset_pending     ← reset to pending（实现）
+  //   - attempt_count     ← attempt counter 字段
+  //   - parent_task_id    ← parent task tracking
+  // 注释里的 "retry" 自然语言说"不做 retry"是合法的；只 ban 实现层 token。
+  console.log("\n--- Phase 7 charter lock — Loop 3 forbidden pattern scan ---");
+
+  const skipHelperSrc = readFileSync(
+    join(__dirname, "harness-queries.ts"),
+    "utf-8",
+  );
+  const harnessRouteSrc = readFileSync(
+    join(__dirname, "routes", "harness.ts"),
+    "utf-8",
+  );
+
+  // 提取 skipFailedStage 函数体（从 export function skipFailedStage 到下一个 // ----- 段分隔）
+  const skipHelperMatch = skipHelperSrc.match(
+    /export function skipFailedStage[\s\S]+?\n\}\n/,
+  );
+  assert(
+    skipHelperMatch != null,
+    `Charter: can locate skipFailedStage in harness-queries.ts`,
+  );
+
+  // 提取 skip route handler（POST "/stages/:id/skip" 到下一个 app. 调用）
+  const skipRouteMatch = harnessRouteSrc.match(
+    /app\.post\("\/stages\/:id\/skip"[\s\S]+?\}\);[\s\S]*?(?=\n\n  \/\/ ---|\n\n  app\.|\n  return)/,
+  );
+  assert(
+    skipRouteMatch != null,
+    `Charter: can locate POST /stages/:id/skip route handler`,
+  );
+
+  const combinedSrc = (skipHelperMatch![0] ?? "") + "\n" + (skipRouteMatch![0] ?? "");
+
+  // 实现层 forbidden patterns（不扫注释里的自然语言）
+  const forbiddenImplPatterns = [
+    /scheduler\s*\.\s*tick\s*\(/,
+    /\.retry\s*\(/,
+    /reset_pending/,
+    /attempt_count|attemptCount/,
+    /parent_task_id|parentTaskId/,
+    /setStageStatus\s*\([^)]*"pending"\s*\)/, // 不允许 reset to pending
+    /setStageStatus\s*\([^)]*"running"\s*\)/, // 不允许 reset to running
+  ];
+
+  for (const pattern of forbiddenImplPatterns) {
+    const matched = pattern.test(combinedSrc);
+    assert(
+      !matched,
+      `Charter: skip path implementation must NOT contain pattern ${pattern}`,
+    );
+  }
+
+  // 反向 sanity check: skip route 必须 invoke skipFailedStage helper（确保我们扫的是真路径）
+  assert(
+    /skipFailedStage\s*\(/.test(combinedSrc),
+    `Charter sanity: skip route invokes skipFailedStage`,
+  );
 
   console.log("\nharness schema OK ✅");
 } finally {

@@ -300,6 +300,50 @@ export function setStageFailed(
   return result.changes > 0;
 }
 
+/**
+ * M2 Loop 3: minimal skip API helper — operator unblock failed stage.
+ *
+ * 严格语义（plan v2 OQ-G）：
+ *   - 仅允许 `failed → skipped` 单向转换
+ *   - 已经是 `skipped` 的 stage 视为 idempotent no-op（200 OK）
+ *   - 其他 status 拒绝（返回 'invalid_state'，调用方应回 409）
+ *
+ * **不**做：retry / resume / auto-retry / reset pending / attempt count /
+ * parentTaskId / 自动触发 tick。operator skip 后需显式调用
+ * `POST /api/harness/scheduler/tick` 推进。
+ *
+ * Returns:
+ *   - { ok: true, alreadySkipped?: true }  — failed → skipped or already skipped
+ *   - { ok: false, error: 'not_found' }    — stageId 不存在
+ *   - { ok: false, error: 'invalid_state', currentStatus } — 不是 failed/skipped
+ */
+export function skipFailedStage(
+  db: Database.Database,
+  stageId: string,
+):
+  | { ok: true; alreadySkipped?: boolean }
+  | { ok: false; error: "not_found" }
+  | { ok: false; error: "invalid_state"; currentStatus: string }
+{
+  const row = db
+    .prepare("SELECT status FROM stage WHERE id = ?")
+    .get(stageId) as { status: string } | undefined;
+  if (!row) return { ok: false, error: "not_found" };
+
+  // Idempotent: already skipped → no-op
+  if (row.status === "skipped") return { ok: true, alreadySkipped: true };
+
+  // Strict charter: only failed → skipped
+  if (row.status !== "failed") {
+    return { ok: false, error: "invalid_state", currentStatus: row.status };
+  }
+
+  // failed → skipped
+  setStageStatus(db, stageId, "skipped");
+  audit(db, "skip", "stage", stageId, { from: "failed" });
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Task — M1 mini #3.1: 真 task 行（cross M1 修：避免 context_bundle.task_id orphan）
 // ---------------------------------------------------------------------------
