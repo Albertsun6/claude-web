@@ -789,6 +789,49 @@ Settings 加 Toggle，控制 thinking block 默认展开/折叠。当前 thinkin
 - `permissionMode == plan` 时把 ExitPlanMode 计划文件作为一等 UI，而不是普通消息。
 - 对 `bypassPermissions` 加二次确认和会话内红色标识。
 
+### H11. Release Pipeline 移动端条件 Gate ⭐⭐
+当前发布链路已拆成 `feat/* → dev → main → tag → GitHub Release → promote.sh → prod worktree`。下一步需要把“移动端是否测试 / 是否安装”纳入 release 管理，但不能每次后端小改都强制重装 iOS。
+
+**目标**：按改动类型触发不同 release gate，让发布既有纪律又不过度自动化。
+
+**触发矩阵**：
+- docs / CI only：只跑普通 CI，不需要移动端验证。
+- backend / Web / Scheduler prompt：promote 后跑 backend smoke；iOS 只做轻量打开检查，不重装。
+- server-driven config / modelList / AgentProfile：promote 后做 iOS smoke，确认配置能刷新、旧客户端不崩。
+- shared protocol：必须跑 protocol fixture + iOS 解码/编译检查；是否重装看 Swift 是否变化。
+- `packages/ios-native/**`：必须 Swift build + simulator smoke；需要真机安装验证。
+- deploy / auth / WS / permission：必须 iOS 真机 smoke，确认连接、权限弹窗、断线恢复不退化。
+
+**实现草案**：
+1. CI 增加 path-aware job：
+   - 普通改动继续跑现有 `test`
+   - 命中 `packages/ios-native/**` 或 `Protocol.swift` 时额外跑 `xcodebuild build`
+   - 命中 shared protocol 时强制 fixture sync check
+2. 新增 release checklist 文档或 PR template section：
+   - 是否改 iOS Swift？
+   - 是否改协议？
+   - 是否改 server-driven config？
+   - 是否需要 simulator？
+   - 是否需要真机安装？
+   - 是否需要 `promote.sh`？
+3. `promote.sh` 后增加可选 smoke 指令：
+   - backend health
+   - `/api/harness/config`
+   - WS probe
+   - iOS 打开 Seaidea，连 prod backend，跑 1-2 个关键路径
+4. 后续再把已有 `ios-sim-e2e` / `ios-install` skills 挂进 release 流程：
+   - Swift 改动：先 simulator E2E，再真机安装
+   - 非 Swift 改动：只要求 iOS smoke，不安装
+
+**不做**：
+- 不把所有 release 都强制装 iPhone。
+- 不在 M1 早期做全自动 App Store / TestFlight。
+- 不把真机人工判断伪装成 CI 绿灯；短期保持 checklist + skill 辅助。
+
+**为什么值得**：Seaidea 是原生 iOS 客户端，很多后端/协议/server-driven 改动都会影响手机端。把移动端 gate 条件化，可以避免“后端已发、手机才发现坏了”，同时不让每次小发布都变成重装流程。
+
+**为什么不立即做**：当前 M1 Scheduler 还在快速迭代，先用人工 checklist 管住；等连续 2-3 次 release 都需要 iOS smoke 后，再把 path-aware CI 和 release checklist 固化。
+
 ---
 
 ### A1. 模型自动选择：Opus 复杂度路由 ⭐⭐⭐
@@ -852,6 +895,193 @@ Settings 加 Toggle，控制 thinking block 默认展开/折叠。当前 thinkin
 - 实现复杂度：5
 - 风险：4，无人监督的 agent 需要安全边界
 - 优先级：P2/P3，先做依赖项
+
+---
+
+## Borrow 池：并行 agent + git worktree 同类项目（2026-05-05）
+
+研究背景：M1 双轨并行实验 retrospective 强信号 #1（结构化 lock schema）+ 5 条 M2 prioritized signals 后，调研 6 个同类开源项目（Paseo / Worktrunk / Daintree / Multica / Composio Agent Orchestrator / workmux 家族）。**借鉴想法不抄整套** — Eva 的产品定位（个人 + 移动端 + 订阅复用）和这些项目（Paseo/Daintree 桌面端 / Multica 团队 SaaS / Composio CI 自动化）有结构性差异。
+
+### H12. 声明式 Worktree Config (`eva.json`) ⭐⭐⭐
+灵感来自 [Paseo](https://paseo.sh/docs/worktrees)：每个 repo 一份 `paseo.json` 声明 worktree 的 `setup` / `teardown` / `terminals` / `scripts`（含 services + 自动 port + 反向代理）。
+
+**可借鉴点**：
+- 把双轨实验 Stage 1 散落的手动步骤（`git worktree add` + `pnpm install` + `PORT=3032 CLAUDE_WEB_DATA_DIR=... pnpm dev:backend`）封成 declarative `eva.json`
+- 顶层 schema：`{ worktree: { setup, teardown, terminals }, scripts: { name: { command, type: "service", port } } }`
+- 替代当前 `WORKTREE_LOCK.md` 自由 markdown 表格 → 直接解决 retrospective 强信号 #1 语义漂移问题（结构化 schema git diff 时 line-level conflict 也对应 semantic conflict）
+- M2 ResourceLock 模块前置基础设施
+
+**适用性**：
+- 用户价值：5（修真信号 #1）
+- 架构贴合：4（与 fallback-config.json server-driven 模式一致）
+- 实现复杂度：3
+- 风险：2（Eva 现有 backend 状态机改动小）
+- 优先级：**P0**
+
+**实现草案**：
+1. `eva.json` schema in `packages/shared/src/eva-config.ts`，复用 zod
+2. `packages/backend/src/eva-config-loader.ts` 解析 + 缓存
+3. ResourceLock 模块（M2）从 `eva.json` 读 lock 单位（services / worktrees）
+4. 把 `WORKTREE_LOCK.md` Active Locks 段迁移到 `eva.json` `locks: [...]`，markdown 留 Historical 历史
+
+License 注意：Paseo 未在调研页明确 license，借鉴**思路**（schema 设计、setup/teardown/services 三段）OK；不复制源码。
+
+---
+
+### H13. Worktree Lifecycle Hooks ⭐⭐
+灵感来自 [Worktrunk](https://worktrunk.dev/)：7 个 hook 覆盖 worktree 全生命周期 — `pre-start` / `post-start` / `post-switch` / `pre-commit` / `pre-merge` / `post-merge` / `pre-remove`，配置在项目内 `.config/wt.toml`。
+
+**可借鉴点**：
+- 当前 Eva 双轨实验 Stage 1 setup 是手写脚本片段，没 hook 概念 → ResourceLock 模块设计时引入 hook 框架
+- `pre-start` blocking（`npm install` 等阻塞依赖）vs `post-start` 后台（`dev server` 等不阻塞）的二分法很实用
+- `pre-merge` hook 可挂 cursor-agent 评审 / dogfood gate 自动化（per harness-review-workflow patch mode）
+
+**适用性**：
+- 用户价值：4
+- 架构贴合：3（需要 worktree 生命周期事件模型）
+- 实现复杂度：3
+- 风险：2
+- 优先级：**P1**（M2 ResourceLock 模块的执行层）
+
+**实现草案**：
+1. `eva.json` 加 `hooks: { "pre-start": "...", "post-start": "...", ... }` 段（与 H12 合并）
+2. `packages/backend/src/worktree-lifecycle.ts` 监听 worktree 事件 + 触发对应 hook
+3. 集成 hook 到 promote.sh / harness-review-workflow patch mode dogfood gate
+
+License：Worktrunk Rust 项目，未在调研页明确 license，借鉴**思路**（7 个 hook 列表、blocking/background 二分），不复制 Rust 实现。
+
+---
+
+### H14. Stage 状态机加 `dispatched` 中间态 ⭐⭐
+灵感来自 [Multica](https://multica.ai/docs/how-multica-works)：task state machine `queued → dispatched → running → completed/failed/cancelled`。
+
+**可借鉴点**：
+- Eva 当前 stage status: `pending → running → approved/rejected/skipped/failed`（无 dispatched）
+- 加 `dispatched` 表示"scheduler 已 reserve stage row 但 spawn agent 还没开始"
+- M1 dogfood v1 实战中曾出现"stage 创建了但 agent 还没真起来"的窗口期（race condition 排错），dispatched 状态能让这个窗口可观察
+- Multica daemon poll 3s + heartbeat 15s 的间隔模型也值得借鉴（Eva backend 只有手动 tick，自动 poll 是 M2/M3）
+
+**适用性**：
+- 用户价值：3（debug / observability 提升）
+- 架构贴合：5（schema 加一个 enum 值 + scheduler 一行 status 变更）
+- 实现复杂度：1
+- 风险：3（schema 改动 = irreversible，需要 migration + iOS protocol enum 同步）
+- 优先级：**P1**（与 dispatched 一起做 daemon poll heartbeat 也 OK，但这是次要）
+
+**实现草案**：
+1. migration 加 stage CHECK 约束 `'dispatched'`，bump schema version
+2. scheduler `tick()`：createStage 后 status='dispatched'（不是直接 running），spawnAgent 启动后 status='running'
+3. iOS HarnessProtocol.swift stage 状态枚举同步加 `dispatched`
+4. fixture round-trip 测试
+
+License：Multica 文档可读，借鉴**状态名**和**daemon 间隔数值**，不复制服务端实现。
+
+---
+
+### H15. Daintree-style Web 看板（M2 真做时） ⭐⭐
+灵感来自 [Daintree](https://daintree.org/)：drag-and-drop panel grid + worktree dashboard 自动检测 PR/Issue + agent state via output heuristics + dev server preview。
+
+**可借鉴点**：
+- M1 双轨实验看板**已删**（`/api/experiments/parallel-board` 实测没真用上 — retrospective §6）
+- M2 真看板必须有"终端做不到的功能"才值得做：
+  - **drag-and-drop panel grid**（terminals + agent sessions + browser previews + notes）
+  - **从 branch name 自动解析 PR / Issue**（如 `feat/eva-M1-foo` → harness_issue lookup → 联动）
+  - **dev server preview embedded**（reverse proxy 已在 Paseo 模式里支持，可叠加）
+- Eva 优势：iOS-native + WS push 已就位，可做"从手机看桌面 agent"独家场景，而非 Daintree 的纯桌面端
+
+**适用性**：
+- 用户价值：4（移动端可观察远程 agent，是 Eva 独家产品定位）
+- 架构贴合：3（需要 reverse proxy + WS push - 部分已有）
+- 实现复杂度：4
+- 风险：3（不要重蹈"看板没人用"覆辙，必须真用得上）
+- 优先级：**P2**（review-orchestrator / ResourceLock 之后，M2 中后期）
+
+**实现草案**：
+1. backend `/api/harness/board` 真 endpoint（不是 `/experiments/...`），WS push live update
+2. iOS native 加 Board view，复用 panel grid 概念但适配触屏
+3. 集成 dev server preview via Tailscale serve 已有架构
+
+**不做**：drag-and-drop panel grid 在 iOS 上不自然，桌面端等 M3+。M2 先做 list view + WS push。
+
+License：Daintree 开源（CLAUDE.md 引用 develop branch），借鉴**panel grid 概念 + state heuristic 想法**，UI 实现独立做。
+
+---
+
+### H16. Agent State via Output Heuristics ⭐⭐⭐
+灵感来自 [Daintree](https://github.com/daintreehq/daintree/blob/develop/CLAUDE.md)：`AgentStateMachine` 通过 output heuristics 推断 agent 状态 — `idle / working / running / waiting / directing / completed / exited`。
+
+**可借鉴点**：
+- 当前 Eva scheduler 只能从 stage event（`stage_started / stage_done / stage_failed`）推断，但 stage 内 agent 是否 idle / 等权限 / 在 thinking / 在 tool use 不可见
+- 看板（H15）+ 通知（heartbeat）+ TTS（语音播报）都受益于更细粒度 agent state
+- 解析现有 stream-json 输出可实现：detect thinking pause / tool use / waiting on permission（Eva PreToolUse hook 能配合）
+- iOS 的"Wandering indicator"（已 ship per memory）就是雏形，可推广到所有 stage
+
+**适用性**：
+- 用户价值：4
+- 架构贴合：5（cli-runner stream-json 解析已经在跑）
+- 实现复杂度：3
+- 风险：2（heuristic 可能误判，但有现实信号 — thinking block / tool use / permission_request event 都明确）
+- 优先级：**P1**（独立于 ResourceLock，可以平行做）
+
+**实现草案**：
+1. `packages/backend/src/agent-state.ts`：从 stream-json 事件推断状态机
+2. 状态扩展：`pending → dispatched → running:thinking → running:tool_use → running:waiting_permission → completed/failed`
+3. WS broadcast 新 event `harness_event { kind: "agent_state_changed", payload: { stageId, state } }`
+4. iOS 实时显示 + 通知（thinking 5min+ 警告 / waiting_permission 推送）
+
+License：Daintree CLAUDE.md 公开，借鉴**状态分类 + heuristic 想法**，自己写解析逻辑。
+
+---
+
+### H17. CI Failure Auto-Route ⭐
+灵感来自 [Composio Agent Orchestrator (MIT)](https://github.com/ComposioHQ/agent-orchestrator)：`CI fails → agent gets the logs and fixes it`，可配置 `retries: 2`。
+
+**可借鉴点**：
+- 当前 Eva failed stage 直接 blocked（Track 1 修过 `computeNextStage`），需人工 resolve
+- 自动化路径：CI failed → 拉日志 → spawn 同 stage 重试，prompt 含 CI 日志 + retry 计数
+- M3 范围（不是 M2 first wave），但值得记录方向
+
+**适用性**：
+- 用户价值：4（无人值守自动恢复）
+- 架构贴合：3（需要 CI log fetch + retry policy + 防 retry storm）
+- 实现复杂度：4
+- 风险：4（自动重试可能浪费 token / 死循环）
+- 优先级：**P3**（M3，permission hub + review-orchestrator 之后）
+
+**实现草案（M3 设计 input，不是 M2 立项）**：
+1. failed stage event → 触发 retry orchestrator
+2. retry orchestrator 读 task.prompt 上次内容 + 拉 CI log + append 到 prompt
+3. 重新 spawn agent，retry 计数到 task 行
+4. retry 上限（如 2）后真 blocked
+
+License：Composio MIT，**思路**借鉴 OK，retry policy 自己设计（避免 token 浪费）。
+
+---
+
+### Borrow 池总结（2026-05-05）
+
+| Idea | 借鉴自 | 优先级 | 触发条件 |
+|---|---|---|---|
+| H12 声明式 worktree config | Paseo | **P0** | retrospective 强信号 #1 直接对应；M2 first wave |
+| H13 Worktree lifecycle hooks | Worktrunk | P1 | M2 ResourceLock 模块执行层 |
+| H14 stage `dispatched` 状态 | Multica | P1 | 与 daemon poll heartbeat 一起做 |
+| H15 Daintree-style 真看板 | Daintree | P2 | review-orchestrator 之后，M2 中后期 |
+| H16 Agent state via output heuristics | Daintree | **P1** | 独立可平行 |
+| H17 CI 失败自动 route | Composio (MIT) | P3 | M3 第二/三波 |
+
+**明确不借鉴**：
+- ❌ Paseo 反向代理 + 自动 port 分配（M1/M2 范围内 :3030/3031 够用，过度设计）
+- ❌ Multica daemon-server 拆分架构（个人自用单进程够用，团队 SaaS 才值得拆）
+- ❌ workmux / muxtree / tmux 家族（Eva 是 backend driven 而非 terminal driven，整套换思路而非借鉴）
+- ❌ Composio orchestrator agent 派发（M3 review-orchestrator 用更轻量编排）
+- ❌ Daintree 桌面端 drag-and-drop UI（iOS 触屏不自然，桌面端等 M3+ 再考虑）
+
+License 风险摘要：
+- Paseo / Daintree / Composio：明确开源，思路借鉴 OK
+- Multica：开源 GitHub 仓库 + 商业 cloud 双轨，文档思路借鉴 OK
+- Worktrunk：Rust binary 项目，公开仓库，思路借鉴 OK
+
+如有任何项目要复制实现细节（≥10 行同质代码），需重新核实 license 并加版权声明。
 
 ---
 

@@ -7,7 +7,7 @@
 // Web /harness board to demonstrate the 5-state pipeline end-to-end.
 
 import type Database from "better-sqlite3";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DATA_DIR } from "./data-dir.js";
@@ -254,6 +254,195 @@ export function setStageStatus(
 
   if (result.changes > 0) audit(db, "set_status", "stage", stageId, { status });
   return result.changes > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Task — M1 mini #3.1: 真 task 行（cross M1 修：避免 context_bundle.task_id orphan）
+// ---------------------------------------------------------------------------
+
+export interface TaskRow {
+  id: string;
+  stage_id: string;
+  agent_profile_id: string;
+  model: string;
+  cwd: string;
+  worktree_path: string | null;
+  prompt: string;
+  skill_set_json: string;
+  permission_mode: string;
+  context_bundle_id: string;
+  run_ids_json: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CreateTaskInput {
+  id: string; // caller-provided so context_bundle.task_id can match
+  stageId: string;
+  agentProfileId: string;
+  model: "opus" | "sonnet" | "haiku";
+  cwd: string;
+  worktreePath?: string | null;
+  prompt: string;
+  permissionMode: string;
+  contextBundleId: string;
+}
+
+export function createTask(db: Database.Database, input: CreateTaskInput): TaskRow {
+  const now = Date.now();
+  const row: TaskRow = {
+    id: input.id,
+    stage_id: input.stageId,
+    agent_profile_id: input.agentProfileId,
+    model: input.model,
+    cwd: input.cwd,
+    worktree_path: input.worktreePath ?? null,
+    prompt: input.prompt,
+    skill_set_json: "[]",
+    permission_mode: input.permissionMode,
+    context_bundle_id: input.contextBundleId,
+    run_ids_json: "[]",
+    status: "pending",
+    created_at: now,
+    updated_at: now,
+  };
+  db.prepare(`
+    INSERT INTO task(id,stage_id,agent_profile_id,model,cwd,worktree_path,prompt,skill_set_json,
+      permission_mode,context_bundle_id,run_ids_json,status,created_at,updated_at)
+    VALUES(@id,@stage_id,@agent_profile_id,@model,@cwd,@worktree_path,@prompt,@skill_set_json,
+      @permission_mode,@context_bundle_id,@run_ids_json,@status,@created_at,@updated_at)
+  `).run(row);
+  audit(db, "create", "task", input.id, { stageId: input.stageId, contextBundleId: input.contextBundleId });
+  return row;
+}
+
+// ---------------------------------------------------------------------------
+// ContextBundle
+// ---------------------------------------------------------------------------
+
+export interface ContextBundleRow {
+  id: string;
+  task_id: string;
+  artifact_refs_json: string;
+  max_tokens: number;
+  pruned_files_json: string;
+  summary: string;
+  snapshot_path: string;
+  created_at: number;
+}
+
+export interface CreateContextBundleInput {
+  id?: string;
+  taskId: string;
+  artifactRefs?: string[];
+  maxTokens: number;
+  prunedFiles?: string[];
+  summary: string;
+  snapshotPath: string;
+}
+
+export function createContextBundle(
+  db: Database.Database,
+  input: CreateContextBundleInput
+): ContextBundleRow {
+  const id = input.id ?? randomUUID();
+  const now = Date.now();
+  const row: ContextBundleRow = {
+    id,
+    task_id: input.taskId,
+    artifact_refs_json: JSON.stringify(input.artifactRefs ?? []),
+    max_tokens: input.maxTokens,
+    pruned_files_json: JSON.stringify(input.prunedFiles ?? []),
+    summary: input.summary,
+    snapshot_path: input.snapshotPath,
+    created_at: now,
+  };
+
+  db.prepare(`
+    INSERT INTO context_bundle(id,task_id,artifact_refs_json,max_tokens,pruned_files_json,summary,snapshot_path,created_at)
+    VALUES(@id,@task_id,@artifact_refs_json,@max_tokens,@pruned_files_json,@summary,@snapshot_path,@created_at)
+  `).run(row);
+  audit(db, "create", "context_bundle", id, { taskId: input.taskId, snapshotPath: input.snapshotPath });
+  return row;
+}
+
+export interface ArtifactRow {
+  id: string;
+  stage_id: string;
+  kind: string;
+  ref: string | null;
+  hash: string;
+  storage: "inline" | "file";
+  content_text: string | null;
+  content_path: string | null;
+  size_bytes: number;
+  metadata_json: string;
+  superseded_by: string | null;
+  created_at: number;
+}
+
+/** M2 v1 (3.2-A'): create artifact row with hash + size_bytes computed.
+ *
+ * Inline storage only in v1 — content_text 必填，content_path 不支持（file 存储留 v2，
+ * 因为需要决定 ~/.claude-web/artifacts/<hash>.<ext> 的 file 写入路径策略）。
+ *
+ * Schema 约束（migration 0001_initial.sql）：
+ * - kind ∈ enum (methodology / spec / design_doc / architecture_doc / adr / patch / pr_url
+ *   / test_report / coverage_report / review_notes / review_verdict / decision_note
+ *   / metric_snapshot / retrospective / changelog_entry)。enum 不在内的 kind 会被 SQLite CHECK 拒
+ * - storage='inline' AND content_text IS NOT NULL AND content_path IS NULL（CHECK 约束已 enforce）
+ * - hash NOT NULL — sha256 of content_text
+ * - size_bytes NOT NULL — Buffer.byteLength of content_text in utf-8
+ */
+export interface CreateArtifactInput {
+  stageId: string;
+  kind: string;
+  ref?: string | null;
+  contentText: string;
+  metadata?: Record<string, unknown>;
+}
+
+export function createArtifact(db: Database.Database, input: CreateArtifactInput): ArtifactRow {
+  if (typeof input.contentText !== "string") {
+    throw new Error("createArtifact requires contentText (inline storage only in v1)");
+  }
+  const id = randomUUID();
+  const now = Date.now();
+  const hash = createHash("sha256").update(input.contentText, "utf-8").digest("hex");
+  const sizeBytes = Buffer.byteLength(input.contentText, "utf-8");
+
+  const row: ArtifactRow = {
+    id,
+    stage_id: input.stageId,
+    kind: input.kind,
+    ref: input.ref ?? null,
+    hash,
+    storage: "inline",
+    content_text: input.contentText,
+    content_path: null,
+    size_bytes: sizeBytes,
+    metadata_json: JSON.stringify(input.metadata ?? {}),
+    superseded_by: null,
+    created_at: now,
+  };
+  db.prepare(`
+    INSERT INTO artifact(id,stage_id,kind,ref,hash,storage,content_text,content_path,size_bytes,metadata_json,superseded_by,created_at)
+    VALUES(@id,@stage_id,@kind,@ref,@hash,@storage,@content_text,@content_path,@size_bytes,@metadata_json,@superseded_by,@created_at)
+  `).run(row);
+  audit(db, "create", "artifact", id, { stageId: input.stageId, kind: input.kind, ref: input.ref ?? null, sizeBytes });
+  return row;
+}
+
+export function listArtifactsForIssue(db: Database.Database, issueId: string): ArtifactRow[] {
+  return db.prepare(`
+    SELECT artifact.*
+    FROM artifact
+    JOIN stage ON stage.id = artifact.stage_id
+    WHERE stage.issue_id = ?
+      AND artifact.superseded_by IS NULL
+    ORDER BY artifact.created_at ASC
+  `).all(issueId) as ArtifactRow[];
 }
 
 // M1 stub: ensure a placeholder methodology row exists for any stage kind

@@ -4,7 +4,7 @@
 // - AgentProfileItemSchema round-trip (含可扩展 hint-only 字段：stage / modelHint)
 // - HarnessConfig superRefine agentProfiles id 唯一
 // - minor bump v1.1 schema 解析 v1.2 payload graceful skip (不崩 + 拿到 modelList + permissionModes)
-// - drift: fallback-config 12 项 + 仅 PM enabled=true（M1 准备）
+// - drift: fallback-config 12 项 + M1 enabled = Strategist + PM + Coder（M1 mini #1+#2 + Track 1 启用 strategy/implement 之后）
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -69,11 +69,21 @@ describe("HarnessConfigSchema with agentProfiles", () => {
     expect(cfg.protocolVersion).toBe("1.2");
   });
 
-  it("PM is the only enabled profile in M0", () => {
+  it("M1 contract: Strategist + PM + Coder are the enabled profiles (one per used stage)", () => {
+    // M0 originally only enabled PM. M1 mini #1+#2 (Scheduler + stage-aware
+    // prompts) drives strategy + implement stages, so Strategist + Coder are
+    // also enabled. PM remains enabled for discovery + iOS Settings UI.
     const enabled = cfg.agentProfiles.filter((p) => p.enabled);
-    expect(enabled).toHaveLength(1);
-    expect(enabled[0].id).toBe("PM");
-    expect(enabled[0].stage).toBe("discovery");
+    const ids = enabled.map((p) => p.id).sort();
+    expect(ids).toEqual(["Coder", "PM", "Strategist"]);
+
+    // Each enabled profile is the unique enabled one for its stage — scheduler
+    // resolveProfile won't be ambiguous.
+    const stageMap = new Map<string, string>();
+    for (const p of enabled) stageMap.set(p.stage, p.id);
+    expect(stageMap.get("strategy")).toBe("Strategist");
+    expect(stageMap.get("discovery")).toBe("PM");
+    expect(stageMap.get("implement")).toBe("Coder");
   });
 
   it("12 ids cover the canonical agent set (drift unit test)", () => {

@@ -80,7 +80,7 @@
       "description": "战略 / KPI / trade-off 决策",
       "stage": "strategy",
       "modelHint": "sonnet",
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "PM",
@@ -117,10 +117,10 @@
     {
       "id": "Coder",
       "displayName": "Coder",
-      "description": "实现 + 测试同步写（复杂度自适应）",
+      "description": "实现 + 测试同步写（M1: sonnet 固定；M2 加复杂度自适应路由）",
       "stage": "implement",
-      "modelHint": "adaptive",
-      "enabled": false
+      "modelHint": "sonnet",
+      "enabled": true
     },
     {
       "id": "Tester",
