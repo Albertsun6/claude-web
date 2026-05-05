@@ -11,11 +11,25 @@
   <key>Label</key>
   <string>com.claude-web.backend</string>
 
+  <!--
+    2026-05-05 lesson: previous form `bash -lc "exec caffeinate -is pnpm ..."`
+    had two bugs —
+      (1) -lc reads login shell init which rewrites PATH (Homebrew node 25 wins
+          over the nvm v24 we want), making backend run on whichever Node was
+          last installed; native bindings then go NODE_MODULE_VERSION mismatch
+      (2) when launchd exec'd this chain via bash, pnpm hung indefinitely under
+          caffeinate (no tsx child ever spawned, log empty)
+    Fix: keep /bin/bash as the launchd program (preserves macOS TCC permission
+    for ~/Desktop access — switching to /pnpm would require fresh Full Disk
+    Access grant), but drop -l and caffeinate.
+    Tradeoff: lose caffeinate idle-sleep prevention; acceptable for personal
+    Mac that's plugged in, plus KeepAlive=true respawns if Mac wakes.
+  -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>-lc</string>
-    <string>exec /usr/bin/caffeinate -is /Users/yongqian/.nvm/versions/node/v24.12.0/bin/pnpm start:backend</string>
+    <string>-c</string>
+    <string>exec /Users/yongqian/.nvm/versions/node/v24.12.0/bin/pnpm start:backend</string>
   </array>
 
   <key>WorkingDirectory</key>
@@ -23,8 +37,11 @@
 
   <key>EnvironmentVariables</key>
   <dict>
+    <!-- ~/.local/bin must be on PATH so scheduler-spawned `claude` CLI is
+         findable. Was previously injected by login-shell init when plist used
+         `bash -lc`; now -l is dropped, the path must be explicit. -->
     <key>PATH</key>
-    <string>/Users/yongqian/.nvm/versions/node/v24.12.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <string>/Users/yongqian/.local/bin:/Users/yongqian/.nvm/versions/node/v24.12.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>HOME</key>
     <string>/Users/yongqian</string>
     <key>PORT</key>
