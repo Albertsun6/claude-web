@@ -52,7 +52,7 @@
 | # | MUST-do | 归属 |
 |---|---|---|
 | MD1 | 持久化失败原因 + recovery metadata（`failed_reason` 字段 / audit log） | M2 #1 |
-| MD2 | retry/resume/skip policy 闭环 + 测试覆盖每条选择路径 | M2 #1 |
+| MD2 | retry/resume/skip policy 闭环 + 测试覆盖每条选择路径 | M2 #1 — **v2 已拆**：Loop 3 仅 minimal skip（`failed→skipped` 单向）；retry / resume / auto-retry / attempt count 留 Loop 4+ 重新 gate |
 | MD3 | 端到端可重复 pipeline 测试（fixture 化的 issue → stage → bundle → agent → result） | M2 #1 |
 | MD4 | 跨端 reconcile（重连时拉 stage 列表，不靠 send-once broadcast） | M2 #4（跨 #1 #5 横切）|
 | MD5 | backlog/queue 可视化 | M2 #4 |
@@ -70,7 +70,7 @@
 
 | 圈 | 内容 | 骨架/螺旋 | 依赖 |
 |---|---|---|---|
-| **#1.1** | `failed_reason` + `failed_at` 字段加进 stage 表（schema v102，schema-rebuild migration）；audit log 写入失败 context | 骨架 #1 | — |
+| **#1.1** | `failed_reason` + `failed_at` 字段加进 stage 表（schema v102，**default migration mode，additive nullable columns only**——非 schema-rebuild。无 NOT NULL / DEFAULT / CHECK / FK / index，不触发 v0.4.4 那种 rebuild 风险）；audit log 写入留 Loop 2 | 骨架 #1（最薄） | — |
 | **#1.2** | `cleanupOrphanStages` 写入 `failed_reason='orphan_after_restart'`；其他 catch path 类似（`spawn_setup_failed` / `cli_failed` / `spec_harvest_failed`） | 螺旋（依赖 #1.1）| #1.1 |
 | **#1.3** | retry/resume/skip API：`POST /api/harness/stages/:id/retry` (重置为 pending)，`/skip`，`/abandon-issue`；scheduler `computeNextStage` 处理 retry 后的 stage 状态 | 螺旋 + 部分骨架 (新 routes + ReviewVerdict 行为) | #1.1, #1.2 |
 | **#1.4** | end-to-end pipeline test：fixture 化 issue → tick → 模拟 spec artifact → tick → 模拟 implement → 验证最终 issue=done。可重复跑 | 螺旋（test infra） | #1.3 |
@@ -118,17 +118,26 @@
 
 每个 M2 目标进入螺旋实施前必须答全 7 问。下面是初步答案（可能需细化）。
 
-### M2 #1 anchor gate
+### Loop 1 anchor gate（**仅** failed_reason + failed_at additive）
 
 | # | 问题 | 草答 |
 |---|---|---|
-| 1 | 数据模型变更明确 + **prod-shape 验证**？ | 待定：stage 加 `failed_reason TEXT NULL` + `failed_at INTEGER NULL` + (#1.5) `cancelled` enum 值。schema v102 schema-rebuild migration（参考 v101 模板）。**prod-shape 测试必须包含 failed stages + cancelled stages + retry 后 stage** |
-| 2 | wire protocol 对齐 + minClientVersion？ | StageDtoSchema 加 `failedReason` `failedAt` 字段；`stage_changed` event payload 加 `failedReason`；HARNESS_PROTOCOL_VERSION 1.1 → 1.2；MIN_CLIENT_VERSION 保持 1.0（老客户端忽略新字段）|
-| 3 | iOS/Web/backend 兼容？ | 老 iOS（无 `failedReason` Codable case）会忽略——非 breaking。但 `cancelled` enum 老客户端会 decode 失败 → 必须 bump MIN_CLIENT_VERSION 1.1 同步 iOS 装机 |
-| 4 | 不可逆迁移？ | schema v102 forward-only，rollback 路径同 v0.4.5（manual restore from backup） |
-| 5 | 权限/凭据/sandbox？ | retry/skip/cancel APIs 需要 `CLAUDE_WEB_TOKEN` auth；cancel 涉及 SIGTERM CLI 子进程（已有路径）|
-| 6 | 多 agent/worktree 资源？ | 不直接涉及 — 但 cancel 可能要 release worktree lock（依赖 #2.1 ResourceLock）|
-| 7 | rollback/cleanup？ | 同 H14 v0.4.5 路径；cancel 失败要可重试 |
+| 1 | 数据模型变更明确 + **prod-shape 验证**？ | stage 加 `failed_reason TEXT NULL` + `failed_at INTEGER NULL`，**default migration mode**（非 schema-rebuild）。无 NOT NULL / DEFAULT / CHECK / FK / index。**prod-shape fixture 最小集**：v101 DB + ≥1 issue + 多个 stage 覆盖现有 status / kind + ≥1 decision FK 指向 stage + 现有 `idx_stage_issue_kind` / `idx_stage_running` 可查询；migration 后二次 reopen + `foreign_key_check` 为空 + 加列前后既有数据完整 |
+| 2 | wire protocol 对齐 + minClientVersion？ | `StageDtoSchema` 加 `failedReason?: string` + `failedAt?: number`（optional）；`HARNESS_PROTOCOL_VERSION` **保持 1.1 不 bump**；`MIN_CLIENT_VERSION` 保持 1.0。老 iOS 装机端的 Swift `Codable` 默认 ignore unknown keys，TS Zod 端是 default non-strict object（接受并 strip extra fields）—— 加 old-schema parse fixture 防 future strict 破坏兼容（cross M2 应用） |
+| 3 | iOS/Web/backend 兼容？ | 全向后兼容。Swift / Web / 老 backend 对额外 nullable 字段不会 decode fail（**前提：上游不加 `.strict()`**） |
+| 4 | 不可逆迁移？ | schema v102 forward-only nullable columns。rollback 到 v101 后老代码读到带 `failed_reason` 列的表完全无副作用（SELECT 不查这列即可）；从 v101 backup 恢复也可（但通常不需要）|
+| 5 | 权限/凭据/sandbox？ | Loop 1 不引入新 route / 新 auth surface。仅 schema migration（runner 已走完整 prod-guard）|
+| 6 | 多 agent/worktree 资源？ | 不涉及 |
+| 7 | rollback/cleanup？ | 同 H14 hot-fix 模式：runner 已有 transaction 回滚；如启动失败可 manual `ALTER TABLE stage DROP COLUMN`（SQLite 3.35+ 支持） |
+
+### M2 #1 future Loop anchor gate（占位 — 各 Loop 启动时单独写）
+
+下列内容来自 v1 的 #1 anchor gate 草答，**不属 Loop 1 scope**，留作对应 Loop 启动时的草答模板：
+
+- `cancelled` enum 值 → Loop 4+ 候选，schema-rebuild migration（同 H14 v0.4.5 模式）；breaking 兼容 → 必须 bump MIN_CLIENT_VERSION 1.1 + 同步 iOS 装机
+- retry/resume 完整 policy → Loop 4+，包含 attempt count / parent_task_id / 自动重试逻辑（不属 Loop 3 minimal skip）
+- skip API auth → Loop 3 启动时实施：`POST /api/harness/stages/:id/skip` 必须走 `CLAUDE_WEB_TOKEN` bearer auth（cross m3 应用）
+- HARNESS_PROTOCOL_VERSION 1.1 → 1.2 / 1.2 → 1.3 → 由具体 Loop 触发条件决定，不预设
 
 ### M2 #2 anchor gate
 
@@ -192,10 +201,10 @@ v2 改成 **loop-scoped 解冻**：本 proposal 通过仅授权 Loop 1 启动批
   - `stage` 表加 `failed_reason TEXT NULL` + `failed_at INTEGER NULL`
   - 默认 mode（不需要 schema-rebuild — 加列不动 CHECK enum，不触发 H14 那种 FK 检查）
 - **wire protocol additive 字段**：
-  - `StageDtoSchema` 加 `failedReason?: string` + `failedAt?: number`
-  - `HARNESS_PROTOCOL_VERSION` **暂不 bump**（additive 字段对老客户端透明，老 Zod schema 用 `passthrough` 接受 extra fields）
+  - `StageDtoSchema` 加 `failedReason?: string` + `failedAt?: number`（optional via `.optional()`）
+  - `HARNESS_PROTOCOL_VERSION` **暂不 bump**。**兼容机制**：老 TS Zod schema 是 default **non-strict** `z.object({...})`（接受并 strip unknown keys；不是 `passthrough`）；Swift `Codable` 默认 **ignore unknown keys**。**前提**：上游不加 `.strict()` 调用——cross M2 应用：Loop 1 必须加 old-schema parse fixture（用 v0.4.5 schema 的固定 sample 解 v0.4.6 server payload）防 future 加 strict 破坏兼容
   - `MIN_CLIENT_VERSION` **保持 1.0**
-- **prod-shape migration test**：Loop 1 的 v102 必须在 prod-shape fixture（含 issue + stage + decision）上验证（§0.5 anchor gate #1 加强后的硬要求）
+- **prod-shape migration test**：Loop 1 的 v102 必须在 prod-shape fixture 上验证。**最小 fixture 集**（cross M3 收紧）：v101 DB + ≥1 issue + 多 stage 覆盖现有 status / kind + ≥1 decision FK ref + 现有 `idx_stage_issue_kind` / `idx_stage_running` + 二次 reopen 验证 + `foreign_key_check` 为空。**不**包含 cancelled / retry stages（那是 future Loop 的 fixture 要求）
 - **iOS Codable**：`Stage` struct 加可选字段（不动 enum）
 
 ### **冻结期内仍不允许**（M2 master plan 通过后也不解锁）
@@ -212,7 +221,9 @@ Loop 2 / Loop 3 / Loop 4+ 启动前各自独立提交解冻申请（修订本文
 
 ---
 
-## 6. 依赖关系图
+## 6. 依赖关系图（Non-authoritative — 仅技术依赖，不是批准顺序也不是承诺执行完）
+
+> **不要把本图当批次承诺**。每条边只表达"如果两个 Loop 都做，谁必须先做"；不代表两个 Loop 都会做。各 Loop ship/drop/defer 由自己 retrospective 决定。
 
 ```
                                            ┌────────────────────────────┐
@@ -285,10 +296,10 @@ Loop 2 / Loop 3 / Loop 4+ 启动前各自独立提交解冻申请（修订本文
 - M2 #1.6（boot ordering） — 螺旋独立 housekeeping
 - M2 #5.1（review stage 集成） — 依赖 #1.1，但本身设计可并行起草
 
-**关键路径**（最长链）：
+**关键路径**（最长链 — 仅技术依赖估算，不承诺执行）：
 `#2.1 → #1.1 → #1.5 → #4.1 → #4.2 → #4.3 → #4.4` ≈ 7 圈
 
-**M2 done 判定**：所有 5 大目标的核心圈完成 + #1.4 e2e pipeline test 反复跑通过 + cursor-agent 三角评审 verdict + retrospective。
+**M2 done 判定**：当用户 + retrospective 数据共同判断"5 大目标已"足够好"" — 不预设硬指标。任何一个目标的"足够好"门槛由该目标最后一圈 retrospective 显式记录。可能 M2 #1 在 Loop 3 后即"足够稳"；可能 ResourceLock 永远不需要做（M2 期间 1-2 agent 并行不出问题就可以推迟到 M3）。
 
 ---
 
@@ -309,7 +320,7 @@ Loop 2 / Loop 3 / Loop 4+ 启动前各自独立提交解冻申请（修订本文
 | Loop | 内容 | 触发条件 |
 |---|---|---|
 | **Loop 2** | failed_reason 写入路径：cleanupOrphanStages → `'orphan_after_restart'`；scheduler catch handler → `'spawn_setup_failed'` / `'cli_failed'`；harvestSpecArtifact catch → `'spec_harvest_failed'` | Loop 1 retrospective 确认 schema 落地稳定 + dogfood 验证 prod 上加列无副作用 |
-| **Loop 3** | minimal skip API：`POST /api/harness/stages/:id/skip`（**仅** `failed → skipped` 单向转换 + 触发下次 tick 推进）。**不**做 retry / resume / auto-retry / reset pending / attempt count / parentTaskId | Loop 2 retrospective 确认 failed_reason 实际能区分失败类型 |
+| **Loop 3** | minimal skip API：`POST /api/harness/stages/:id/skip`（**仅** `failed → skipped` 单向转换 + 触发下次 tick 推进）。**不**做 retry / resume / auto-retry / reset pending / attempt count / parentTaskId。**Auth 要求**（cross m3 应用）：路由必须走现有 `CLAUDE_WEB_TOKEN` bearer auth；不允许 unauthenticated mutation route | Loop 2 retrospective 确认 failed_reason 实际能区分失败类型 |
 | **Loop 4+** | **不预设**。等 Loop 1-3 retrospective 累积证据再决定下一圈。可能候选：ResourceLock / cancelled enum / ContextMgr v2 selector / e2e pipeline test / ... | 由 Loop 3 retrospective + 当时 prod 状态 + 剩余风险排序决定 |
 
 **Loop 3 与原 plan #1.3 (full retry/skip policy in Wave C) 切开**：
@@ -338,7 +349,7 @@ v1 写"5 wave × 3-4 圈 = 17 圈"是机械估算。v2 不再估总数。每个 
 | OQ-E | M2 期间 prod release 节奏？ | **每个 Loop 结束做 ship/drop/defer decision**：触碰 prod runtime / schema / protocol 的 Loop 倾向 release（不机械规定）；纯文档 / 测试 / 内部 refactor 可合 dev 后批量 release。decision 写进 retrospective。 |
 | OQ-F | anchor gate 是 Loop 级还是单圈级？ | **每 Loop 独立 anchor gate**。**+ 偷渡防护**：如果 Loop 内触碰未授权骨架项（不在该 Loop 启动批解冻清单里），必须暂停并重新过 gate；不允许 Loop 内偷加骨架变更 |
 | OQ-G（v2 新增）| Loop 3 限定为 minimal skip API（不含 retry / resume / auto-retry / reset pending / attempt count），完整 retry policy 留后续 Loop？ | **是**。Loop 3 仅做 unblock operator 最薄能力（`failed → skipped` 单向 + 触发 tick）；retry policy 易膨胀，不能挤进同 Loop |
-| OQ-H（v2 新增）| 正式弃用 "wave" 术语，统一改 "Loop"？ | **是**。"wave" 暗示 batch；"Loop" 与 §0.5 螺旋一圈语义一致。本文档已改；后续 retrospective / commit / PR 描述均用 Loop |
+| OQ-H（v2 新增）| 正式弃用 "wave" 术语，统一改 "Loop"？ | **是**。"wave" 暗示 batch；"Loop" 与 §0.5 螺旋一圈语义一致。**执行模型已统一为 Loop；仅在 v1 废弃说明上下文中保留 wave 引用**（解释为什么不再用），其他地方一律 Loop。后续 retrospective / commit / PR 描述均用 Loop |
 
 ---
 
