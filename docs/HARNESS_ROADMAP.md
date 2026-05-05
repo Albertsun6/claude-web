@@ -108,6 +108,116 @@ claude-web 当前是"Claude CLI 的远程控制台"——iOS/Web 通过 WS 把 p
 
 ---
 
+## 0.5 螺旋 + 阶梯双层交付原则（Layered Spiral Delivery）
+
+> **核心约束（防误解）**：螺旋不是绕过架构设计；**螺旋只在已通过 anchor gate 的骨架内运行**。"没想清 schema / protocol / 分层就先做一版" 不是螺旋，是危险的螺旋仿冒品（Boehm 的原话："hazardous spiral look-alike"）。
+
+Eva 既不能纯阶梯（不 dogfood 就一次性大设计 → 容易过度抽象 + 文档理想态压现实），也不能纯螺旋（每圈只看当下证据 → 在 schema/protocol/分层等高搬迁成本决策上反复横跳）。本节把双层节奏正式化为全局默认。理论依据：Boehm 螺旋模型本身就内置 anchor point milestones（LCO / **LCA** / IOC），其中 LCA 明确卡住"无架构定义就进 incremental"——这正是纯螺旋的危险面。详见调研笔记引用的 Boehm 1995 _Anchoring the Software Process_ 与 Thoughtworks _Evolutionary Architecture_。
+
+### 双层定义
+
+**外层：阶梯式架构骨架（Up-front + ADR/proposal 锁定）**
+
+下列改动属于"骨架"，**不允许只做一圈 dogfood 就直接合主分支**，必须先走 proposal / ADR-lite + cross review + migration / rollback / compatibility 计划：
+
+1. `harness.db` schema / migration / CHECK enum（参见 [HARNESS_DATA_MODEL.md](HARNESS_DATA_MODEL.md) §1，13 实体 + DDL）
+2. wire protocol（[`packages/shared/src/harness-protocol.ts`](../packages/shared/src/harness-protocol.ts) `HARNESS_PROTOCOL_VERSION` + TS Zod + Swift Codable + fixture 三端契约）
+3. 6 层架构边界（参见 [HARNESS_ARCHITECTURE.md](HARNESS_ARCHITECTURE.md) L1-L7）+ §0 #11（不引入新基础组件）
+4. Runtime provider 模型（Claude CLI subprocess 路线 §0 #2；新接 Cursor / Codex / OpenAI / Gemini 的 runtime 形态属骨架）
+5. 权限 / sandbox / allowlist / fs isolation（已由 §0 #16 不可逆操作沙箱覆盖；本条仅引用，避免重复）
+6. worktree / ResourceLock 持久化模型（已由 §0 #17 资源隔离 + `eva.json` 状态机覆盖；本条仅引用）
+7. release / prod worktree / tag 策略（[CLAUDE.md "Branch & Release"](../CLAUDE.md) + `scripts/promote.sh` + `scripts/rollback.sh` + 硬钉 Node 路径）
+8. iOS server-driven schema 和 `MIN_CLIENT_VERSION`（任何会让老 iOS 装机端 decode 失败的 wire 变更）
+
+骨架变更走的固定流程：
+- 写 proposal 或 ADR-lite（放 `docs/proposals/` 或 `docs/adr/`）
+- 至少一次 cross review（[`harness-architecture-review`](../.claude/skills/harness-architecture-review/SKILL.md) + [`reviewer-cross`](../.claude/skills/reviewer-cross/SKILL.md) 之一，外加 cursor-agent 异源模型）
+- 跨端 migration / rollback / 兼容性矩阵（"老客户端 vs 新服务端"行为说明）
+- 评审分级按 §22 输出侧仪式预算（fast-path 适用于"骨架内的小改"，触动骨架定义本身的不允许 fast-path）
+
+**与 §0 #21 元工作冻结的衔接**：冻结期内（`HARNESS_EVOLUTION_FROZEN=1`）骨架变更继承 §0 #21 的 startup batch 豁免逻辑——只有显式登记在启动批的骨架修订允许进行；非启动批的骨架触碰即视为"解冻条件之一未满足"，必须先解冻或缩减为螺旋层动作。
+
+**内层：螺旋式能力实施（risk-driven loop）**
+
+下列改动属于"在已锁定骨架内的能力实施"，按 risk-driven 螺旋每圈推进：
+
+1. Scheduler 行为细化（next-stage 选取、stage 状态机分支、并发 tick 防护等）
+2. ContextManager prompt 内容 + selector 策略（哪些 artifact 放进 bundle、按何种优先级）
+3. Agent prompt / profile / `modelHint` / 工具白名单
+4. Dashboard / cockpit / UI 展示
+5. Dogfood workflow + 看板能力（端口 / DATA_DIR 隔离、retrospective 模板）
+6. Review prompt（reviewer-cross / harness-architecture-review 等的 SKILL.md 措辞）
+7. Release smoke checklist（触发条件、最小 dogfood 集）
+8. 在已接入的 provider 上试新 reviewer 角色 / 新 agent profile（不动 provider runtime）
+
+**关键差异：螺旋是 risk-driven 而非 feature-driven**——每圈选题 = 当前最大风险或最大不确定性，而不是"再加一个 feature"。例：双轨实验是为验证人驱动并行风险，不是为了多做两个 PR；3.2-A' 是为验证 ContextBundle rich prompt 链路，不是为了多加一个 feature；v0.4.3 prod smoke 是为消除"dev 通、prod 不通"的部署风险，不是例行发布。
+
+### 螺旋一圈的 6 步
+
+1. **明确本圈风险或不确定性** —— 一句话写下"这一圈想消除的最大未知是什么"，作为 retrospective 第一行
+2. **最小可运行切片** —— 能跑起来 + 能针对该风险产生证据的最薄实现
+3. **机器验证** —— tests / CI / smoke 全过；类型干净；DB 迁移 / 协议 round-trip 一致
+4. **真实 dogfood** —— 在 dev backend 或主项目上手动跑一次真实路径，不只跑 mock
+5. **review 或 cross-review** —— 至少一次独立视角（cursor-agent / harness-architecture-review / reviewer-cross 任一）
+6. **retrospective + 下一圈 scope** —— 写入 `docs/retrospectives/...`（极小改动可追加到已有 retrospective 的新一节）；强信号转下圈优先级，弱信号 / 反信号触发 drop / defer
+
+### Exit 强约束（每一圈必选其一并写进 retrospective）
+
+- **ship** — 收口落地，进入下一圈
+- **drop** — 实验证伪原假设，明确放弃
+- **defer** — 信号不强或前置条件未到，记入 backlog 等触发条件
+
+不允许"做着做着不了了之"。
+
+### Architecture spike（跨层探索，不直接合主分支）
+
+当不确定某个螺旋圈是否会触动骨架时，先做 spike：time-boxed throwaway 探索，产出**证据**而非生产代码：
+
+- **spike 输入**：明确写下"我担心这一步会碰骨架的哪一项"
+- **spike 输出**：要么返回螺旋层（确认在已锁定骨架内可以实施），要么升级骨架层（提交 proposal / ADR-lite）
+- **历史 spike 例**：双轨并行实验 / `fs-as-context` vs `prompt-as-context` 对比 / Cursor / Codex reviewer 接入对比
+
+spike 代码默认放独立 worktree（参见 §0 #17 资源隔离），不直接合 `dev`。
+
+### Anchor gate（每个 Mx 进入前必须过）
+
+进入新里程碑（M-1 / M0 / M1 / M2 / M3 / ...）实施前，先回答 7 问：
+
+1. 本里程碑的数据模型（新增 / 修改的实体 + DDL + migration）是否明确？
+2. wire protocol（TS / Swift / SQLite 三端契约 + fixture）是否对齐 + minClientVersion 是否声明？
+3. iOS / Web / backend 三端兼容方式（老客户端遇到新服务端怎么办）是否说明？
+4. 是否有不可逆迁移（DB schema / 文件系统 / prod 部署），且按 §0 #16 流程？
+5. 权限 / 文件系统 / 凭据风险是否有边界 / allowlist / sandbox？
+6. 多 agent / worktree 资源争用是否有控制方案（按 §0 #17）？
+7. 失败后 rollback / cleanup 路径是否明确？
+
+任意一条未答 = anchor gate 未过 = 不允许进入该 M 的大规模螺旋实施；先做骨架层 proposal / spike 把缺口补上。
+
+### 它防的三类问题
+
+1. **防大爆炸设计** —— 例如直接做完整 M2（Scheduler + ContextManager + ResourceLock + PR Manager + Review Orchestrator + Provider Runtime），会变成不可 review 的一大坨 patch。双层模型把"骨架先定 + 螺旋逐圈推" 拆开：M2 anchor gate 过了之后才进螺旋实施，每圈风险驱动。
+2. **防"文档理想态"压倒现实** —— 例如 `fs-as-context` 是长期理想，但 dogfood 发现当前 CLI 不适合 → 螺旋层降级为 prompt-as-context；同时把 fs isolation 升级到骨架层 spike，等条件成熟再进 anchor gate。理想态不能盖过实证，但也不允许在"凭直觉"层直接改骨架。
+3. **防凭感觉排优先级** —— 下一圈 scope 必须由上圈的真实信号驱动（如双轨实验 retrospective 暴露 `WORKTREE_LOCK.md` 语义漂移 → H12 `eva.json`），不是因为某个想法"看着酷"。
+
+### 双层为什么比单层准确
+
+单层纯螺旋会让 Eva 在 schema / protocol / 分层等"高搬迁成本"决策上反复横跳——这恰是 Eva 改起来最痛的部分（migration 必须 rebuild 表 / 跨端协议升级牵动三端）。但 Eva 也确实在 Scheduler / ContextManager 这种实施细节上靠纯螺旋拿到了关键信号。**双层让两类决策走各自合适的节奏**：高搬迁成本的走阶梯（前瞻 + ADR），低搬迁成本的走螺旋（dogfood + retrospective）。
+
+### 实证案例（截止 2026-05-05）
+
+| 一圈 / 一阶 | 类别 | 信号 | 下圈调整 |
+|---|---|---|---|
+| 13 实体 + 6 层架构 + wire protocol v1.0 | 阶梯（M-1） | 一次性 ADR + 三端 round-trip 锁定 | 后续螺旋圈在此骨架内推进 |
+| 双轨并行实验 | 螺旋（M2 spike）| `WORKTREE_LOCK.md` 文档式锁会语义漂移 | H12 `eva.json` 声明式状态机 |
+| 3.2-A' rich prompt dogfood | 螺旋（M2） | prompt-as-context 链路真能跑 | v0.4.3 ship；fs-as-context 推迟 M3+ |
+| `fs-as-context` 设计讨论 | spike | 当前 CLI 不适合 | 降级 prompt-as-context；fs isolation 升级 M3+ 骨架 spike |
+| native binding 报错 | 阶梯修订 | NODE_MODULE_VERSION 漂移会拖垮 prod backend | 强化 `promote.sh` + plist 硬钉 Node 路径 |
+| H14 dispatched 状态 | 阶梯（schema v101 + protocol 1.1）+ 螺旋（scheduler 状态机） | CHECK enum + 跨端 round-trip + cross-review 走完 | M2 后续状态机细化在新骨架内螺旋推进 |
+
+> 未来若要把本原则正式化（例如要拒绝某个不符双层的提案）可补 `ADR-0018 Layered Spiral Delivery for Harness Evolution`，目前不强制写。
+
+---
+
 ## 1. 数据模型（详细见 [HARNESS_DATA_MODEL.md](HARNESS_DATA_MODEL.md)）
 
 新增持久层 `~/.claude-web/harness.db`（better-sqlite3 + FTS5），现有 `~/.claude-web/projects.json` 不动。
