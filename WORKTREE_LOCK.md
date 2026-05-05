@@ -7,8 +7,9 @@
 | Track | 文件 | 状态 | 时间 |
 |---|---|---|---|
 | Track 1 | packages/backend/src/scheduler.ts:computeNextStage, packages/shared/fixtures/harness/fallback-config.json (agentProfiles), docs/retrospectives/M1-mini2-stage-aware-prompts.md | active | 2026-05-05 16:00 |
+| Track 2 | packages/backend/src/context-manager.ts (NEW), packages/backend/src/harness-queries.ts (createTask + ContextBundle helpers), packages/backend/src/scheduler.ts:spawnAgent | active | 2026-05-05 16:10 |
 
-> Track 2 在 `~/Desktop/claude-web-mini3` worktree（branch `feat/eva-M1-context-manager-skeleton`）独立 append 自己的行 — 合并 dev 时会出现 WORKTREE_LOCK.md merge，是实验观察点之一。
+> **Rebase observation**：Track 2 在自己 worktree 加 lock 行时，dev 上 Track 1 的 "Active Locks" 段尚未存在；Track 2 把行 append 到 OLD "Historical Locks" 表里。Rebase 后 git 报**零冲突**，但**语义漂移** — Track 2 行被错误归到 Historical 段。本 commit 是手动 reposition。M1 双轨实验 retrospective 信号 #1：**自由 markdown 锁文件 + 多 worktree 时序异步 → rebase 报 ok 但语义错。M2 自动化必须用结构化 lock schema**。
 
 ## Historical Locks（旧版表格 — 早期实践）
 
