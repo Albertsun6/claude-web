@@ -18,11 +18,15 @@ description: Unified Review Mechanism v2 orchestrator. Runs phase 1 (2 independe
 | **`proposal`** (默认) | 研究 / 探索 / 路线图 / 方案选型 / 可逆决策 | `docs/proposals/<TOPIC>.md` | 无 |
 | **`contract`** | 数据模型 / 方法论 / SKILL 文件 / 协议契约 / schema 改动 | `docs/contracts/<TOPIC>.md` 或 `docs/proposals/<TOPIC>.md`（视 M-1 约定） | + ADR-lite (`docs/adr/NNNN-...md`) + dogfood gate（如 `scripts/verify-m1-deliverables.mjs` 校验脚本） |
 | **`patch`** | PR ready to merge / 不可逆代码改动 / 上线 release | PR description / branch | + ADR-lite + dogfood + PR template 对齐（[HARNESS_PR_GUIDE.md](docs/HARNESS_PR_GUIDE.md)） |
+| **`patch-ops`** | L7 运维基础设施 fix（launchd plist / promote.sh / CI yaml / 部署脚本 / shell 脚本类）| PR description / branch | + **cursor-agent 评审（异质性 floor，不能跳）** + dogfood / 端到端验证；**跳过** ADR-lite + PR template 严格化（不是产品决策，不需要审计 trail）|
 
 判断 mode：
 1. **优先看不可逆度**：可逆 → proposal；schema/契约/方法论 → contract；patch ready → patch
-2. **次看输出形态**：纯文字 → proposal；有 SQL DDL / 协议字段 → contract；有 git diff → patch
+2. **次看输出形态**：纯文字 → proposal；有 SQL DDL / 协议字段 → contract；有 git diff → patch；只改 launchd/CI/script → patch-ops
 3. **歧义时降级**：不确定就用 proposal 起步，contract/patch 阶段升级
+4. **patch-ops 不是 patch 的子集** — 是平行简化模式。如果改动同时触及产品代码 + 运维脚本，按 `patch` 走（更严）
+
+**为什么 patch-ops 仍要 cursor-agent 评审**：2026-05-05 PR #6 dogfood 暴露的运维 fix（plist + promote.sh），作者自评通过但 cursor-agent 一秒命中 1 BLOCKER（probe 用 `/api/harness/config` 漏掉 D6）+ 2 MAJOR（PATH soft-pin、caffeinate 移除后 sleep 风险）。运维 fix 的失败模式横跨 OS / shell / 进程 / 网络层，单端 reviewer 容易盲到分层假设。
 
 ## When to use
 
