@@ -30,6 +30,7 @@ import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
 import { harnessConfigRouter } from "./routes/harness-config.js";
 import { harnessConfigEvents } from "./harness-config.js";
+import { experimentsParallelBoardRouter } from "./routes/experiments-parallel-board.js";
 import { buildHarnessRouter } from "./routes/harness.js";
 import { openHarnessDb } from "./harness-store.js";
 import { worktreesRouter, workRouter } from "./routes/worktrees.js";
@@ -101,6 +102,16 @@ app.route("/api/harness/config", harnessConfigRouter);
 app.route("/api/worktrees", worktreesRouter);
 app.route("/api/work", workRouter);
 
+// Eva parallel-tracks experiment cockpit (Stage 0).
+// Env-gated: stable :3030 backend never sets EVA_PARALLEL_EXPERIMENT, so this
+// route + HTML are inert in prod. Only the experiment dev backend on :3031
+// activates them. Throwaway by design — see plan + route file header.
+const PARALLEL_EXPERIMENT_ON = process.env.EVA_PARALLEL_EXPERIMENT === "1";
+if (PARALLEL_EXPERIMENT_ON) {
+  app.route("/api/experiments/parallel-board", experimentsParallelBoardRouter);
+  console.log("[experiment] parallel-board route mounted at /api/experiments/parallel-board");
+}
+
 // Harness M1: open SQLite DB here (early), but mount CRUD+scheduler routes after wss init
 // (scheduler needs broadcastToAll which references wss.clients).
 // Exception: error/disabled 503 handlers are still registered here (before wss) — that is intentional,
@@ -147,6 +158,21 @@ function globalActiveRuns(): number {
 // Serve the frontend production build, if present.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIST = path.resolve(__dirname, "../../frontend/dist");
+
+// Experiment cockpit static HTML (Stage 0). Env-gated, single file from
+// packages/backend/public/. Registered BEFORE the SPA catchall middleware so
+// /experiments-parallel-board.html doesn't fall through to frontend dist.
+if (PARALLEL_EXPERIMENT_ON) {
+  const BOARD_HTML_PATH = path.resolve(__dirname, "../public/experiments-parallel-board.html");
+  app.get("/experiments-parallel-board.html", async (c) => {
+    if (!existsSync(BOARD_HTML_PATH)) {
+      return c.text("experimental board html missing", 500);
+    }
+    const html = readFileSync(BOARD_HTML_PATH, "utf-8");
+    return c.html(html);
+  });
+  console.log(`[experiment] parallel-board html served at /experiments-parallel-board.html`);
+}
 if (existsSync(FRONTEND_DIST)) {
   console.log(`[backend] serving frontend from ${FRONTEND_DIST}`);
 
