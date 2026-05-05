@@ -79,6 +79,7 @@ describe("harness-protocol — entity fixtures round-trip", () => {
     { file: "idea-capture.json", schema: IdeaCaptureDtoSchema, name: "IdeaCapture" },
     { file: "stage.json", schema: StageDtoSchema, name: "Stage" },
     { file: "stage-dispatched.json", schema: StageDtoSchema, name: "Stage (dispatched, H14 v1)" },
+    { file: "stage-failed.json", schema: StageDtoSchema, name: "Stage (failed with failedReason, M2 Loop 1)" },
     { file: "methodology.json", schema: MethodologyDtoSchema, name: "Methodology" },
     { file: "task.json", schema: TaskDtoSchema, name: "Task" },
     { file: "context-bundle.json", schema: ContextBundleDtoSchema, name: "ContextBundle" },
@@ -106,6 +107,50 @@ describe("harness-protocol — fixtures coverage", () => {
   it("every entity in HARNESS_DTO_SCHEMAS has at least one fixture", () => {
     const fixtureFiles = readdirSync(FIXTURES_DIR).filter((f) => f.endsWith(".json"));
     expect(fixtureFiles.length).toBeGreaterThanOrEqual(Object.keys(HARNESS_DTO_SCHEMAS).length);
+  });
+});
+
+describe("harness-protocol — old-client compat lock (M2 Loop 1)", () => {
+  // M2 Loop 1 cross M2 应用：HARNESS_PROTOCOL_VERSION 暂不 bump，依赖 Zod default
+  // non-strict + Swift Codable ignore-unknown-keys 实现 additive 字段向后兼容。
+  // 任何上游对 StageDtoSchema 加 .strict() 都会破坏这个不变量 — 本测试 lock。
+  //
+  // 场景模拟：v0.4.6 server 发送 v102 schema payload (含 failedReason / failedAt) →
+  // v0.4.5 老客户端用未升级的 Zod schema 解析 → 应该成功（额外字段被 strip）。
+  // 反向同理：老 server payload (无 failedReason) → 新客户端解析 → 也应成功（optional）。
+  it("StageDtoSchema accepts payload with extra unknown keys (default non-strict)", () => {
+    const v0_4_6_payload = {
+      id: "s-x", issueId: "i-x", kind: "implement", status: "failed",
+      weight: "heavy", gateRequired: true, assignedAgentProfile: "Coder",
+      methodologyId: "m-x",
+      inputArtifactIds: [], outputArtifactIds: [], reviewVerdictIds: [],
+      createdAt: 0,
+      failedReason: "orphan_after_restart",
+      failedAt: 1000,
+      // 模拟未来某 Loop 加的新字段 — 老 schema 应忽略，不报错
+      futureFieldZ: "ignored-by-old-client",
+    };
+    expect(() => StageDtoSchema.parse(v0_4_6_payload)).not.toThrow();
+    const parsed = StageDtoSchema.parse(v0_4_6_payload);
+    expect(parsed.failedReason).toBe("orphan_after_restart");
+    expect(parsed.failedAt).toBe(1000);
+    // futureFieldZ 应被 strip（default non-strict 行为）
+    expect("futureFieldZ" in parsed).toBe(false);
+  });
+
+  it("StageDtoSchema accepts payload without failedReason / failedAt (old-server compat)", () => {
+    const v0_4_5_payload = {
+      id: "s-y", issueId: "i-y", kind: "spec", status: "approved",
+      weight: "light", gateRequired: false, assignedAgentProfile: "PM",
+      methodologyId: "m-y",
+      inputArtifactIds: [], outputArtifactIds: [], reviewVerdictIds: [],
+      createdAt: 0,
+      // failedReason / failedAt 缺失 — Loop 1 字段都是 optional
+    };
+    expect(() => StageDtoSchema.parse(v0_4_5_payload)).not.toThrow();
+    const parsed = StageDtoSchema.parse(v0_4_5_payload);
+    expect(parsed.failedReason).toBeUndefined();
+    expect(parsed.failedAt).toBeUndefined();
   });
 });
 
