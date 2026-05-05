@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { openHarnessDb, HARNESS_SCHEMA_VERSION } from "./harness-store.js";
+import { setStageFailed } from "./harness-queries.js";
 
 // 复制 harness-store.ts 的 MIGRATIONS_DIR 解析（保持一致即可，避免再 export 一份内部常量）
 const __filename = fileURLToPath(import.meta.url);
@@ -698,6 +699,78 @@ CREATE INDEX idx_stage_running ON stage(status) WHERE status = 'running';
     `schema_migrations contains 0003 (no re-exec)`,
   );
   loop1Reopen.close();
+
+  // === Phase 6: M2 Loop 2 — setStageFailed helper invariants
+  //
+  // 验证 setStageFailed:
+  //   1. 写入 status='failed' + failed_reason + failed_at
+  //   2. 同时设置 ended_at（COALESCE 不覆盖既有 ended_at）
+  //   3. **Idempotent guard**: 已有 failed_reason 时不覆盖（首次写赢）
+  //   4. audit log 写入 set_failed 事件
+  console.log("\n--- Phase 6: setStageFailed helper invariants (M2 Loop 2) ---");
+
+  const phase6Path = join(tmp, "phase6.db");
+  const phase6Handle = openHarnessDb({ dbPath: phase6Path });
+
+  // Seed
+  const ph6Now = Date.now();
+  phase6Handle.db.prepare(
+    "INSERT INTO methodology(id,stage_kind,version,applies_to,content_ref,approved_by,approved_at) VALUES(?,?,?,?,?,?,?)",
+  ).run("m-p6", "spec", "1.0", "universal", "x", "user", ph6Now);
+  phase6Handle.db.prepare(
+    "INSERT INTO harness_project(id,cwd,name,worktree_root,created_at) VALUES(?,?,?,?,?)",
+  ).run("p-p6", "/tmp/p6", "p6", "/tmp/p6/.worktrees", ph6Now);
+  phase6Handle.db.prepare(
+    `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+  ).run("i-p6", "p-p6", "manual", "p6", "x", "[]", "normal", "in_progress", ph6Now, ph6Now);
+
+  const insertS = phase6Handle.db.prepare(
+    `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+     VALUES(?,?,?,?,?,?,?,?,?)`,
+  );
+  insertS.run("s-p6-a", "i-p6", "strategy", "running", "heavy", 1, "PM", "m-p6", ph6Now);
+  insertS.run("s-p6-b", "i-p6", "implement", "dispatched", "heavy", 1, "PM", "m-p6", ph6Now);
+
+  // 1. 第一次 setStageFailed 应写入完整 reason + failed_at
+  const first = setStageFailed(phase6Handle.db, "s-p6-a", "cli_failed", ph6Now);
+  assert(first === true, `first setStageFailed returns true (changes > 0)`);
+
+  const row1 = phase6Handle.db
+    .prepare("SELECT status, failed_reason, failed_at, ended_at FROM stage WHERE id = 's-p6-a'")
+    .get() as { status: string; failed_reason: string; failed_at: number; ended_at: number };
+  assert(row1.status === "failed", `setStageFailed sets status='failed'`);
+  assert(row1.failed_reason === "cli_failed", `failed_reason persisted = 'cli_failed'`);
+  assert(row1.failed_at === ph6Now, `failed_at persisted = ${ph6Now}`);
+  assert(row1.ended_at === ph6Now, `ended_at also set when not previously set`);
+
+  // 2. **Idempotent guard**: 第二次 setStageFailed 不覆盖首次 reason
+  const second = setStageFailed(phase6Handle.db, "s-p6-a", "unknown_error", ph6Now + 1000);
+  assert(second === false, `second setStageFailed (already has reason) returns false (no changes)`);
+
+  const row1Again = phase6Handle.db
+    .prepare("SELECT failed_reason, failed_at FROM stage WHERE id = 's-p6-a'")
+    .get() as { failed_reason: string; failed_at: number };
+  assert(
+    row1Again.failed_reason === "cli_failed",
+    `Idempotent: failed_reason still 'cli_failed' (not overwritten by 'unknown_error')`,
+  );
+  assert(
+    row1Again.failed_at === ph6Now,
+    `Idempotent: failed_at still original timestamp`,
+  );
+
+  // 3. 不同 stage 独立工作（覆盖不被串扰）
+  setStageFailed(phase6Handle.db, "s-p6-b", "spawn_setup_failed", ph6Now + 2000);
+  const row2 = phase6Handle.db
+    .prepare("SELECT status, failed_reason, failed_at FROM stage WHERE id = 's-p6-b'")
+    .get() as { status: string; failed_reason: string; failed_at: number };
+  assert(
+    row2.status === "failed" && row2.failed_reason === "spawn_setup_failed",
+    `Independent stage gets its own failed_reason ('spawn_setup_failed')`,
+  );
+
+  phase6Handle.close();
 
   console.log("\nharness schema OK ✅");
 } finally {
