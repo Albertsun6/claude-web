@@ -51,7 +51,80 @@ export class EvaScheduler {
   constructor(
     private db: Database.Database,
     private broadcast: (msg: unknown) => void,
-  ) {}
+  ) {
+    this.cleanupOrphanStages();
+  }
+
+  /**
+   * F (M2 螺旋圈): backend 启动时清理 orphan active stages。
+   *
+   * 场景：scheduler.spawnAgent 是 fire-and-forget（tick 立即返回，spawn 后台跑）。
+   * backend 在 spawn 中途崩溃（OOM / SIGKILL / launchd kickstart）→ stage 留在
+   * pending / dispatched / running，但已无进程会推进它。下次 tick 时这些行被
+   * STAGE_ACTIVE_STATUSES 检查阻塞 → 死锁。
+   *
+   * 修：实例化 EvaScheduler（每次 backend 启动一次）时扫描 active stages，
+   * 标 failed + 广播 stage_changed。awaiting_review 不动（合法人审暂停，不是 orphan）。
+   *
+   * H14 dispatched 状态特别相关：dispatched 是 ContextBundle 写盘 / createTask 阶段，
+   * spawn 真起来前如果 backend 崩了就会留下 dispatched orphan。
+   *
+   * 原子性（cross M1 应用）：所有 DB 更新包在 db.transaction()，整体 all-or-none。
+   * broadcast 在 commit 后跑，单条失败 try/catch 吞掉（broadcast 是 UX 通知，不影响
+   * DB 已修复的真相；客户端重连时应靠轮询 stage 列表 reconcile —— 见 cross M5 列入
+   * M2 master plan）。
+   *
+   * Boot ordering: 本类在 routes/harness.ts createHarnessRoutes 内实例化，routes 注册
+   * 完成才接受 HTTP tick；构造函数同步跑完 cleanup 才返回，单 backend 单 scheduler 假设
+   * 下不会发生 cleanup 中途有外部 tick 调用 → 不需要额外锁。多实例场景见 M2 master plan。
+   *
+   * 注：本方法 mutates DB —— 不是 pure construction。每次 new EvaScheduler 都跑一次。
+   * cross m1 列入 M2 master plan：以后改成 explicit init() 由 boot 序列调用。
+   */
+  private cleanupOrphanStages(): void {
+    const orphans = this.db
+      .prepare(
+        `SELECT id, kind, status FROM stage
+         WHERE status IN ('pending', 'dispatched', 'running')`,
+      )
+      .all() as Array<{ id: string; kind: string; status: string }>;
+
+    if (orphans.length === 0) return;
+
+    // 1. DB 更新走 transaction（all-or-none）—— cross M1 应用
+    const applyAll = this.db.transaction(() => {
+      for (const stage of orphans) {
+        setStageStatus(this.db, stage.id, "failed");
+      }
+    });
+    applyAll();
+
+    // 2. 广播在 commit 后；单条失败吞掉，不影响其他事件 + 不回滚 DB
+    for (const stage of orphans) {
+      try {
+        this.broadcast({
+          type: "harness_event",
+          kind: "stage_changed",
+          stageId: stage.id,
+          status: "failed",
+        });
+      } catch (e) {
+        console.warn(
+          `[EvaScheduler] cleanup broadcast failed for ${stage.id}: ${e}`,
+        );
+      }
+    }
+
+    // 3. 日志在最后（transaction 已 commit + broadcast 已尝试 → 状态稳定再 log）
+    for (const stage of orphans) {
+      console.warn(
+        `[EvaScheduler] orphan stage ${stage.id} (${stage.kind}, was ${stage.status}) → failed (backend restart cleanup)`,
+      );
+    }
+    console.log(
+      `[EvaScheduler] cleaned up ${orphans.length} orphan active stage(s) on init`,
+    );
+  }
 
   // POST /api/harness/scheduler/tick — 手动触发一次推进
   async tick(projectId?: string): Promise<SchedulerTickResult> {
