@@ -7,7 +7,7 @@
 // Web /harness board to demonstrate the 5-state pipeline end-to-end.
 
 import type Database from "better-sqlite3";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DATA_DIR } from "./data-dir.js";
@@ -380,6 +380,58 @@ export interface ArtifactRow {
   metadata_json: string;
   superseded_by: string | null;
   created_at: number;
+}
+
+/** M2 v1 (3.2-A'): create artifact row with hash + size_bytes computed.
+ *
+ * Inline storage only in v1 — content_text 必填，content_path 不支持（file 存储留 v2，
+ * 因为需要决定 ~/.claude-web/artifacts/<hash>.<ext> 的 file 写入路径策略）。
+ *
+ * Schema 约束（migration 0001_initial.sql）：
+ * - kind ∈ enum (methodology / spec / design_doc / architecture_doc / adr / patch / pr_url
+ *   / test_report / coverage_report / review_notes / review_verdict / decision_note
+ *   / metric_snapshot / retrospective / changelog_entry)。enum 不在内的 kind 会被 SQLite CHECK 拒
+ * - storage='inline' AND content_text IS NOT NULL AND content_path IS NULL（CHECK 约束已 enforce）
+ * - hash NOT NULL — sha256 of content_text
+ * - size_bytes NOT NULL — Buffer.byteLength of content_text in utf-8
+ */
+export interface CreateArtifactInput {
+  stageId: string;
+  kind: string;
+  ref?: string | null;
+  contentText: string;
+  metadata?: Record<string, unknown>;
+}
+
+export function createArtifact(db: Database.Database, input: CreateArtifactInput): ArtifactRow {
+  if (typeof input.contentText !== "string") {
+    throw new Error("createArtifact requires contentText (inline storage only in v1)");
+  }
+  const id = randomUUID();
+  const now = Date.now();
+  const hash = createHash("sha256").update(input.contentText, "utf-8").digest("hex");
+  const sizeBytes = Buffer.byteLength(input.contentText, "utf-8");
+
+  const row: ArtifactRow = {
+    id,
+    stage_id: input.stageId,
+    kind: input.kind,
+    ref: input.ref ?? null,
+    hash,
+    storage: "inline",
+    content_text: input.contentText,
+    content_path: null,
+    size_bytes: sizeBytes,
+    metadata_json: JSON.stringify(input.metadata ?? {}),
+    superseded_by: null,
+    created_at: now,
+  };
+  db.prepare(`
+    INSERT INTO artifact(id,stage_id,kind,ref,hash,storage,content_text,content_path,size_bytes,metadata_json,superseded_by,created_at)
+    VALUES(@id,@stage_id,@kind,@ref,@hash,@storage,@content_text,@content_path,@size_bytes,@metadata_json,@superseded_by,@created_at)
+  `).run(row);
+  audit(db, "create", "artifact", id, { stageId: input.stageId, kind: input.kind, ref: input.ref ?? null, sizeBytes });
+  return row;
 }
 
 export function listArtifactsForIssue(db: Database.Database, issueId: string): ArtifactRow[] {
