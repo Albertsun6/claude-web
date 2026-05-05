@@ -37,6 +37,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, "migrations");
 
 const TARGET_VERSION_RE = /--\s*TARGET_VERSION\s*=\s*(\d+)/;
+// v0.4.5 hot-fix：MIGRATION_MODE 控制 runner 是否在 transaction 外关 FK。
+// 默认 'default' = 包在 db.transaction() 里跑，FK 始终 ON（SQLite 推荐节奏）。
+// 'schema-rebuild' = 必须 rebuild 表（如改 CHECK enum），父表被子表 FK 引用时 DROP TABLE
+// 会被 schema-level FK 检查阻塞——`PRAGMA defer_foreign_keys=ON` 只推迟 row-level 检查不
+// 救 DROP TABLE。SQLite 12-step ALTER TABLE recipe 要求在 transaction 外 PRAGMA foreign_keys=OFF；
+// 本 runner 由此包装。0002 v0.4.4 prod 失败的根因即此。
+const MIGRATION_MODE_RE = /--\s*MIGRATION_MODE\s*=\s*([\w-]+)/;
+type MigrationMode = "default" | "schema-rebuild";
 
 export interface HarnessDb {
   db: Database.Database;
@@ -49,12 +57,25 @@ export interface HarnessDb {
  *
  * Migration filenames: `NNNN_<desc>.sql`. Each file MUST contain
  * `-- TARGET_VERSION = <int>` (e.g. `100`) somewhere in its first 20 lines.
+ * 可选 `-- MIGRATION_MODE = <default|schema-rebuild>`（默认 default）。
  *
- * Apply rules:
+ * Apply rules（mode=default）：
  * - schema_migrations 表记录已应用 file
- * - 每个 migration 在 db.transaction() 里执行
+ * - 每个 migration 在 db.transaction() 里执行（FK ON）
  * - 事务成功后 INSERT INTO schema_migrations + PRAGMA user_version = <target>
  * - 失败 → 整个事务回滚，user_version 不动，schema_migrations 不写
+ *
+ * Apply rules（mode=schema-rebuild，v0.4.5 引入）：
+ * - PRAGMA foreign_keys = OFF（在 transaction 外，SQLite 要求）
+ * - 跑 transaction（内）— 顺序：
+ *     1) db.exec(sql) — 实际 rebuild
+ *     2) PRAGMA foreign_key_check — 验证 FK 完整性，违反则 throw（transaction 回滚 →
+ *        schema_migrations / user_version 都不写 → 下次启动重试，无 broken 落地）
+ *     3) INSERT INTO schema_migrations
+ *     4) PRAGMA user_version
+ * - PRAGMA foreign_keys = ON（finally 保证恢复，即便 transaction 抛错）
+ * 适用：rebuild 父表来改 CHECK enum / 字段类型等，父表被子表 FK 引用时 schema-level
+ * 检查会阻塞 DROP TABLE（v0.4.4 prod 失败的根因）。
  */
 export function openHarnessDb(opts: { dbPath?: string } = {}): HarnessDb {
   const path = opts.dbPath ?? DB_PATH;
@@ -100,16 +121,48 @@ function runPendingMigrations(db: Database.Database): void {
     if (applied.has(file)) continue;
 
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    const m = TARGET_VERSION_RE.exec(sql.split("\n").slice(0, 20).join("\n"));
-    if (!m) {
+    const header = sql.split("\n").slice(0, 20).join("\n");
+
+    const tv = TARGET_VERSION_RE.exec(header);
+    if (!tv) {
       throw new Error(
         `migration ${file} missing required '-- TARGET_VERSION = <int>' header in first 20 lines`,
       );
     }
-    const target = parseInt(m[1], 10);
+    const target = parseInt(tv[1], 10);
 
-    const apply = db.transaction(() => {
+    const modeMatch = MIGRATION_MODE_RE.exec(header);
+    const mode: MigrationMode =
+      modeMatch == null
+        ? "default"
+        : modeMatch[1] === "schema-rebuild"
+          ? "schema-rebuild"
+          : (() => {
+              throw new Error(`migration ${file} unknown MIGRATION_MODE='${modeMatch[1]}'`);
+            })();
+
+    const applyTx = db.transaction(() => {
       db.exec(sql);
+
+      // schema-rebuild 模式：FK 完整性检查必须在 INSERT schema_migrations / 推进 user_version
+      // 之前跑（cross M1 修），否则 violations throw 时 transaction 已经 commit，下次启动
+      // 看到 schema_migrations 里有该 file 就跳过 → broken DB 永久落地。
+      // foreign_key_check 不依赖 foreign_keys 状态（SQLite 文档），所以 FK=OFF 期间依然
+      // 能正确扫描 child rows 的悬空引用。
+      if (mode === "schema-rebuild") {
+        const violations = db.pragma("foreign_key_check") as unknown;
+        if (!Array.isArray(violations)) {
+          throw new Error(
+            `[harness-store] migration ${file} foreign_key_check returned non-array: ${JSON.stringify(violations)}`,
+          );
+        }
+        if (violations.length > 0) {
+          throw new Error(
+            `[harness-store] migration ${file} schema-rebuild left FK violations: ${JSON.stringify(violations)}`,
+          );
+        }
+      }
+
       db.prepare(
         "INSERT INTO schema_migrations(file, target_ver, applied_at) VALUES(?,?,?)",
       ).run(file, target, Date.now());
@@ -117,7 +170,24 @@ function runPendingMigrations(db: Database.Database): void {
       db.pragma(`user_version = ${target}`);
     });
 
-    apply();
-    console.log(`[harness-store] applied migration ${file} → user_version=${target}`);
+    if (mode === "schema-rebuild") {
+      // SQLite 要求 PRAGMA foreign_keys 必须在 transaction 外切；transaction 内调
+      // 不报错但无效。包装顺序：
+      //   1) 关 FK（外）
+      //   2) 跑 transaction（内）—— rebuild + foreign_key_check + INSERT schema_migrations + PRAGMA user_version
+      //      check 失败 throw → transaction 回滚 → schema_migrations / user_version 都不动 → 下次启动重试
+      //   3) 开 FK（外，finally 保护，异常路径也恢复 ON）
+      db.pragma("foreign_keys = OFF");
+      try {
+        applyTx();
+      } finally {
+        db.pragma("foreign_keys = ON");
+      }
+    } else {
+      applyTx();
+    }
+    console.log(
+      `[harness-store] applied migration ${file} → user_version=${target} (mode=${mode})`,
+    );
   }
 }
