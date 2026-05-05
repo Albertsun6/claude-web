@@ -13,6 +13,7 @@ import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { type ModelHint, modelIdForHint } from "@claude-web/shared";
 import { runSession } from "./cli-runner.js";
 import { getHarnessConfig } from "./harness-config.js";
 import { buildContextBundle } from "./context-manager.js";
@@ -193,9 +194,9 @@ export class EvaScheduler {
     const config = getHarnessConfig();
     const profile = config.agentProfiles.find((p) => p.id === stage.assigned_agent_profile);
 
-    const modelHint = profile?.modelHint ?? "sonnet";
-    const model: "opus" | "sonnet" | "haiku" =
-      modelHint === "opus" ? "opus" : modelHint === "haiku" ? "haiku" : "sonnet";
+    const rawHint = profile?.modelHint ?? "sonnet";
+    const model: ModelHint =
+      rawHint === "opus" ? "opus" : rawHint === "haiku" ? "haiku" : "sonnet";
 
     // Cross M1 修：context_bundle.task_id 必须指向真 task 行（schema 注释明文 "外键
     // 回指 Task"），过去 M1 #3.1 用 synthetic `<issueId>/<stageId>` 留下 orphan 行。
@@ -223,12 +224,9 @@ export class EvaScheduler {
       contextBundleId: bundle.bundleId,
     });
 
-    // 注：opus 长期会出新版本（4.5 → 4.6 → 4.7 …）；这里 hardcode 当前最新 modelId 是
-    // 螺旋层的"profile.modelHint → CLI --model 字符串"映射，不是骨架。其他地方
-    // （frontend ConfigPanel / fallback-config.json / fixtures）已统一到 4-7，scheduler 在
-    // v0.4.4 时落后两代留下 drift；本次螺旋圈消除。
-    const modelClaudeId =
-      model === "opus" ? "claude-opus-4-7" : model === "haiku" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+    // modelHint → CLI --model 字符串映射的 single source 在 [model-registry.ts]
+    // (../../shared/src/model-registry.ts)。下次模型升级只改 registry + 同步 fallback-config.json。
+    const modelClaudeId = modelIdForHint(model);
 
     // H14 v1: 真正 spawn CLI 之前再翻 dispatched → running
     // 在此之前 bundle 写盘 / createTask INSERT 失败 → stage 留 dispatched，外层 catch 标 failed。
