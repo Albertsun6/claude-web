@@ -32,6 +32,29 @@ import { z } from "zod";
 export const EvaWorktreeStatusSchema = z.enum(["active", "done", "released"]);
 export type EvaWorktreeStatus = z.infer<typeof EvaWorktreeStatusSchema>;
 
+/** Hooks (H13 v1) — 4 个生命周期 hook，灵感来自 [Worktrunk](https://worktrunk.dev/)
+ * 7 hooks 模板。Eva v1 收窄到 4 个最常用，其他 3 个（post-switch / pre-commit /
+ * pre-merge）暂不开 schema 位（需要时再 bump version）。
+ *
+ * v1 **手动触发**：`pnpm eva:hook <hookName> <worktreeName>`。无 git wrapper，
+ * 无 file watcher。M2 ResourceLock 才上自动化。
+ *
+ * Hook 命令在对应 worktree 路径下用 shell 执行（`bash -c`），blocking 等结束
+ * 退码即终态。`pre-start` / `post-start` / `post-merge` / `pre-remove` 都 blocking
+ * — v1 不区分 background（Worktrunk 的 post-start background 留 v2）。 */
+const HookCommandSchema = z.string().min(1).max(2000);
+/** **strict** — 拒绝未知 hook 名（如 v2 加 post-switch 时必须 bump version + migration）。 */
+export const EvaHooksSchema = z
+  .object({
+    "pre-start": HookCommandSchema.optional(),
+    "post-start": HookCommandSchema.optional(),
+    "post-merge": HookCommandSchema.optional(),
+    "pre-remove": HookCommandSchema.optional(),
+  })
+  .strict()
+  .optional();
+export type EvaHooks = z.infer<typeof EvaHooksSchema>;
+
 /** `owns` 字段格式约束（cross M3 修：避免 free-form 漂移到 ResourceLock 时）。
  * 允许：
  * - 相对路径：`packages/backend/src/foo.ts`
@@ -72,6 +95,8 @@ export const EvaWorktreeEntrySchema = z.object({
   since: z.string().datetime({ offset: true }).optional(),
   /** 自由文本描述 / PR ref / commit SHA / merge 时间等。 */
   note: z.string().optional(),
+  /** H13 v1 lifecycle hooks（4 个最常用，可选）。 */
+  hooks: EvaHooksSchema,
 });
 export type EvaWorktreeEntry = z.infer<typeof EvaWorktreeEntrySchema>;
 

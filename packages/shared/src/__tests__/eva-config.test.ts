@@ -221,6 +221,89 @@ describe("eva-config schema", () => {
     });
   });
 
+  it("accepts entry with hooks (H13 v1)", () => {
+    const cfg = parseEvaConfig({
+      version: 1,
+      worktrees: [
+        {
+          name: "test-with-hooks",
+          branch: "feat/test",
+          path: "~/Desktop/test",
+          status: "active",
+          hooks: {
+            "pre-start": "pnpm install",
+            "post-start": "pnpm dev:backend",
+            "post-merge": "echo merged",
+            "pre-remove": "pkill -f test-backend",
+          },
+        },
+      ],
+    });
+    expect(cfg.worktrees[0].hooks?.["pre-start"]).toBe("pnpm install");
+    expect(cfg.worktrees[0].hooks?.["pre-remove"]).toBe("pkill -f test-backend");
+  });
+
+  it("hooks all optional — entry without hooks parses ok", () => {
+    const cfg = parseEvaConfig({
+      version: 1,
+      worktrees: [
+        { name: "no-hooks", branch: "feat/no", path: "~/x", status: "active" },
+      ],
+    });
+    expect(cfg.worktrees[0].hooks).toBeUndefined();
+  });
+
+  it("partial hooks (only pre-start) parses ok", () => {
+    const cfg = parseEvaConfig({
+      version: 1,
+      worktrees: [
+        {
+          name: "partial",
+          branch: "feat/p",
+          path: "~/p",
+          status: "active",
+          hooks: { "pre-start": "echo install" },
+        },
+      ],
+    });
+    expect(cfg.worktrees[0].hooks?.["pre-start"]).toBe("echo install");
+    expect(cfg.worktrees[0].hooks?.["post-start"]).toBeUndefined();
+  });
+
+  it("rejects unknown hook key", () => {
+    expect(() =>
+      parseEvaConfig({
+        version: 1,
+        worktrees: [
+          {
+            name: "x",
+            branch: "feat/x",
+            path: "~/x",
+            status: "active",
+            hooks: { "post-switch": "echo no" }, // not in v1
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it("rejects empty hook command", () => {
+    expect(() =>
+      parseEvaConfig({
+        version: 1,
+        worktrees: [
+          {
+            name: "x",
+            branch: "feat/x",
+            path: "~/x",
+            status: "active",
+            hooks: { "pre-start": "" },
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
   it("summarizeEvaConfig counts by status", () => {
     const cfg = parseEvaConfig({
       version: 1,
