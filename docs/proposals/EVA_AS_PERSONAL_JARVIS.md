@@ -1,12 +1,12 @@
-# Eva 演化为私人贾维斯 — 长期愿景 proposal v0.2
+# Eva 演化为私人贾维斯 — 长期愿景 proposal v0.3 (round 2 修复后 final)
 
-> **Status**: ✅ **用户拍板 + author 仲裁收敛** · **Date**: 2026-05-06 · **Author**: Claude Sonnet 4.6
+> **Status**: ✅ **用户拍板 + author 仲裁 + round 2 cross-check 修复后 final** · **Date**: 2026-05-06 · **Author**: Claude Sonnet 4.6
 > **Review depth**: Phase 1+2+3 完整三相评审完成（[arch verdict](../reviews/eva-as-personal-jarvis-arch-2026-05-06-0042.md) + [cross verdict](../reviews/eva-as-personal-jarvis-cross-2026-05-06-0042.md) + [react-arch](../reviews/eva-as-personal-jarvis-react-arch-2026-05-06-0050.md) + [react-cross](../reviews/eva-as-personal-jarvis-react-cross-2026-05-06-0050.md) + [arbitration log](../reviews/eva-as-personal-jarvis-arbitration-2026-05-06.md)）
 > **不可逆度**: **高** — 真"高"。M5-M8 顺序重排（v0.1 v0.2 不同）+ 加 K-jarvis-5/6/7 三条新不变量 + 新加 5 条 FJ7-FJ11 失败模式 + Stage 模型分层（jarvis Subject 走 Memory + Decision 不走 Stage 流水线）+ Memory kind 走 registry 中间路径 + 加密走 J3-B Node crypto。这些决策一旦合入 docs / M-1 数据模型扩展点预留就长期生效，错过预留窗口 M5 启动时补 schema 的代价 = 反向迁移 + 老数据 backfill + iOS 协议 break，远高于现在 author + reviewer 多花的时间
 > **范围边界**：本 proposal 是**方向性 / 长期路线图**，不是即将做的 spec。具体 schema 改动每条到 M5+ 启动时再走 contract mode + ADR-lite。本 proposal 只锁定**扩展点应当预留**这个原则
 > **配套 proposal**：[EVA_MULTI_PROJECT_USAGE.md v0.3 final](EVA_MULTI_PROJECT_USAGE.md)（短期相变，2026-05-05 用户拍板收敛）。本 proposal 是其延伸：短期是"用 Eva 做工程项目"的相变，长期是"Eva 不只做软件工程"的相变
 > **v0.1 → v0.2 收敛信号**：5 BLOCKER 双向 + 1 cross 自我升级 + 1 cross 自我新加 = 7 BLOCKER 全部仲裁吸收 + 13 MAJOR + 5 风险遗漏 + 6 OQ + 3 MINOR + 4 new-finding 全分类 + 3 用户决定（U-J1/U-J2/U-J3 全 = author 推荐）。**0 双向 disagree 硬冲突**。详见 [arbitration log](../reviews/eva-as-personal-jarvis-arbitration-2026-05-06.md)
-> **建议 round 2 phase 1 局部评审**（按 SKILL.md L268）：v0.2 引入 M7 拆 M7a/M7b + memory_kind_registry + Stage 分层（U-J3-C）三处新设计，需 reviewer 二次验证未引入新 BLOCKER 维度
+> **Round 2 lightweight cross-check 完成**（[round 2 verdict](../reviews/eva-as-personal-jarvis-round2-cross-2026-05-06-0100.md)）：抓到 2 BLOCKER (F1+F3 同根) + 3 DRIFT (F2/F4/F5)。v0.2 → v0.3 修复完成：(a) memory + decision schema 扩展前置到 M5 末（M7a 可直接用）；(b) memory_kind_registry 加 `tier` 字段消歧；(c) decision schema 扩展（stage_id nullable + project_id NOT NULL + source_ref_*）；(d) K-jarvis-5/6 落地契约补全；(e) K-jarvis-7 不暗示现有 backend 已支持。0 finding 需要 escalate 完整 round 2 → **v0.3 = final**
 
 ---
 
@@ -163,10 +163,11 @@
 | `harness_project.domain_profile` | ⏳ v0.3 docs 已决议 (5 选)，代码未落 | M5 0006 schema-rebuild 扩到 ≥8 选含 `knowledge / health / finance / routine` 等非软件 domain（K12 fallback 保护老 iOS）| 中 |
 | `methodology.applies_to` | ⏳ 同上 | 同上 0006 同步扩展（与 domain_profile 对齐）| 中 |
 | **Stage CHECK enum 10 值固定**（v0.2 新加，**U-J3-C 用户决定**）| ✅ 当前固定 10 值（strategy → observe）| **不扩展**——Stage 模型只服务 software / knowledge domain；routine/health/finance 走 Memory + Decision 直驱不走 Stage 流水线（详见 §5 M7a）| 低（不动 Stage schema）|
-| `Memory` 实体表（v0.2 走 U-J1-B registry 中间路径）| ❌ 不存在 | M6 新加 `memory(id, kind, project_id, payload_json, created_at, expires_at?, importance, provenance, sensitivity_level)` + FTS5 索引 + `memory_kind_registry(kind, payload_schema_ref, owner_domain, deprecated_at)` + memory.kind 外键 registry | 中（新表 + registry + quarantine） |
-| `memory_kind_registry`（v0.2 新加，U-J1-B）| ❌ 不存在 | M6 新加；核心 kind 走 CHECK enum，扩展 kind 走 registry | 中 |
-| `memory_quarantine` 隔离区（v0.2 新加，FJ7）| ❌ 不存在 | M6 fact-extractor 输出经 application gate 校验 against registry；不在 registry 内的 kind 进 quarantine 表先隔离，等 ritual review 决定升级 | 低 |
-| `Routine` 实体（提醒 / 日程 / 周期任务）| ❌ 不存在 | **M7a 走 Memory + Decision 直驱**（U-J3-C），不独立建表；routine 配置存 Memory（kind='config.routine.cron'）+ trigger 触发 Decision row | 低（无新表）|
+| `Memory` 实体表（v0.3 round 2 修复：前置到 M5 末）| ❌ 不存在 | **M5 末**新加 `memory(id, kind TEXT NOT NULL REFERENCES memory_kind_registry(kind), project_id, payload_json, created_at, expires_at?, importance, provenance, sensitivity_level)` + 基本 INSERT/SELECT 能力（**不含 fact-extractor 不含 FTS5**，留 M6）| 中 |
+| `memory_kind_registry`（v0.3 round 2 修复：加 tier + 前置到 M5 末）| ❌ 不存在 | **M5 末**新加 `memory_kind_registry(kind PRIMARY KEY, tier TEXT NOT NULL CHECK (tier IN ('core','extension')), payload_schema_ref, owner_domain, deprecated_at)`；M5 末 seed 第一批 core kind（≤10 个，含 `config.routine.cron / decision.routine.handled / fact.user-preference` 等）；扩展 kind 走 INSERT row（不需 migration）| 中 |
+| `memory_quarantine` 隔离区（v0.2 新加，FJ7；v0.3 round 2 留 M6）| ❌ 不存在 | **M6** fact-extractor 输出经 application gate 校验 against registry；不在 registry 内的 kind 进 quarantine 表先隔离，等 ritual review 决定升级 | 低 |
+| **`decision` schema 扩展**（v0.3 round 2 新加，回应 round 2 F4 DRIFT）| ✅ 当前 `decision.stage_id NOT NULL REFERENCES stage(id)` | **M5 末**改 schema：`stage_id` 改 nullable + 加 `project_id TEXT NOT NULL REFERENCES harness_project(id)` + `subject_domain TEXT` + `source_ref_type TEXT` (枚举: 'stage' \| 'memory' \| 'routine_trigger' \| 'observer_emit') + `source_ref_id TEXT` + `severity TEXT NOT NULL CHECK (severity IN ('trivial','minor','major'))` (回应 K-jarvis-6 落地契约 F5)；现有 stage-bound decision row 走 source_ref_type='stage' 兼容老路径 | 中（schema-rebuild 改 NOT NULL → nullable）|
+| `Routine` 实体（提醒 / 日程 / 周期任务）| ❌ 不存在 | **M7a 走 Memory + Decision 直驱**（U-J3-C），不独立建表；routine 配置存 `memory(kind='config.routine.cron')` + trigger 触发 `decision(source_ref_type='routine_trigger', source_ref_id=memory.id)` | 低（无新表）|
 | **加密 application-level（U-J2-B）** | ❌ 不存在 | M5 health / finance domain 字段经 Node `crypto` AES-256-GCM 加密 + Argon2 密钥派生（passphrase）+ payload_json 字段加密存储 | 低（不引入新依赖）|
 | 主动性预算 server-driven config | ❌ 不存在 | M8 加 `proactivity_budget: { weekly_push_limit: 7, kill_switch: ... }` | 低 |
 | 跨设备备份 cron + read-only degraded mode | ❌ 不存在 | M5 关键 domain 必须 rsync 到第二台设备（iPad + Tailscale）+ K-jarvis-7 iPad read-only 副本 | 低 |
@@ -222,6 +223,10 @@ Khoj（[GitHub khoj-ai/khoj](https://github.com/khoj-ai/khoj)，Apache 2.0，27K
 
 - 0006 schema-rebuild migration v300：`harness_project.domain_profile` enum 扩到 ≥ 8 选（含 `knowledge / health / finance / routine` 等非软件 domain）
 - 0006 同步：`methodology.applies_to` enum 同样扩展（与 domain_profile 对齐 + 加 `'memory-driven'` 标识 routine/health/finance 类型，与 software/knowledge 类型并存）
+- **0007 additive migration v301（v0.3 round 2 新加，前置 memory + decision schema）**：
+  - 新加 `memory_kind_registry(kind PRIMARY KEY, tier TEXT NOT NULL CHECK (tier IN ('core','extension')), payload_schema_ref, owner_domain, deprecated_at)` + seed ≤10 条 core kind（`config.routine.cron / decision.routine.handled / fact.user-preference / fact.health.baseline / fact.health.daily / fact.routine.cron` 等）
+  - 新加 `memory(id, kind TEXT NOT NULL REFERENCES memory_kind_registry(kind), project_id, payload_json, created_at, expires_at?, importance, provenance, sensitivity_level)` 基本表（**不含 FTS5 不含 fact-extractor**，留 M6）
+  - schema-rebuild `decision` 表：`stage_id` 改 nullable + 加 `project_id TEXT NOT NULL REFERENCES harness_project(id)` + `subject_domain` + `source_ref_type / source_ref_id` + `severity TEXT NOT NULL CHECK (severity IN ('trivial','minor','major'))`；现有 stage-bound decision row backfill `source_ref_type='stage' / source_ref_id=stage_id` 兼容
 - **Stage 模型分层**（U-J3-C）：
   - software-* / knowledge domain 走 Stage 流水线（现有 10 stage CHECK enum 不动）
   - routine / health / finance domain 走 Memory + Decision 直驱（不创建 Issue / Stage row）
@@ -229,19 +234,21 @@ Khoj（[GitHub khoj-ai/khoj](https://github.com/khoj-ai/khoj)，Apache 2.0，27K
 - K12 跨端 enum graceful fallback 已就位（v0.3 K12），新 enum 值老 iOS 不破
 
 **不做**：
-- 不引入 generic Memory 表（M6 范围）
+- 不引入 fact-extractor / memory_fts / memory_quarantine（M6 范围）
 - 不引入主动观察层（M8 范围）
 - 不接 IoT / 邮件 / 日历集成（M7a/M7b 范围）
 
 **退出条件**（all of）：
-- 0006 migration 跑通 + harness-store 测试全绿
-- 至少 1 个 `knowledge` domain Subject 实测全链路跑通：从想法 → spec（按 knowledge 模板）→ 多 stage 推进 → retrospective（**不依赖 Memory 表**，回应 BLK-3 + BLK-7）
+- 0006 + 0007 migration 跑通 + harness-store 测试全绿
+- 至少 1 个 `knowledge` domain Subject 实测全链路跑通：从想法 → spec（按 knowledge 模板）→ 多 stage 推进 → retrospective（**不依赖 fact-extractor**，回应 BLK-3 + BLK-7）
+- memory 表 + memory_kind_registry seed 完整，能 INSERT / SELECT core kind row
+- decision 表能创建 source_ref_type='memory' / 'routine_trigger' 的 row（基础校验）
 - 老 iOS 装包看到新 domain enum 不崩（K12 fallback 验证）
 - ~~routine domain push 提醒~~ 移到 M7a
 
-### M7a 通用执行 agent — routine + knowledge dry-run（**v0.2 新加，介于 M5 和 M6 之间**）
+### M7a 通用执行 agent — routine + knowledge dry-run（**v0.2 新加，介于 M5 和 M6 之间；v0.3 round 2 修复**）
 
-**核心**：M7a 是 routine domain dry-run executor + knowledge domain agent 的最小可用形态，**不依赖 Memory 表**。
+**核心**：M7a 是 routine domain dry-run executor + knowledge domain agent 的最小可用形态。**Memory 基本表 + Decision 扩展 schema 已在 M5 末就位**（v0.3 round 2 修复 F1+F3 BLOCKER：M7a "不依赖 Memory" 措辞推翻——M7a **依赖 M5 末就位的 memory + decision 基本 schema**，但**不依赖 M6 的 fact-extractor / FTS5 / quarantine**）。
 
 **准入条件**：
 - ✅ M5 完成
@@ -268,21 +275,20 @@ Khoj（[GitHub khoj-ai/khoj](https://github.com/khoj-ai/khoj)，Apache 2.0，27K
 - 跑通 1 个 knowledge Subject 全链路（不依赖 Memory）
 - 至少 100 条 retrospective 入库（作为 M6 fact extraction 的训练样本）
 
-### M6 个人记忆层（fact extraction + memory_kind_registry 中间路径）
+### M6 个人记忆层（fact extraction + FTS5 + registry 扩展，**v0.3 round 2 修复：不再"第一次引入 memory 表"**）
 
-**核心**：在 SQLite + FTS5 上实现"事实抽取 + 实体图 + 语义检索"三层结构，按 **U-J1-B 用户拍板**走 memory_kind_registry 中间路径。
+**核心**：在 M5 末就位的 memory + memory_kind_registry 基本 schema 上，加 fact-extractor + FTS5 索引 + memory_quarantine 隔离区。
 
 **准入条件**：
-- ✅ M7a 完成（≥100 条 retrospective 作 fact extraction 样本）
+- ✅ M7a 完成（≥100 条 retrospective + ≥ N 条 routine memory row 作 fact extraction 样本）
 - ✅ FTS5 + Scheduler 并发 race condition spike 通过（NF2-arch）
 
-**核心动作**：
+**核心动作**（v0.3 round 2 修订）：
 
-- 0007 additive migration v301：
-  - 新加 `memory(id, kind TEXT NOT NULL REFERENCES memory_kind_registry(kind), project_id, payload_json, created_at, expires_at, importance: 0..1, provenance TEXT, sensitivity_level TEXT)` 表 + FTS5 索引
-  - 新加 `memory_kind_registry(kind PRIMARY KEY, payload_schema_ref, owner_domain, deprecated_at)` 表
+- 0008 additive migration v302（M6 范围，与 M5 末 0007 拆开）：
+  - 给现有 `memory` 表加 FTS5 索引 (`memory_fts`)
   - 新加 `memory_quarantine(id, kind TEXT, payload_json, created_at, reviewed_at, decision)` 隔离表
-  - 第一批 registry kind ≤ 20 个：`fact.user-preference / fact.health.baseline / fact.health.daily / fact.routine.cron / fact.finance.entry / decision.health.alert / decision.routine.handled / pattern.coder.success / pattern.reviewer.anti-pattern` 等
+  - registry 扩展 kind row（fact.* / pattern.* 等 fact-extractor 输出 kind，所有 tier='extension'）
 - 加 `fact-extractor` ritual stage（轻量，每次 retrospective 落库时自动跑）
   - 输入：retrospective.md
   - 输出：N 条 fact.* 行
@@ -374,9 +380,9 @@ Khoj（[GitHub khoj-ai/khoj](https://github.com/khoj-ai/khoj)，Apache 2.0，27K
 | **K-jarvis-2** | **关键决策必须 Decision approve** — 财务支出 ≥ 阈值 / 健康用药 / 重要回复 / 任何不可逆非软件操作（calendar/mail/iot 写）永远只能"建议 + 用户拍板"，agent 不允许有 auto-execute 路径 | FJ3 + FJ6 agentic over-reach |
 | **K-jarvis-3** | **一键全关开关两档** — iOS 顶栏 kill switch，分两档：`passiveMode` 只关 Observer / 主动 push（保留 Memory 检索 + Strategist 跨 Issue 引用）/ `strictLocalMode` 同时关跨 domain 跨 Subject Memory 引用，degrade to v0.4.5 形态（采纳 cross react 两档方案，回应 OQ3 + m2）| FJ1 单点 + FJ3 注意力反转 |
 | **K-jarvis-4** | **不做全屏感知** — 永久否决"屏幕 OCR / activity tracking / 永久后台监听"等高隐私换便利的 Awareness 路径 | FJ4 私密信息中心化 + FJ5 集成面爆炸 |
-| **K-jarvis-5** | **Memory 跨 Subject 检索默认禁止跨 domain + ContextBundle 层 provenance + sensitivity tagging**（v0.2 新加，回应 MAJ-2 + NF2-cross）— query 层限 project_id/domain + ContextBundle 层加 provenance + sensitivity tag，防止 agent / reviewer 复制到 artifact / retrospective | FJ7 Memory 数据污染传播 + 跨域信息泄漏 |
-| **K-jarvis-6** | **Decision form 分级** — trivial 自动 approve / minor 默认 approve 可撤销 / major 必须同步 approve；防 R7.2 审批疲劳全面回归（v0.2 新加，回应 FJ10 + 与 §0 #22 fast-path 同源）| FJ10 K-jarvis-2 与 R7.2 冲突 |
-| **K-jarvis-7** | **read-only degraded mode** — iPad + Tailscale 直接读 read-only harness.db 副本（不跑 backend），保证 Mac 故障 / Eva 异常时"今天该做什么"仍可查询；与 K-jarvis-3 strictLocalMode 联动（v0.2 新加，回应 FJ11）| FJ11 Eva 故障 = 用户生活停摆 |
+| **K-jarvis-5** | **Memory 跨 Subject 检索 policy 三档**（v0.3 round 2 修订 F5 DRIFT）— query policy 三档：`same_subject`（默认）/ `same_domain_cross_subject`（同 domainProfile 跨 Subject 显式策略允许，如 dogfood Eva fact 引用到 software-cli Eva 工具开发 Subject）/ `cross_domain_explicit`（跨 domain 必须 K-jarvis-3 strictLocalMode 关闭 + 显式 policy 允许）。query 层 + ContextBundle 层均强制带 policy 字段；ContextBundle 检索结果记录 provenance + sensitivity tag | FJ7 Memory 数据污染传播 + 跨域信息泄漏 |
+| **K-jarvis-6** | **Decision form 分级**（v0.3 round 2 修订 F5：schema 字段 `decision.severity TEXT NOT NULL CHECK (severity IN ('trivial','minor','major'))` 已在 M5 末 0007 落地）— trivial 自动 approve / minor 默认 approve 可撤销 / major 必须同步 approve；防 R7.2 审批疲劳全面回归（与 §0 #22 fast-path 同源）| FJ10 K-jarvis-2 与 R7.2 冲突 |
+| **K-jarvis-7** | **read-only degraded mode（iPad 直接读 read-only DB 副本不跑 backend）**（v0.3 round 2 修订 F5：明确不依赖现有 backend HTTP 路由）— iPad + Tailscale 拿 rsync 过来的 read-only `harness.db` 副本，**iPad 端独立读（不依赖 Mac backend 在线）**；与 K-jarvis-3 strictLocalMode 联动；如未来要走 HTTP degraded mode，单独设计只读 router 不暗示当前 backend 已支持 | FJ11 Eva 故障 = 用户生活停摆 |
 
 **v0.2 删除**：~~K-jarvis-5 强制非 Claude provider~~（采纳 cross react refine：FJ8 改成 OQ7 而非不变量；degraded mode 已由 K-jarvis-7 提供基本保障）
 
@@ -568,8 +574,21 @@ Phase 1+2+3 review trail：
 - §11: 加 Khoj 链接 + scheduler.ts + anchor gate 引用
 - §12: 新加（v0.1 → v0.2 修订对照审计 trail）
 
-### v0.2 → v0.3 触发条件
+### v0.2 → v0.3 修订（round 2 cross-check 触发）
 
-- **必触发 round 2 phase 1 局部评审**：M7 拆 M7a/M7b + memory_kind_registry + Stage 分层（U-J3-C）三处新设计
-- 若 round 2 reviewer 提 BLOCKER 否定上述任一新设计，回 phase 2 cross-pollinate 该段落 + phase 3 author 仲裁，迭代到 v0.3
-- 若 round 2 全过 → v0.2 = final，进入落地阶段（不在本 proposal 范围）
+cursor-agent (gpt-5.5) round 2 lightweight cross-check 抓 2 BLOCKER + 3 DRIFT：
+
+- **F1+F3 BLOCKER (同根)**：M7a 声明"不依赖 Memory" 但核心动作要求 routine 配置存 Memory + 创建 Decision row，与当前 `decision.stage_id NOT NULL` 冲突
+  - **v0.3 修复**：把 memory + memory_kind_registry + decision schema 扩展前置到 M5 末（0007 additive）；M6 只做 fact-extractor + FTS5 + quarantine 扩展（0008）；M7a "不依赖 Memory" 措辞推翻——M7a 依赖 M5 末就位的基本 schema，但不依赖 M6 的 fact-extractor / FTS5
+- **F2 DRIFT**：memory_kind_registry "核心 kind CHECK enum + 扩展 registry FK" SQL 上不能两套都加在 memory.kind
+  - **v0.3 修复**：registry 加 `tier TEXT CHECK (tier IN ('core','extension'))`；memory.kind 只走 FK 不加额外 CHECK
+- **F4 DRIFT**：Decision 直驱缺 schema 落点
+  - **v0.3 修复**：M5 末 0007 schema-rebuild `decision`：stage_id 改 nullable + 加 project_id NOT NULL + subject_domain + source_ref_type/source_ref_id + severity
+- **F5 DRIFT**：K-jarvis-5/6/7 落地契约不足
+  - **v0.3 修复**：K-jarvis-5 改 policy 三档（same_subject / same_domain_cross_subject / cross_domain_explicit）；K-jarvis-6 schema 字段 decision.severity 已在 M5 末落；K-jarvis-7 明确不依赖现有 backend HTTP 路由
+
+### v0.3 → v0.4 触发条件
+
+- v0.3 修复完所有 round 2 BLOCKER + DRIFT，按 SKILL.md L262-268 收敛判断 v0.3 = final
+- 若未来 round 3 reviewer (M5 启动前) 抓到 v0.3 修复引入的新 BLOCKER → 回 phase 2 cross-pollinate 该段落 + phase 3 author 仲裁，迭代到 v0.4
+- 当前 v0.3 已 user-approved + author-arbitrated + round 2-fixed 三层收敛，**进入落地阶段**（M5 启动时各 schema 改动走 contract mode + ADR-lite）
