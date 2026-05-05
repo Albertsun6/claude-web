@@ -10,7 +10,7 @@
 
 ## 0. 总览
 
-20 条风险，按主题分 7 组：
+35 条风险（含 R8.3 拆 a/b 实际 36 条目），按主题分 8 组：
 1. **Agent 行为** — agent 自由度过高、CLI 长链路稳定性、上下文失败、多 AI 分歧瘫痪
 2. **流程与节奏** — 卡点过多、MVP 战线过长、奠基 ritual 不收敛、方法论无限拖延
 3. **多 Agent 协作** — 资源争抢、Reviewer 被污染、集体盲区
@@ -18,6 +18,7 @@
 5. **演化与垂直** — 企业垂直贴谱、schema 演化失败
 6. **运维** — 离线 fallback、成本失控/波动
 7. **框架自身**（v0.2 2026-05-04 新增，Meta-Freeze P1-7）— 元工作螺旋、用户审批疲劳
+8. **多项目使用**（v0.3 2026-05-05 新增，源自 [EVA_MULTI_PROJECT_USAGE.md v0.3](proposals/EVA_MULTI_PROJECT_USAGE.md)）— 凭据混杂、不可逆操作、方法论领域不贴（R8.3 拆 a 粗 enum + b 业务子领域 PM spec 缺失）、SQLite 并发、iOS 多项目混乱、备份缺失、skill 集体盲区跨项目、元数据归属、dogfood 自指、injectEnv 反向打洞、hook 链路冲突、Swift Codable unknown enum、M2 loop2+ 串行、ServerChan format 破坏、.env.harness 备份（**15 个主题，含 R8.3 拆 a/b 共 16 个条目**）
 
 ---
 
@@ -270,7 +271,142 @@
 
 ---
 
-## 8. 风险按里程碑分布
+## 8. 多项目使用风险（v0.3 新增，M2+ 落地多项目时触发）
+
+> **来源**：[EVA_MULTI_PROJECT_USAGE.md v0.3](proposals/EVA_MULTI_PROJECT_USAGE.md) §7.1 经 phase 1+2+3 评审收敛 + 用户拍板（2026-05-05）。
+>
+> **触发条件**：用户从 dogfood 单 Subject（Eva 自己）走到多 Subject（用 Eva 开发自己的工程项目）的相变。M2 master plan loop1 已 ship，loop2+ 期间是这些风险首次暴露的窗口。
+
+### R8.1 凭据混杂（cli-runner 默认全继承 env）
+
+**描述**：`cli-runner.ts` spawn 子进程时默认 `env: process.env`（[L80](../packages/backend/src/cli-runner.ts#L80) 事实证据），意味着 backend 主进程的所有敏感凭据（OPENAI_API_KEY / STRIPE_KEY / SERVERCHAN_KEY / TG token）会泄到 spawn 出来的 claude CLI 子进程，进而泄到 agent 跑的 `npm test` 等命令。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 P0-1 BLOCKER](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- AgentProfile 加 `inheritEnv: string[]` 白名单（默认 `['PATH', 'HOME', 'USER', 'SHELL', 'LANG', 'LC_*', 'TERM', 'TMPDIR', 'NVM_DIR', 'PNPM_HOME', 'CLAUDE_CONFIG_DIR']`，与 [WORKTREE_LOCK.md L41](../WORKTREE_LOCK.md) H13 hook env strip 同源）
+- 退出条件三层：negative canary + 30 天 dogfood Run 命令 dry-run 无 ENOENT + InjectEnv denylist 单元测试
+
+### R8.2 不可逆操作误触
+
+**描述**：agent 误触发 DB migration / 真实三方 API / 部署 / 付费操作。本风险是 R4.1 在多项目场景的扩展——dogfood 期间 agent 工具白名单较窄，多项目期间会跑各种工程项目的 deploy 命令，攻击面扩大。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 P0-2 BLOCKER](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- prod-guard.mjs 实施前必须做 1 天 spike 验证 hook deny 优先级（详见 R8.11）
+- 黑名单单源真相 = `~/.claude-web/never-allowed-commands.json`（与 [context-manager.ts NEVER_ALLOWED](../packages/backend/src/context-manager.ts#L86-L94) 同源）
+- Token-level 检测（用 shell-quote 包，纯 JS）+ wrapper 解析（`pnpm/npm/yarn run <script>` 必须 ResolveScript）+ allowlist override（`~/.claude-web/prod-guard-allowlist.json`）
+
+### R8.3a 方法论领域不贴谱（schema 层粗 enum）
+
+**描述**：当前 [methodology.applies_to](../packages/backend/src/migrations/0001_initial.sql#L108) enum 只有 3 选 `('claude-web','enterprise-admin','universal')`，但工程项目可能是 library / cli / infra / 数据科学等领域，PM agent 套企业管理系统模板会产出大段 N/A 字段。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 P0-4a](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- harness_project 加 `domain_profile` 字段，5 选 enum：`software-enterprise / software-library / software-cli / infra-script / dogfood-self`
+- 0004 additive migration（minor bump v103）+ 0005 schema-rebuild migration（major bump v200）改 methodology.applies_to enum 同步对齐
+
+### R8.3b 业务子领域 PM spec 缺失
+
+**描述**：即使 P0-4a 把 domain_profile 拆 5 选，订单 / CRM / 财务 / 库存 / HR 等业务子领域的 PM spec 必填段完全不同，但都归到 `software-enterprise` 一档。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 PRT + U1-A 用户拍板](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- 用户拍板：业务子领域**进 PM spec 必填字段，不进 schema**（避免提前固化未知分类）
+- 3-5 个真实企业项目实践后再考虑升 schema enum
+
+### R8.4 单 SQLite 单进程并发瓶颈
+
+**描述**：better-sqlite3 同步 API + Scheduler 全局 setInterval，多 active project 并行时 SQLite 写锁竞争 + tick 抖动。dogfood 期间 1-2 active 不暴露，多项目时显著。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 P1-1](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- Scheduler tick 按 `task.cwd → project_id` 分桶，每桶独立 `maxConcurrentRuns`（default 2）
+- 不引入 Redis / NATS / BullMQ（§0 #11）
+
+### R8.5 iOS Inbox 多项目混乱（30 秒入口反成 30 秒困惑）
+
+**描述**：iOS BackendClient 是 per-conversation 不是 per-project，多项目时 push 通知 / Inbox / Decision 都混在一起，用户看到通知 30 秒内分不清是哪个项目。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 P1-2](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- 拆两步：P1-2a 后端通知 title 加 `[<projectName>]` prefix（payload 保留结构化字段保护 webhook）+ P1-2b iOS UI 项目切换器 + Inbox 分组（破坏 K4 thin shell 假设的 ack）
+
+### R8.6 harness.db 单文件损坏 = 元数据归零
+
+**描述**：`~/.claude-web/harness.db` 是单 SQLite 文件，无任何备份机制。损坏 = 所有 project 的 Initiative / Stage / Run / Artifact / Retrospective 全丢。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 P1-3](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- 三层退出条件：覆盖范围（备份 `~/.claude-web/` 整目录含 artifacts / audit / projects.json / telemetry）+ 完整性（`PRAGMA integrity_check` + `foreign_key_check`）+ 可恢复性（每月 1 号自动 dry-run 恢复演练）
+- `.env.harness` 不混入普通快照（避免明文密钥进备份，单走 P2-3）
+
+### R8.7 skill 集体盲区跨项目放大
+
+**描述**：`.claude/skills/*/SKILL.md` 全局激活，dogfood 提炼的 anti-pattern 会喂到非 dogfood Project 的 agent，跨领域时变成误导。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 P1-4-spike](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- 1 小时 spike 验证 CLI skill 激活机制是否能拦
+- spike 失败时三选一替代：symlink profile / 临时 skills dir（推荐）/ prompt-level 禁用声明
+
+### R8.8 元数据归属（参考性，**降为低风险**）
+
+**描述**：所有 spec / decision / retrospective 押在 `~/.claude-web/harness.db`，工程项目 git 仓库失去"为什么这样设计"的脉络。
+
+**缓解**：用户愿景"思想留 Eva"反对镜像，**降为 P3 可选**——仅当某 Subject 真的要交付 / 转手 / 归档时按需手动导出（不自动）
+
+### R8.9 dogfood 自指风险触发面被低估（F8 升级）
+
+**描述**：R4.2 是基线，R8.9 是其升级——P0-1 / P0-2 第一批改动正是 backend 自指（cli-runner.ts spawn / hook 链路），第一个用 jarvis 之外项目的 Run 大概率改 P0-1 / P0-2 自己的实现。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 MAJ-9](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- P0-1 / P0-2 加 dogfood smoke gate：(a) backend health check (b) 一次 harmless prompt (c) 一次 Bash deny (d) 一次允许普通 git diff
+
+### R8.10 injectEnv 反向打洞，绕过 inheritEnv 白名单
+
+**描述**：P0-1 加 inheritEnv 白名单后，如果 injectEnv 没限制可覆盖 key，能通过 `injectEnv: { PATH: '/malicious/...' }` 反向覆盖白名单变量，绕过整个安全模型。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 MAJ-1](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- injectEnv denylist `['PATH', 'HOME', 'BASH_ENV', 'ENV', 'SHELLOPTS', 'CDPATH', 'IFS', 'PS1', 'PS4']`
+- 与 [WORKTREE_LOCK.md L41](../WORKTREE_LOCK.md) H13 hook env strip 同源
+- 违反即拒（throw `InjectEnvDenied`）
+
+### R8.11 hook 链路 fail-open / fail-closed 冲突语义未定义
+
+**描述**：permission-hook 是 fail-open（CLAUDE.md 明文）；prod-guard 必须 fail-closed；同 PreToolUse 链路两 hook 一个 allow 一个 deny 时 Claude CLI 合并行为未明示。如果取宽松语义"先收到的 allow 优先" = prod-guard 形同虚设。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 P0-2-spike + U3-defer 用户拍板](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- P0-2 第一步必做 1 天 spike：跑一对冲突测试 `permission-hook(allow) + prod-guard(deny)`
+- spike 失败 → 默认走 U3-B（permission-hook 内置黑名单，单进程 fail-closed）
+
+### R8.12 Swift Codable 老 iOS 遇 unknown enum 整 DTO decode 失败
+
+**描述**：Swift Codable 默认对 unknown enum case 抛 `DecodingError.dataCorrupted`。一旦 backend 返回新加的 enum 值（如 `software-cli`）老 iOS 装包 ProjectDTO 整体 decode 失败 = 所有 project 列表显示空白。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §6 K12](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- Swift Codable 必须实现 `init(from:)` 自定义 decoding，unknown enum 值 fallback 到 default（如 `'software-enterprise'`）
+- TS Zod 用 `z.enum([...]).catch('software-enterprise')` 同样 fallback
+- Fixture round-trip 测试加 `'future-unknown-value'` 反例，TS / Swift 都应当 decode 成功
+
+### R8.13 M2 loop2+ 与 P0-1 / P0-2 同改 cli-runner.ts 段冲突
+
+**描述**：cli-runner.ts L77-156 是所有 spawn 的单点（K5），P0-1 改 env / P0-2 加 hook chain / M2 loop 可能改 args。worktree 隔离只能隔离文件系统，不能消除同一核心路径的语义冲突。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §6 K10](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- K10 不变量：P0-1 / P0-2 与任何改 cli-runner.ts spawn / env / args / hook 链路的 M2 loop 必须**串行合并**（先 ship P0-1/P0-2 后 cherry-pick 到 loop branch）
+
+### R8.14 ServerChan / Telegram notification format 破坏
+
+**描述**：M0.5 已 ship 的 ServerChan + Telegram 推送字符串是 contract，下游有用户 webhook / TG 群解析。iOS push title 加 `[<projectName>]` 前缀同样会传到这两个 channel，可能破坏现有解析。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 MAJ-7](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- 通知 payload 保留结构化字段 `projectName / projectId`
+- iOS lockscreen 显示 prefix
+- ServerChan / Telegram 维持原 title 或追加末尾字段（不破坏现有外部 contract）
+
+### R8.15 .env.harness 备份策略遗漏
+
+**描述**：P2-3 引入 worktree 内独立 `.env.harness` 后，如果不专门处理，损坏 = 工程项目密钥永久丢失（用户对 git 不可见 = 自己也找不回）。简单混入 P1-3 普通备份会导致明文密钥进备份。
+
+**缓解**：[EVA_MULTI_PROJECT_USAGE.md §5 P2-3 + MAJ-8](proposals/EVA_MULTI_PROJECT_USAGE.md)
+- 不混入 P1-3 普通快照
+- 三选一：加密备份（age / gpg）/ 显式排除用户自管 / 不备份接受丢失风险（在文档明确说明）
+
+---
+
+## 9. 风险按里程碑分布
 
 | M | 主要风险 | 关键缓解 |
 |---|---|---|
@@ -282,18 +418,19 @@
 | M4 | R5.3 持续 | audit 报表月度跑 |
 | M4 远期 | R3.3 集体盲区（可选） | 引入非 Claude 终审；个人自用不强制 |
 | **跨 M（贯穿）** | **R7.1 元工作螺旋、R7.2 用户审批疲劳** | **fast-path 分级 + HARNESS_EVOLUTION_FROZEN + telemetry methodology.debt** |
+| **M2+ 多项目首发** | **R8.1-R8.15 多项目使用风险（15 主题 / 16 条目，含 R8.3 拆 a/b）** | **EVA_MULTI_PROJECT_USAGE v0.3 P0/P1/P2 落地 + K10/K11/K12 三条不变量** |
 
 ---
 
-## 9. 维护规则
+## 10. 维护规则
 
-### 9.1 何时更新
+### 10.1 何时更新
 
 - 新增风险（dogfood 暴露 / 评审反馈）→ 加到对应主题段
 - 缓解策略升级 → 更新缓解段
 - 风险消除 → 标 ✅ deprecated（不删）
 
-### 9.2 与其他文档同步
+### 10.2 与其他文档同步
 
 - 每条风险必须对应 [HARNESS_ROADMAP.md §0](HARNESS_ROADMAP.md) 的某条原则
 - 缓解涉及代码模块的，必须在 [HARNESS_ARCHITECTURE.md](HARNESS_ARCHITECTURE.md) 的 L7 横切段提及
