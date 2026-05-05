@@ -57,6 +57,19 @@ export class EvaScheduler {
     // 2. 计算下一个 Stage（跳过已完成和进行中的）
     const stages = listStages(this.db, issue.id);
     const nextKind = this.computeNextStage(stages);
+    if (nextKind === "blocked") {
+      // cross B2: 不主动改 issue status 到 "blocked"。`ELIGIBLE` 不含 blocked，
+      // 一旦 set blocked，operator 即使按 reason 操作也会被 ELIGIBLE 过滤掉，
+      // 落入死循环。保持 issue 状态可调度，operator 用现有 PATCH 端点 resolve
+      // failed stage（status → skipped），下次 tick 自动 advance。
+      const failed = stages
+        .filter((s) => s.status === "failed")
+        .map((s) => `${s.kind}@${s.id.slice(0, 8)}`);
+      return {
+        issued: false,
+        reason: `issue ${issue.id} has failed stage(s) [${failed.join(", ")}]. To retry: PATCH /api/harness/stages/<id> {status: "skipped"} for each failed stage, then re-tick. To abandon: PATCH /api/harness/issues/<id> {status: "wont_fix"}. Issue status kept eligible (no auto-block) so re-tick after stage resolve advances normally.`,
+      };
+    }
     if (nextKind === "done") {
       updateIssueStatus(this.db, issue.id, "done");
       return { issued: false, reason: `issue ${issue.id} all stages complete → marked done` };
@@ -114,7 +127,13 @@ export class EvaScheduler {
     return { issued: true, issueId: issue.id, stageKind: nextKind, taskId };
   }
 
-  private computeNextStage(existingStages: StageRow[]): StageKind {
+  private computeNextStage(existingStages: StageRow[]): StageKind | "blocked" {
+    // dogfood v1 暴露：失败 stage 既不在 COMPLETE 也不在 ACTIVE 集合，导致下次 tick
+    // 想再 spawn 同 kind → INSERT 撞 UNIQUE(issue_id, kind)。M1 选保守路线：失败
+    // 直接 block，手动 resolve（删 stage 行重跑 OR 标 issue wont_fix）。M2 接 retry policy。
+    const hasFailed = existingStages.some((s) => s.status === "failed");
+    if (hasFailed) return "blocked";
+
     const completedKinds = new Set(
       existingStages
         .filter((s) => STAGE_COMPLETE_STATUSES.has(s.status))

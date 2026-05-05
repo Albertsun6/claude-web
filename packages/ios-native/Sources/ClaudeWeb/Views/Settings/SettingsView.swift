@@ -210,7 +210,7 @@ struct SettingsView: View {
                 }
                 Section {
                     // M0 agentProfiles Round (v1.2): server-driven 只读列表。
-                    // M0 期 11 项 disabled + PM enabled (M1 discovery 准备); M2 真 spawn 时此处升级为可触发。
+                    // M1 mini #1+#2 + Track 1: Strategist + PM + Coder enabled; 其余 9 项 disabled（M2 真 spawn 升级为可触发）。
                     let profiles = harnessStore.agentProfiles
                     ForEach(profiles, id: \.id) { profile in
                         HStack(alignment: .top, spacing: 8) {
@@ -249,7 +249,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Agent Profiles (\(harnessStore.agentProfiles.count))")
                 } footer: {
-                    Text("由服务端配置 (/api/harness/config v1.2)。M0 期仅 PM 启用（M1 discovery 准备），其余 11 项 M2 真 agent spawn 时打开。改 fallback-config.json 重启 backend 即可热更。")
+                    Text("由服务端配置 (/api/harness/config v1.2)。当前启用的 profile 由服务端决定；M1 scheduler 使用 Strategist (strategy) + Coder (implement)，PM 保留 discovery 用。其余 9 项 M2 真 agent spawn 时打开。改 fallback-config.json 重启 backend 即可热更。")
                 }
                 Section {
                     Picker("聊天区字号", selection: $s.fontSize) {
