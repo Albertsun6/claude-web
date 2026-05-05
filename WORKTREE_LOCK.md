@@ -6,10 +6,14 @@
 
 | Track | 文件 | 状态 | 时间 |
 |---|---|---|---|
-| Track 1 | packages/backend/src/scheduler.ts:computeNextStage, packages/shared/fixtures/harness/fallback-config.json (agentProfiles), docs/retrospectives/M1-mini2-stage-aware-prompts.md | active | 2026-05-05 16:00 |
-| Track 2 | packages/backend/src/context-manager.ts (NEW), packages/backend/src/harness-queries.ts (createTask + ContextBundle helpers), packages/backend/src/scheduler.ts:spawnAgent | active | 2026-05-05 16:10 |
+| Track 1 | packages/backend/src/scheduler.ts:computeNextStage, packages/shared/fixtures/harness/fallback-config.json (agentProfiles), docs/retrospectives/M1-mini2-stage-aware-prompts.md | done | 2026-05-05 16:20（PR #12 合 dev） |
+| Track 2 | packages/backend/src/context-manager.ts (NEW), packages/backend/src/harness-queries.ts (createTask + ContextBundle helpers), packages/backend/src/scheduler.ts:spawnAgent | done | 2026-05-05 17:01（PR #13 合 dev） |
 
-> **Rebase observation**：Track 2 在自己 worktree 加 lock 行时，dev 上 Track 1 的 "Active Locks" 段尚未存在；Track 2 把行 append 到 OLD "Historical Locks" 表里。Rebase 后 git 报**零冲突**，但**语义漂移** — Track 2 行被错误归到 Historical 段。本 commit 是手动 reposition。M1 双轨实验 retrospective 信号 #1：**自由 markdown 锁文件 + 多 worktree 时序异步 → rebase 报 ok 但语义错。M2 自动化必须用结构化 lock schema**。
+> **状态转换记录**（cleanup）：双 Track 已合 dev，状态从 `active` 改为 `done`，**保留行**永不删历史（用户 manual #5）。
+>
+> **Rebase observation**：Track 2 在自己 worktree 加 lock 行时，dev 上 Track 1 的 "Active Locks" 段尚未存在；Track 2 把行 append 到 OLD "Historical Locks" 表里。Rebase 后 git 报**零冲突**，但**语义漂移** — Track 2 行被错误归到 Historical 段（修复 commit `e8d2f81`）。M1 双轨实验 retrospective **信号 #1**：自由 markdown 锁文件 + 多 worktree 时序异步 → rebase 报 ok 但语义错。M2 自动化必须用**结构化 lock schema** — 详见 [retrospectives/M1-parallel-tracks-experiment.md](docs/retrospectives/M1-parallel-tracks-experiment.md)。
+>
+> **实验已完成，不再做第 2 次人驱动并行**（per plan §Q3）。后续真并行需求等 M2 agent 自动 spawn + worktree 自动创建 + ResourceLock。
 
 ## Historical Locks（旧版表格 — 早期实践）
 
