@@ -19,11 +19,16 @@
           last installed; native bindings then go NODE_MODULE_VERSION mismatch
       (2) when launchd exec'd this chain via bash, pnpm hung indefinitely under
           caffeinate (no tsx child ever spawned, log empty)
-    Fix: keep /bin/bash as the launchd program (preserves macOS TCC permission
-    for ~/Desktop access — switching to /pnpm would require fresh Full Disk
-    Access grant), but drop -l and caffeinate.
-    Tradeoff: lose caffeinate idle-sleep prevention; acceptable for personal
-    Mac that's plugged in, plus KeepAlive=true respawns if Mac wakes.
+    Fix: keep /bin/bash as the launchd program (observed locally that
+    switching ProgramArguments to /pnpm caused `ls ~/Desktop/...` →
+    "Operation not permitted" — likely macOS TCC tying ~/Desktop access to
+    the previously-granted /bin/bash binary, but the exact mechanism is not
+    verified), drop -l and caffeinate.
+    Tradeoff (per cross review M2 2026-05-05): lose caffeinate idle-sleep
+    prevention. KeepAlive=true only respawns when Mac is awake — does NOT
+    fire across system sleep. Mitigation: promote.sh prints a soft warning
+    if `pmset -g` shows sleep > 0, asking user to `sudo pmset -a sleep 0`
+    on first install. Acceptable for personal Mac mini that stays awake.
   -->
   <key>ProgramArguments</key>
   <array>
