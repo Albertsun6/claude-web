@@ -33,7 +33,9 @@ enum StageKind: String, Codable, CaseIterable {
 }
 
 enum StageStatus: String, Codable {
-    case pending, running
+    // H14 v1 (M2 schema v101): dispatched 中间态 — scheduler 已 reserve stage 但 spawn
+    // 还没真起来。pending → dispatched → running → approved/rejected/skipped/failed。
+    case pending, dispatched, running
     case awaitingReview = "awaiting_review"
     case approved, rejected, skipped, failed
 }

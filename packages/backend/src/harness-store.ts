@@ -25,7 +25,7 @@ const DB_PATH = join(HARNESS_DIR, "harness.db");
 
 // PRAGMA user_version 编码：major*100 + minor，patch 不计
 // 1.0 → 100, 1.2 → 102, 2.0 → 200
-export const HARNESS_SCHEMA_VERSION = 100;
+export const HARNESS_SCHEMA_VERSION = 101;
 
 // migrations 目录定位（Round 2 cross m3 边界注释）：
 // - 当前 backend 用 `tsx watch src/index.ts` 直接跑源码，不打包，不复制 dist
