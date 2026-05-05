@@ -118,6 +118,7 @@ async function scenarioCliFailed(): Promise<void> {
     }) as RunSessionFn;
 
     const scheduler = new EvaScheduler(handle.db, barrier.broadcast, mockThrowingRunSession);
+    scheduler.initialize();  // Loop 6: explicit boot step
 
     barrier.reset();
     const tick = await scheduler.tick(fx.projectId);
@@ -230,6 +231,7 @@ async function scenarioSpecHarvestFailed(): Promise<void> {
     }) as RunSessionFn;
 
     const scheduler = new EvaScheduler(handle.db, barrier.broadcast, mockRunSessionNoSpec);
+    scheduler.initialize();  // Loop 6: explicit boot step
 
     barrier.reset();
     const tick = await scheduler.tick(fx.projectId);
@@ -300,6 +302,7 @@ async function scenarioFailureIdempotent(): Promise<void> {
     }) as RunSessionFn;
 
     const scheduler = new EvaScheduler(handle.db, barrier.broadcast, mockThrowingRunSession);
+    scheduler.initialize();  // Loop 6: explicit boot step
     barrier.reset();
     await scheduler.tick(fx.projectId);
     await barrier.waitForTerminal();
@@ -312,12 +315,12 @@ async function scenarioFailureIdempotent(): Promise<void> {
     assert(before.failed_at != null, `first run: failed_at set`);
     const firstFailedAt = before.failed_at!;
 
-    // 重新实例化 scheduler — 模拟 backend 重启
+    // 重新实例化 scheduler + initialize — 模拟 backend 重启 (Loop 6)
     // 但当前 stage 是 'failed'，cleanupOrphanStages 只清 active 状态（pending/dispatched/running），
     // 所以不应该被改动。verify failed_reason 不变 + failed_at 不变。
     await new Promise((r) => setTimeout(r, 5)); // 时间往前移
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _scheduler2 = new EvaScheduler(handle.db, () => {}, mockThrowingRunSession);
+    const scheduler2 = new EvaScheduler(handle.db, () => {}, mockThrowingRunSession);
+    scheduler2.initialize();  // Loop 6: explicit boot step
 
     const after = handle.db
       .prepare("SELECT failed_reason, failed_at FROM stage WHERE issue_id = ? AND kind = 'strategy'")
