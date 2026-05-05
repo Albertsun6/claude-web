@@ -164,9 +164,11 @@ try {
     .prepare("SELECT file FROM schema_migrations ORDER BY file")
     .all()
     .map((r: any) => r.file as string);
+  // H14 v1：再加 migration 时 expected 同步增长（assertion 与实际 migration 文件目录一一对应）
+  const expected = ["0001_initial.sql", "0002_stage_status_dispatched.sql"];
   assert(
-    applied.length === 1 && applied[0] === "0001_initial.sql",
-    `schema_migrations records exactly 1 row: ${JSON.stringify(applied)}`,
+    applied.length === expected.length && applied.every((f, i) => f === expected[i]),
+    `schema_migrations records exactly ${expected.length} rows: ${JSON.stringify(applied)}`,
   );
 
   // 数据应该还在（FK / 数据完整性）

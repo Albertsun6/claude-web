@@ -115,6 +115,17 @@ GitHub Branch Protection（需在 GitHub UI 手动配置）：
 - `main`：require PR + require CI job `test` pass + no force push
 - `dev`：require PR + require CI job `test` pass + no force push
 
+## Layered Spiral Delivery
+
+Eva 采用 **双层交付**：
+
+- **阶梯层（骨架）** — DB schema / wire protocol / 6 层架构 / runtime provider / release 策略 / iOS minClientVersion 等高搬迁成本决策**靠 up-front proposal 或 ADR-lite + cross review 锁定**，不允许"先做一版试试"。
+- **螺旋层（骨架内能力）** — Scheduler 行为 / ContextManager prompt / agent profile / dashboard / dogfood / review prompt 等按 **risk-driven 螺旋**：明确本圈风险 → 最小切片 → 机器验证 → dogfood → review → retrospective + ship/drop/defer。每一圈必须在 `docs/retrospectives/...` 留下可读证据（极小改动可追加到已有 retrospective）。
+
+> **核心约束**：螺旋不是绕过架构设计；**螺旋只在已通过 anchor gate 的骨架内运行**。每个 Mx 进入前过 7 问 anchor gate（数据模型 / 协议 / 兼容 / 不可逆 / 权限 / 资源争用 / rollback）。
+
+详见 [docs/HARNESS_ROADMAP.md §0.5](docs/HARNESS_ROADMAP.md#05-螺旋--阶梯双层交付原则layered-spiral-delivery)。
+
 ## Required external tools
 
 - `claude` CLI (subscription-authenticated; check `~/.claude/.credentials.json`)

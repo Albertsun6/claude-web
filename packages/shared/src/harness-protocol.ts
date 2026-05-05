@@ -39,7 +39,12 @@ const DimensionScoreSchema = z.number().min(0).max(5);
 // 版本协商（HARNESS_PROTOCOL.md §5）
 // ============================================================================
 
-export const HARNESS_PROTOCOL_VERSION = "1.0";
+// H14 v1：minor bump 1.0 → 1.1 — StageStatus 加 'dispatched' 是 wire enum 扩展。
+// 老客户端（1.0）若收到 stage_changed status='dispatched' 会 Codable decode 失败（Swift）/
+// Zod parse 失败（TS）；服务端用 MIN_CLIENT_VERSION 决定是否拒老客户端连。
+// 现状：暂保 MIN_CLIENT_VERSION="1.0"（个人自用单一客户端，无需强迫升级），但
+// HARNESS_PROTOCOL_VERSION 推进以反映 wire 实际形状。
+export const HARNESS_PROTOCOL_VERSION = "1.1";
 export const MIN_CLIENT_VERSION = "1.0";
 
 // ============================================================================
@@ -53,7 +58,9 @@ export const StageKindSchema = z.enum([
 export type StageKind = z.infer<typeof StageKindSchema>;
 
 export const StageStatusSchema = z.enum([
-  "pending", "running", "awaiting_review", "approved",
+  // H14 v1: dispatched 中间态（M2，schema v101）— 表 "scheduler 已 reserve stage row +
+  // 准备 ContextBundle/task/runtime；spawn 真起来前"。pending → dispatched → running。
+  "pending", "dispatched", "running", "awaiting_review", "approved",
   "rejected", "skipped", "failed",
 ]);
 export type StageStatus = z.infer<typeof StageStatusSchema>;

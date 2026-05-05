@@ -1,4 +1,4 @@
-// EvaScheduler — L3 Orchestration 骨架 (M1 minimum slice)
+// SEvacheduler — L3 Orchestration 骨架 (M1 minimum slice)
 //
 // 职责：从 harness.db 读待处理 Issue → 推进 Stage 状态机 → spawn claude CLI agent
 //
@@ -35,7 +35,8 @@ type StageKind = "strategy" | "implement" | "done";
 type IssueStatus = "inbox" | "triaged" | "planned" | "in_progress" | "blocked" | "done" | "wont_fix";
 // Stage 完成状态（无 "done"；M1 用 "approved" 表示完成，跳过 review gate）
 const STAGE_COMPLETE_STATUSES = new Set(["approved", "rejected", "skipped"]);
-const STAGE_ACTIVE_STATUSES = new Set(["pending", "running", "awaiting_review"]);
+// H14: dispatched 也是 active（防止并发 tick 在 dispatched 窗口内重复 spawn）
+const STAGE_ACTIVE_STATUSES = new Set(["pending", "dispatched", "running", "awaiting_review"]);
 
 export interface SchedulerTickResult {
   issued: boolean;
@@ -105,18 +106,24 @@ export class EvaScheduler {
       return { issued: false, reason: `no cwd found for project ${issue.project_id}` };
     }
 
-    // 6. 创建 Stage 记录并置 running
+    // 6. 创建 Stage 记录置 dispatched（H14 v1：scheduler 已 reserve，但 spawn 还没起来）
+    //    dispatched → running 在 spawnAgent 调 runSession 前刚好切换。这窗口内
+    //    bundle/task setup 阶段失败，stage 直接失败 → 排错语义清晰。
     const stage = createStage(this.db, {
       issueId: issue.id,
       kind: nextKind,
       agentProfileId: profile.id,
     });
-    setStageStatus(this.db, stage.id, "running");
+    setStageStatus(this.db, stage.id, "dispatched");
+    this.broadcast({ type: "harness_event", kind: "stage_changed", stageId: stage.id, status: "dispatched" });
     updateIssueStatus(this.db, issue.id, "in_progress");
 
     const taskId = `${issue.id}/${stage.id}`;
 
     // 7. 广播 stage_started（符合 ServerMessage protocol）
+    // 注：H14 v1 修：pre-spawn 阶段问题排查应 key on stageId 而非 taskId（taskId 此时
+    // 是 synthetic `${issue.id}/${stage.id}`，真 task UUID 在 spawnAgent createTask 时才
+    // 写入 DB）。setup 期失败的 stage_failed 广播只能用 stageId 关联到落库的 stage 行。
     this.broadcast({
       type: "harness_event",
       kind: "stage_started",
@@ -127,6 +134,7 @@ export class EvaScheduler {
     this.spawnAgent(issue, stage, taskId, projectCwd).catch((err) => {
       console.error(`[EvaScheduler] agent error for ${taskId}:`, err);
       setStageStatus(this.db, stage.id, "failed");
+      this.broadcast({ type: "harness_event", kind: "stage_changed", stageId: stage.id, status: "failed" });
       this.broadcast({
         type: "harness_event",
         kind: "stage_failed",
@@ -218,6 +226,12 @@ export class EvaScheduler {
     const modelClaudeId =
       model === "opus" ? "claude-opus-4-5" : model === "haiku" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
 
+    // H14 v1: 真正 spawn CLI 之前再翻 dispatched → running
+    // 在此之前 bundle 写盘 / createTask INSERT 失败 → stage 留 dispatched，外层 catch 标 failed。
+    // 这样 setup 阶段失败 与 CLI 执行阶段失败 在 audit 上可区分（status trail 不同）。
+    setStageStatus(this.db, stage.id, "running");
+    this.broadcast({ type: "harness_event", kind: "stage_changed", stageId: stage.id, status: "running" });
+
     // M1: bypassPermissions — scheduler 无交互 UI，无法走 permission hub。
     // M2 改造点：注册 scheduler permission channel，广播 decision_requested 事件。
     await runSession({
@@ -244,6 +258,7 @@ export class EvaScheduler {
     }
 
     setStageStatus(this.db, stage.id, "approved");
+    this.broadcast({ type: "harness_event", kind: "stage_changed", stageId: stage.id, status: "approved" });
 
     this.broadcast({
       type: "harness_event",

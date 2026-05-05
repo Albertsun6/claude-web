@@ -10,7 +10,8 @@
 | `initiative.json` | `InitiativeDtoSchema` |
 | `issue.json` | `IssueDtoSchema` |
 | `idea-capture.json` | `IdeaCaptureDtoSchema` |
-| `stage.json` | `StageDtoSchema` |
+| `stage.json` | `StageDtoSchema` (status='awaiting_review') |
+| `stage-dispatched.json` | `StageDtoSchema` (status='dispatched', H14 v1) |
 | `methodology.json` | `MethodologyDtoSchema` |
 | `task.json` | `TaskDtoSchema` |
 | `context-bundle.json` | `ContextBundleDtoSchema` |

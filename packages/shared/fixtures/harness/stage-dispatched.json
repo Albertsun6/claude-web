@@ -1,0 +1,14 @@
+{
+  "id": "stage-01HJK5XD0CDEF99",
+  "issueId": "iss-01HJK5XB0CDEF03",
+  "kind": "implement",
+  "status": "dispatched",
+  "weight": "heavy",
+  "gateRequired": true,
+  "assignedAgentProfile": "Coder",
+  "methodologyId": "meth-01HJK5XE0CDEF06",
+  "inputArtifactIds": ["art-spec-001"],
+  "outputArtifactIds": [],
+  "reviewVerdictIds": [],
+  "createdAt": 1746234700000
+}
