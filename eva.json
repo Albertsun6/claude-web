@@ -87,8 +87,17 @@
       "owns": [
         "docs/proposals/EVA_MULTI_PROJECT_USAGE.md",
         "docs/proposals/EVA_AS_PERSONAL_JARVIS.md",
-        "docs/reviews/eva-multi-project-usage-*.md",
-        "docs/reviews/eva-as-personal-jarvis-*.md"
+        "docs/reviews/eva-multi-project-usage-arbitration-2026-05-05.md",
+        "docs/reviews/eva-multi-project-usage-arch-2026-05-05-2342.md",
+        "docs/reviews/eva-multi-project-usage-cross-2026-05-05-2342.md",
+        "docs/reviews/eva-multi-project-usage-react-arch-2026-05-05-2348.md",
+        "docs/reviews/eva-multi-project-usage-react-cross-2026-05-05-2348.md",
+        "docs/reviews/eva-as-personal-jarvis-arbitration-2026-05-06.md",
+        "docs/reviews/eva-as-personal-jarvis-arch-2026-05-06-0042.md",
+        "docs/reviews/eva-as-personal-jarvis-cross-2026-05-06-0042.md",
+        "docs/reviews/eva-as-personal-jarvis-react-arch-2026-05-06-0050.md",
+        "docs/reviews/eva-as-personal-jarvis-react-cross-2026-05-06-0050.md",
+        "docs/reviews/eva-as-personal-jarvis-round2-cross-2026-05-06-0100.md"
       ],
       "status": "active",
       "since": "2026-05-05T23:35:00Z",
