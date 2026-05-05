@@ -70,6 +70,23 @@ try {
     `pending/dispatched/running 3 stages → failed (got: ${JSON.stringify(failed)})`,
   );
 
+  // 校验 1b (M2 Loop 2): orphan cleanup 写入 failed_reason='orphan_after_restart' + failed_at
+  const orphanRows = handle.db
+    .prepare(
+      `SELECT id, failed_reason, failed_at FROM stage
+       WHERE id IN ('s-pend','s-disp','s-run')
+       ORDER BY id`,
+    )
+    .all() as Array<{ id: string; failed_reason: string | null; failed_at: number | null }>;
+  assert(
+    orphanRows.every((r) => r.failed_reason === "orphan_after_restart"),
+    `Loop 2: all 3 orphans have failed_reason='orphan_after_restart' (got: ${JSON.stringify(orphanRows.map((r) => r.failed_reason))})`,
+  );
+  assert(
+    orphanRows.every((r) => r.failed_at != null && r.failed_at > 0),
+    `Loop 2: all 3 orphans have failed_at timestamp set`,
+  );
+
   // 校验 2: awaiting_review **不动**（合法人审暂停）
   const stillReview = handle.db
     .prepare("SELECT status FROM stage WHERE id = 's-rev'")
