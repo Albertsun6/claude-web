@@ -56,6 +56,18 @@ export interface SchedulerTickResult {
 }
 
 export class EvaScheduler {
+  /**
+   * M2 Loop 6: explicit boot ordering — constructor is **pure** (no DB mutation).
+   * Caller must invoke `.initialize()` once during backend boot before routes
+   * accept ticks. cleanupOrphanStages() is idempotent (Loop 2 first-write-wins
+   * guard), but callers should not rely on repeated initialization — call once.
+   *
+   * v0.5.0 ↔ v0.6.0 boot ordering migration:
+   *   v0.5.0: `new EvaScheduler(db, broadcast)` → cleanup ran in constructor
+   *   v0.6.0: `new EvaScheduler(db, broadcast); scheduler.initialize()`
+   * Production behavior is byte-equivalent (cleanup still runs before any
+   * route accepts traffic), but boot ordering is now visible at the call site.
+   */
   constructor(
     private db: Database.Database,
     private broadcast: (msg: unknown) => void,
@@ -66,6 +78,20 @@ export class EvaScheduler {
      */
     private runSessionFn: RunSessionFn = runSession,
   ) {
+    // pure construction — no side effects (Loop 6)
+  }
+
+  /**
+   * M2 Loop 6: explicit boot step. Backend caller invokes once after constructing
+   * scheduler, before mounting routes that accept ticks. Performs orphan-stage
+   * cleanup (active stages left in pending/dispatched/running by previous
+   * crashed backend run get marked failed with reason='orphan_after_restart').
+   *
+   * Idempotent: cleanupOrphanStages() honors first-write-wins guard (Loop 2),
+   * so calling initialize() twice on the same DB is safe but wasteful.
+   * Callers should call once per scheduler instance per backend boot.
+   */
+  public initialize(): void {
     this.cleanupOrphanStages();
   }
 
@@ -77,8 +103,8 @@ export class EvaScheduler {
    * pending / dispatched / running，但已无进程会推进它。下次 tick 时这些行被
    * STAGE_ACTIVE_STATUSES 检查阻塞 → 死锁。
    *
-   * 修：实例化 EvaScheduler（每次 backend 启动一次）时扫描 active stages，
-   * 标 failed + 广播 stage_changed。awaiting_review 不动（合法人审暂停，不是 orphan）。
+   * 修：backend boot 调用 `initialize()` 时（每次 backend 启动一次，Loop 6 后）扫描 active
+   * stages，标 failed + 广播 stage_changed。awaiting_review 不动（合法人审暂停，不是 orphan）。
    *
    * H14 dispatched 状态特别相关：dispatched 是 ContextBundle 写盘 / createTask 阶段，
    * spawn 真起来前如果 backend 崩了就会留下 dispatched orphan。
@@ -88,12 +114,10 @@ export class EvaScheduler {
    * DB 已修复的真相；客户端重连时应靠轮询 stage 列表 reconcile —— 见 cross M5 列入
    * M2 master plan）。
    *
-   * Boot ordering: 本类在 routes/harness.ts createHarnessRoutes 内实例化，routes 注册
-   * 完成才接受 HTTP tick；构造函数同步跑完 cleanup 才返回，单 backend 单 scheduler 假设
-   * 下不会发生 cleanup 中途有外部 tick 调用 → 不需要额外锁。多实例场景见 M2 master plan。
-   *
-   * 注：本方法 mutates DB —— 不是 pure construction。每次 new EvaScheduler 都跑一次。
-   * cross m1 列入 M2 master plan：以后改成 explicit init() 由 boot 序列调用。
+   * Boot ordering（M2 Loop 6 修订）：本方法由 `initialize()` 调用，初始化由 backend boot
+   * 序列在 routes 注册前显式触发（routes/harness.ts createHarnessRoutes 内）。单 backend
+   * 单 scheduler 假设下，initialize 同步跑完才返回，不会发生 cleanup 中途有外部 tick 调用
+   * → 不需要额外锁。多实例场景见 M2 master plan。
    */
   private cleanupOrphanStages(): void {
     const orphans = this.db

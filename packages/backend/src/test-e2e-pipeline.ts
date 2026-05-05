@@ -155,6 +155,7 @@ async function runOnePipeline(label: string): Promise<PipelineRunResult> {
 
     const mockRunSession = buildMockRunSession(handle);
     const scheduler = new EvaScheduler(handle.db, wrappedBroadcast, mockRunSession);
+    scheduler.initialize();  // Loop 6: explicit boot step
 
     // === Tick 1: strategy ===
     donePromise = new Promise<void>((r) => { resolveDone = r; });

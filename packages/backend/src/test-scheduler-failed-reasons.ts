@@ -67,10 +67,10 @@ try {
 
   // 实例化 scheduler — 不会触发 cleanup（这些 stage 在 active 状态会被 cleanup 标 failed +
   // 'orphan_after_restart'），所以先记录 cleanup 之后的 fallback baseline。
-  console.log("--- Constructing EvaScheduler (will run cleanupOrphanStages) ---");
+  console.log("--- Constructing EvaScheduler + initialize() (Loop 6 — cleanup runs in init) ---");
   const broadcasts: Array<unknown> = [];
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _scheduler = new EvaScheduler(handle.db, (m) => broadcasts.push(m));
+  const scheduler = new EvaScheduler(handle.db, (m) => broadcasts.push(m));
+  scheduler.initialize();  // Loop 6: explicit boot step triggers cleanupOrphanStages
 
   // Cleanup 完后，3 stages 都应是 failed + 'orphan_after_restart'
   const afterCleanup = handle.db
