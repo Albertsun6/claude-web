@@ -1,6 +1,16 @@
 # Eva Worktree 文件锁
 
-并行任务开始前登记占用的核心文件/模块，合并后删行。
+并行任务开始前登记占用的核心文件/模块。**运行中 append-only**；cleanup 时把状态从 `active` 改为 `done` 或 append `released` 行，**永不删历史**（M1 双轨实验 plan §"用户 manual #5"）。
+
+## Active Locks (M1 双轨并行实验，2026-05-05)
+
+| Track | 文件 | 状态 | 时间 |
+|---|---|---|---|
+| Track 1 | packages/backend/src/scheduler.ts:computeNextStage, packages/shared/fixtures/harness/fallback-config.json (agentProfiles), docs/retrospectives/M1-mini2-stage-aware-prompts.md | active | 2026-05-05 16:00 |
+
+> Track 2 在 `~/Desktop/claude-web-mini3` worktree（branch `feat/eva-M1-context-manager-skeleton`）独立 append 自己的行 — 合并 dev 时会出现 WORKTREE_LOCK.md merge，是实验观察点之一。
+
+## Historical Locks（旧版表格 — 早期实践）
 
 | worktree 分支 | 占用文件/模块 | 开始日期 | 状态 |
 |---|---|---|---|
