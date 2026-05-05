@@ -30,6 +30,26 @@ jobs:
       - name: Frontend TypeScript build
         run: pnpm --filter @claude-web/frontend build
 
+      # M2 Loop 7: backend regression + e2e tests in CI gate.
+      # Each test is its own step so GHA UI shows pass/fail granularly.
+      # Tests use mkdtemp for DB + cwd + DATA_DIR (Loop 4 LEARNINGS.md #6),
+      # so no /home/runner persistent state pollution.
+      # better-sqlite3 native binding rebuilds on ubuntu via pnpm install above.
+      - name: Backend harness schema test (Phase 1-7, Loop 6 charter)
+        run: pnpm --filter @claude-web/backend test:harness-schema
+
+      - name: Backend scheduler orphan cleanup test (F + Loop 6 charter)
+        run: pnpm --filter @claude-web/backend test:scheduler-cleanup
+
+      - name: Backend scheduler failed reasons test (Loop 2 distribution)
+        run: pnpm --filter @claude-web/backend test:scheduler-failed-reasons
+
+      - name: Backend e2e happy-path test (Loop 4)
+        run: pnpm --filter @claude-web/backend test:e2e-pipeline
+
+      - name: Backend e2e failure-path test (Loop 5)
+        run: pnpm --filter @claude-web/backend test:e2e-failures
+
       - name: Protocol sync check
         run: |
           BASE=$(git rev-parse HEAD~1 2>/dev/null || echo "")
