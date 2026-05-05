@@ -7,10 +7,17 @@
 // - cross M6: 修测试 setup 顺序，先 methodology 后 stage，避免 FK 错误掩盖 CHECK 测试
 // - BLOCKER-2: 加重启回归用例（重新打开同一 db 不报错且不重跑 migration）
 
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
+import Database from "better-sqlite3";
 import { openHarnessDb, HARNESS_SCHEMA_VERSION } from "./harness-store.js";
+
+// 复制 harness-store.ts 的 MIGRATIONS_DIR 解析（保持一致即可，避免再 export 一份内部常量）
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const MIGRATIONS_DIR = join(__dirname, "migrations");
 
 const EXPECTED_TABLES = [
   "schema_migrations",  // Round 1 BLOCKER-2 修复后新增
@@ -178,6 +185,146 @@ try {
   assert(stillThere?.id === "i1", "data persisted across reopen");
 
   handle2.close();
+
+  // === Phase 3: prod-shape migration v100 → v101（v0.4.5 hot-fix gate）
+  //
+  // v0.4.4 prod 失败的真实场景：harness.db 已在 v100，stage 表 53 行，decision 表 46 行
+  // FK 引用 stage.id。runner 跑 0002 → DROP TABLE stage 触发 "FOREIGN KEY constraint failed"，
+  // backend 启动失败。
+  //
+  // 本阶段在 prod-shape fixture 上重现 + 验证修复：
+  //   1. 用 better-sqlite3 直开 raw db
+  //   2. 手工 bootstrap：bootstrapMigrationsTable + 跑 0001 + 写 schema_migrations 行 + user_version=100
+  //      （≡ v0.4.3 prod 状态）
+  //   3. 种 prod-shape 数据：project + methodology + issue + 10 stages + 5 decisions(stage_id refs)
+  //   4. close → reopen via openHarnessDb → runner 应该跑 0002 成功
+  //   5. 验证：data 完整 + foreign_key_check 空 + dispatched 接受 + 非法 status 拒
+  console.log("\n--- Phase 3: prod-shape migration v100 → v101 (v0.4.5 hot-fix gate) ---");
+
+  const prodPath = join(tmp, "prod-shape.db");
+  {
+    const raw = new Database(prodPath);
+    raw.pragma("journal_mode = WAL");
+    raw.pragma("foreign_keys = ON");
+    raw.exec(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        file        TEXT PRIMARY KEY,
+        target_ver  INTEGER NOT NULL,
+        applied_at  INTEGER NOT NULL
+      )
+    `);
+    const sql0001 = readFileSync(join(MIGRATIONS_DIR, "0001_initial.sql"), "utf-8");
+    const apply0001 = raw.transaction(() => {
+      raw.exec(sql0001);
+      raw.prepare(
+        "INSERT INTO schema_migrations(file, target_ver, applied_at) VALUES(?,?,?)",
+      ).run("0001_initial.sql", 100, Date.now());
+      raw.pragma("user_version = 100");
+    });
+    apply0001();
+
+    // Seed prod-shape：1 project + 1 methodology + 1 issue + 10 stages（10 个 kind 全部覆盖）
+    // + 5 decisions（FK 引用前 5 个 stage.id，正是 prod 触发 schema-level FK 检查的形态）
+    const now = Date.now();
+    raw.prepare(
+      "INSERT INTO methodology(id,stage_kind,version,applies_to,content_ref,approved_by,approved_at) VALUES(?,?,?,?,?,?,?)",
+    ).run("m-prod", "spec", "1.0", "universal", "x", "user", now);
+    raw.prepare(
+      "INSERT INTO harness_project(id,cwd,name,worktree_root,created_at) VALUES(?,?,?,?,?)",
+    ).run("p-prod", "/tmp/prod", "prod", "/tmp/prod/.worktrees", now);
+    raw.prepare(
+      `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    ).run("i-prod", "p-prod", "manual", "prod issue", "body", "[]", "normal", "in_progress", now, now);
+
+    const stageKinds = [
+      "strategy", "discovery", "spec", "compliance", "design",
+      "implement", "test", "review", "release", "observe",
+    ] as const;
+    const insertStage = raw.prepare(
+      `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+       VALUES(?,?,?,?,?,?,?,?,?)`,
+    );
+    for (const kind of stageKinds) {
+      insertStage.run(`s-${kind}`, "i-prod", kind, "approved", "heavy", 1, "PM", "m-prod", now);
+    }
+
+    const insertDecision = raw.prepare(
+      `INSERT INTO decision(id,stage_id,requested_by,options_json,created_at) VALUES(?,?,?,?,?)`,
+    );
+    for (const kind of stageKinds.slice(0, 5)) {
+      insertDecision.run(`d-${kind}`, `s-${kind}`, "user", "[]", now);
+    }
+    raw.close();
+  }
+
+  // 现在打开 prod-shape DB，runner 应该把 0002 跑成功
+  const prodHandle = openHarnessDb({ dbPath: prodPath });
+  assert(
+    prodHandle.schemaVersion === HARNESS_SCHEMA_VERSION,
+    `prod-shape DB upgraded to user_version=${HARNESS_SCHEMA_VERSION}`,
+  );
+
+  // 数据完整：10 stages 全部保留 + kind/status 一致
+  const stagesAfter = prodHandle.db
+    .prepare("SELECT id, kind, status FROM stage ORDER BY id")
+    .all() as Array<{ id: string; kind: string; status: string }>;
+  assert(
+    stagesAfter.length === 10 && stagesAfter.every((s) => s.status === "approved"),
+    `prod-shape stages preserved (${stagesAfter.length}/10 with status='approved')`,
+  );
+
+  // FK 完整性 — 决定性 gate（cursor-agent re-review 重点）
+  const violations = prodHandle.db.pragma("foreign_key_check") as Array<unknown>;
+  assert(
+    Array.isArray(violations) && violations.length === 0,
+    `foreign_key_check returns no violations after schema-rebuild`,
+  );
+
+  // dispatched 现在被 CHECK 接受
+  const issueId2 = "i-prod-2";
+  prodHandle.db.prepare(
+    `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+  ).run(issueId2, "p-prod", "manual", "issue 2", "x", "[]", "normal", "in_progress", Date.now(), Date.now());
+  prodHandle.db.prepare(
+    `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+     VALUES(?,?,?,?,?,?,?,?,?)`,
+  ).run("s-disp", issueId2, "strategy", "dispatched", "heavy", 1, "PM", "m-prod", Date.now());
+  const dispCount = prodHandle.db
+    .prepare("SELECT count(*) as n FROM stage WHERE status='dispatched'")
+    .get() as { n: number };
+  assert(dispCount.n === 1, `stage status='dispatched' accepted by new CHECK`);
+
+  // 非法 status 仍被拒
+  let invalidThrew = false;
+  try {
+    prodHandle.db.prepare(
+      `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+       VALUES(?,?,?,?,?,?,?,?,?)`,
+    ).run("s-bad", issueId2, "discovery", "INVALID", "heavy", 1, "PM", "m-prod", Date.now());
+  } catch (e: any) {
+    invalidThrew = String(e.message || e).includes("CHECK");
+  }
+  assert(invalidThrew, `invalid stage.status still rejected by CHECK`);
+
+  // FK 完整性 again（dispatched 行 + 5 decisions 无变化）
+  const violations2 = prodHandle.db.pragma("foreign_key_check") as Array<unknown>;
+  assert(
+    Array.isArray(violations2) && violations2.length === 0,
+    `foreign_key_check empty after additional inserts`,
+  );
+
+  // 5 decisions FK 引用应仍然 valid（stage.id 名字保留）
+  const decRefs = prodHandle.db
+    .prepare(`SELECT d.id, s.kind FROM decision d JOIN stage s ON s.id = d.stage_id ORDER BY d.id`)
+    .all() as Array<{ id: string; kind: string }>;
+  assert(
+    decRefs.length === 5,
+    `decision.stage_id FK still resolves to stage rows (${decRefs.length}/5)`,
+  );
+
+  prodHandle.close();
 
   console.log("\nharness schema OK ✅");
 } finally {

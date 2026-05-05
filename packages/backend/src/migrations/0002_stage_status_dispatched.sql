@@ -1,4 +1,5 @@
 -- TARGET_VERSION = 101
+-- MIGRATION_MODE = schema-rebuild
 --
 -- H14 v1: stage.status 加 'dispatched' 中间态（M2 first wave 后续）。
 --
@@ -12,20 +13,34 @@
 --   新：pending → dispatched → running → approved/rejected/skipped/failed
 --                            ↘ failed
 --
--- Migration 策略（SQLite 不能 ALTER CHECK，必须 rebuild table 模式）：
---   PRAGMA defer_foreign_keys=ON  (内 transaction 推迟 FK 检查到 commit)
---   CREATE TABLE stage_new (含新 CHECK)
---   INSERT INTO stage_new SELECT * FROM stage  (拷数据)
---   DROP TABLE stage  (FK ref from task/artifact/review_verdict/decision 暂时悬空)
---   ALTER TABLE stage_new RENAME TO stage  (FK ref 重绑同名表)
---   重建 index (idx_stage_issue_kind + idx_stage_running)
---   commit 时 SQLite 校验 FK 完整性 — 数据不变 + 名字不变 = 满足
+-- v0.4.4 → v0.4.5 hot-fix（重要历史）：
+-- 原版用 `PRAGMA defer_foreign_keys = ON` 期望让 DROP TABLE stage 通过，但 SQLite 的
+-- defer_foreign_keys 只推迟 row-level immediate 检查，**不影响 DROP TABLE 的 schema-level
+-- FK 引用检查**。prod 真实数据下（53 stages + 46 decisions FK 引用 stage.id）启动 backend
+-- 触发 "FOREIGN KEY constraint failed"，promote 失败。详见
+-- [docs/retrospectives/M2-h14-prod-migration-failure.md](../../../../docs/retrospectives/M2-h14-prod-migration-failure.md)。
 --
--- harness-store.ts migration runner 把整段包在 db.transaction()，原子。defer_foreign_keys
--- 是 SQLite 推荐的 transaction-scope FK 推迟方式（不像 PRAGMA foreign_keys=OFF 必须
--- 在 transaction 外执行）。
-
-PRAGMA defer_foreign_keys = ON;
+-- Migration 策略（修复版，SQLite 12-step ALTER TABLE recipe）：
+--   1. MIGRATION_MODE = schema-rebuild header → harness-store.ts runner 在 transaction 外
+--      `PRAGMA foreign_keys = OFF`（SQLite 要求 FK pragma 必须在 transaction 外切）
+--   2. 本 SQL 文件（runner 包在 transaction 内）：
+--        CREATE TABLE stage_new (含新 CHECK)
+--        INSERT INTO stage_new SELECT * FROM stage（拷数据）
+--        DROP TABLE stage（FK 已 OFF，schema-level 检查跳过；child table 的 FK ref 暂时悬空）
+--        ALTER TABLE stage_new RENAME TO stage（SQLite 3.25+ 自动重新绑定其他表的 FK ref）
+--        重建 index
+--   3. runner 在 transaction 后 `PRAGMA foreign_key_check` → 验证 FK 完整性（数据不变 +
+--      名字不变 → child rows 仍指向有效父行 → 应返回空）
+--   4. runner finally 恢复 `PRAGMA foreign_keys = ON`
+--
+-- Rollback 边界（cross m3 应用）：
+-- v101 是 forward-only schema 步骤。`scripts/rollback.sh v0.4.3` 会回滚代码 + 重跑 pnpm
+-- install + restart backend，但**不会** down-migrate harness.db 的 user_version 或
+-- stage.status CHECK enum。回滚到 v0.4.3 仅在以下条件下安全：
+--   (a) 当前 DB 没有 status='dispatched' 的 stage 行（v0.4.3 代码 read 这种行不会 crash，
+--       但 enum 推进 / scheduler 选取逻辑会忽略，行为不可预期）
+--   (b) 没有依赖 protocol 1.1 wire 字段的 in-flight 客户端
+-- 想要真正回滚 schema → manual 从 promote 前的 backup 恢复 ~/.claude-web/harness.db。
 
 -- 新 stage 表 — CHECK 约束加 'dispatched'
 CREATE TABLE stage_new (
