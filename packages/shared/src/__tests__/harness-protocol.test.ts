@@ -27,6 +27,7 @@ import {
   AuditLogEntrySchema,
   HarnessEventSchema,
   StageKindSchema,
+  StageStatusSchema,
 } from "../harness-protocol";
 import type { z } from "zod";
 
@@ -59,6 +60,15 @@ describe("harness-protocol — enum lock (Round 2 arch #4 refinement)", () => {
       "implement", "test", "review", "release", "observe",
     ]);
   });
+
+  // H14 v1 (M2 schema v101): dispatched 中间态加在 pending 后、running 前。
+  // 顺序是状态机时序——回退顺序意味着语义反转，必须 lock。
+  it("StageStatus has exactly 8 values in fixed order (H14 v1)", () => {
+    expect(StageStatusSchema.options).toEqual([
+      "pending", "dispatched", "running", "awaiting_review",
+      "approved", "rejected", "skipped", "failed",
+    ]);
+  });
 });
 
 describe("harness-protocol — entity fixtures round-trip", () => {
@@ -68,6 +78,7 @@ describe("harness-protocol — entity fixtures round-trip", () => {
     { file: "issue.json", schema: IssueDtoSchema, name: "Issue" },
     { file: "idea-capture.json", schema: IdeaCaptureDtoSchema, name: "IdeaCapture" },
     { file: "stage.json", schema: StageDtoSchema, name: "Stage" },
+    { file: "stage-dispatched.json", schema: StageDtoSchema, name: "Stage (dispatched, H14 v1)" },
     { file: "methodology.json", schema: MethodologyDtoSchema, name: "Methodology" },
     { file: "task.json", schema: TaskDtoSchema, name: "Task" },
     { file: "context-bundle.json", schema: ContextBundleDtoSchema, name: "ContextBundle" },
