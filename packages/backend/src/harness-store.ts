@@ -77,8 +77,13 @@ export interface HarnessDb {
  * 适用：rebuild 父表来改 CHECK enum / 字段类型等，父表被子表 FK 引用时 schema-level
  * 检查会阻塞 DROP TABLE（v0.4.4 prod 失败的根因）。
  */
-export function openHarnessDb(opts: { dbPath?: string } = {}): HarnessDb {
+export function openHarnessDb(
+  opts: { dbPath?: string; migrationsDir?: string } = {},
+): HarnessDb {
   const path = opts.dbPath ?? DB_PATH;
+  // migrationsDir 默认指向 packages/backend/src/migrations；test 用 inject 路径跑
+  // broken / scenario migrations，避免污染源码目录或动态写文件到 fixed dir。
+  const migrationsDir = opts.migrationsDir ?? MIGRATIONS_DIR;
   mkdirSync(dirname(path), { recursive: true });
 
   const db = new Database(path);
@@ -86,7 +91,7 @@ export function openHarnessDb(opts: { dbPath?: string } = {}): HarnessDb {
   db.pragma("foreign_keys = ON");
 
   bootstrapMigrationsTable(db);
-  runPendingMigrations(db);
+  runPendingMigrations(db, migrationsDir);
 
   const schemaVersion = db.pragma("user_version", { simple: true }) as number;
 
@@ -108,8 +113,8 @@ function bootstrapMigrationsTable(db: Database.Database): void {
   `);
 }
 
-function runPendingMigrations(db: Database.Database): void {
-  const files = readdirSync(MIGRATIONS_DIR)
+function runPendingMigrations(db: Database.Database, migrationsDir: string): void {
+  const files = readdirSync(migrationsDir)
     .filter((f) => /^\d{4}_.*\.sql$/.test(f))
     .sort();
 
@@ -120,7 +125,7 @@ function runPendingMigrations(db: Database.Database): void {
   for (const file of files) {
     if (applied.has(file)) continue;
 
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
+    const sql = readFileSync(join(migrationsDir, file), "utf-8");
     const header = sql.split("\n").slice(0, 20).join("\n");
 
     const tv = TARGET_VERSION_RE.exec(header);

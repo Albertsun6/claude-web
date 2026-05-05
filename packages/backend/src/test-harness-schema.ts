@@ -7,7 +7,7 @@
 // - cross M6: 修测试 setup 顺序，先 methodology 后 stage，避免 FK 错误掩盖 CHECK 测试
 // - BLOCKER-2: 加重启回归用例（重新打开同一 db 不报错且不重跑 migration）
 
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -325,6 +325,157 @@ try {
   );
 
   prodHandle.close();
+
+  // === Phase 4: 负面 — schema-rebuild 留 FK violations 时 metadata 不应推进
+  //
+  // H14 hot-fix retrospective M2 follow-up：cross-review m2 finding —— 验证 runner
+  // 在 schema-rebuild migration 留下 FK 完整性问题时，schema_migrations 不写、
+  // user_version 不动、下次启动重试。
+  //
+  // 流程：
+  //   1. tmp migrationsDir 写入真实 0001 + 故意 broken 0002（rebuild 但只拷一半 stage rows）
+  //   2. 用 migrationsDir option 打开 DB → 0001 应用 + 种 prod-shape 数据（5 stages + 5 decisions）
+  //   3. 关 DB
+  //   4. 重新打开同 DB 同 migrationsDir → runner 跑 0002 → foreign_key_check 检测到 violations
+  //      → throw → transaction 回滚 → schema_migrations 不写 + user_version 仍 100
+  //   5. 第三次打开（仅校验）→ 仍 v100，确认状态稳定，下次启动仍可重试
+  console.log("\n--- Phase 4: negative — runner rolls back on FK violation (H follow-up) ---");
+
+  const negPath = join(tmp, "neg-shape.db");
+  const negMigrationsDir = join(tmp, "neg-migrations");
+  const realMigrationsDir = MIGRATIONS_DIR; // 引用真实 0001
+  // 创建 tmp migrations dir
+  rmSync(negMigrationsDir, { recursive: true, force: true });
+  mkdirSync(negMigrationsDir, { recursive: true });
+  copyFileSync(join(realMigrationsDir, "0001_initial.sql"), join(negMigrationsDir, "0001_initial.sql"));
+
+  // broken 0002：schema-rebuild + 仅拷 ROWID 奇数的 stage rows，造成偶数 ROWID 对应的
+  // decision/task FK 引用悬空。foreign_key_check 必须报告 violations，runner throw + rollback。
+  const brokenSql = `-- TARGET_VERSION = 102
+-- MIGRATION_MODE = schema-rebuild
+--
+-- INTENTIONALLY BROKEN — used by Phase 4 negative test only.
+-- Pattern: rebuild stage but copy ONLY half the rows (奇数 ROWID), 让 decision FK 悬空。
+
+CREATE TABLE stage_new (
+  id                       TEXT PRIMARY KEY,
+  issue_id                 TEXT NOT NULL REFERENCES issue(id),
+  kind                     TEXT NOT NULL,
+  status                   TEXT NOT NULL,
+  weight                   TEXT NOT NULL,
+  gate_required            INTEGER NOT NULL DEFAULT 1,
+  assigned_agent_profile   TEXT NOT NULL,
+  methodology_id           TEXT NOT NULL REFERENCES methodology(id),
+  input_artifact_ids_json  TEXT NOT NULL DEFAULT '[]',
+  output_artifact_ids_json TEXT NOT NULL DEFAULT '[]',
+  review_verdict_ids_json  TEXT NOT NULL DEFAULT '[]',
+  started_at               INTEGER,
+  ended_at                 INTEGER,
+  created_at               INTEGER NOT NULL
+);
+
+INSERT INTO stage_new
+  (id, issue_id, kind, status, weight, gate_required, assigned_agent_profile,
+   methodology_id, input_artifact_ids_json, output_artifact_ids_json,
+   review_verdict_ids_json, started_at, ended_at, created_at)
+SELECT id, issue_id, kind, status, weight, gate_required, assigned_agent_profile,
+       methodology_id, input_artifact_ids_json, output_artifact_ids_json,
+       review_verdict_ids_json, started_at, ended_at, created_at
+FROM stage
+WHERE ROWID % 2 = 1;
+
+DROP TABLE stage;
+ALTER TABLE stage_new RENAME TO stage;
+
+CREATE UNIQUE INDEX idx_stage_issue_kind ON stage(issue_id, kind);
+CREATE INDEX idx_stage_running ON stage(status) WHERE status = 'running';
+`;
+
+  // 关键：先种 prod-shape 数据（这里走 0001 only），再写 broken 0002 到同 dir 重开
+  // Step 1: 用 migrationsDir 打开 DB（仅 0001 在 dir 里）→ schema 全建好
+  {
+    const handle = openHarnessDb({ dbPath: negPath, migrationsDir: negMigrationsDir });
+    assert(handle.schemaVersion === 100, `step 1: schemaVersion=100 (only 0001 applied)`);
+
+    const now = Date.now();
+    handle.db.prepare(
+      "INSERT INTO methodology(id,stage_kind,version,applies_to,content_ref,approved_by,approved_at) VALUES(?,?,?,?,?,?,?)",
+    ).run("m-neg", "spec", "1.0", "universal", "x", "user", now);
+    handle.db.prepare(
+      "INSERT INTO harness_project(id,cwd,name,worktree_root,created_at) VALUES(?,?,?,?,?)",
+    ).run("p-neg", "/tmp/neg", "neg", "/tmp/neg/.worktrees", now);
+    handle.db.prepare(
+      `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    ).run("i-neg", "p-neg", "manual", "neg issue", "body", "[]", "normal", "in_progress", now, now);
+
+    const insertStage = handle.db.prepare(
+      `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+       VALUES(?,?,?,?,?,?,?,?,?)`,
+    );
+    const stageKinds = ["strategy", "discovery", "spec", "compliance", "design"] as const;
+    for (const kind of stageKinds) {
+      insertStage.run(`s-neg-${kind}`, "i-neg", kind, "approved", "heavy", 1, "PM", "m-neg", now);
+    }
+
+    const insertDecision = handle.db.prepare(
+      `INSERT INTO decision(id,stage_id,requested_by,options_json,created_at) VALUES(?,?,?,?,?)`,
+    );
+    for (const kind of stageKinds) {
+      insertDecision.run(`d-neg-${kind}`, `s-neg-${kind}`, "user", "[]", now);
+    }
+    handle.close();
+  }
+
+  // Step 2: 把 broken 0002 写进同 migrationsDir
+  writeFileSync(join(negMigrationsDir, "0002_bad_rebuild.sql"), brokenSql);
+
+  // Step 3: 重新打开 DB → runner 跑 broken 0002 → 应该 throw
+  let threw = false;
+  let errMsg = "";
+  try {
+    const handle = openHarnessDb({ dbPath: negPath, migrationsDir: negMigrationsDir });
+    handle.close(); // 不应该到这
+  } catch (e: any) {
+    threw = true;
+    errMsg = String(e.message || e);
+  }
+  assert(threw, `broken 0002 throws on reopen (err: ${errMsg.slice(0, 80)})`);
+  assert(
+    /FK violations|foreign_key/i.test(errMsg),
+    `error message mentions FK violation (got: ${errMsg.slice(0, 80)})`,
+  );
+
+  // Step 4: 第三次打开仅 inspect — user_version 必须仍 100，schema_migrations 仅 0001
+  // 但每次 open 都会重新尝试 broken 0002 并 throw。要校验 metadata，得用 raw better-sqlite3
+  // 直接 SELECT（不走 runner）。这恰好也证明了：broken 状态没有持久化，下次重启仍可重试。
+  {
+    const raw = new Database(negPath);
+    raw.pragma("foreign_keys = ON");
+    const userVersion = raw.pragma("user_version", { simple: true }) as number;
+    assert(userVersion === 100, `step 3: user_version still 100 after broken migration (was ${userVersion})`);
+
+    const applied = raw
+      .prepare("SELECT file FROM schema_migrations ORDER BY file")
+      .all()
+      .map((r: any) => r.file as string);
+    assert(
+      applied.length === 1 && applied[0] === "0001_initial.sql",
+      `step 3: schema_migrations only records 0001 (got: ${JSON.stringify(applied)})`,
+    );
+
+    // 验证 stage 数据完整（5 行未被 broken rebuild 偷走 — transaction 回滚正确）
+    const stageCount = raw.prepare("SELECT count(*) as n FROM stage").get() as { n: number };
+    assert(stageCount.n === 5, `step 3: stage rows preserved across rolled-back rebuild (got: ${stageCount.n})`);
+
+    // 验证 FK 仍然完整：5 decisions 仍能 JOIN 到 5 stages
+    const fkCount = raw.prepare(
+      `SELECT count(*) as n FROM decision d JOIN stage s ON s.id = d.stage_id`,
+    ).get() as { n: number };
+    assert(fkCount.n === 5, `step 3: decision FK refs intact (got: ${fkCount.n})`);
+
+    raw.close();
+  }
 
   console.log("\nharness schema OK ✅");
 } finally {
