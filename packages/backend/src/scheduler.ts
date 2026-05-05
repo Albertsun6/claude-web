@@ -11,13 +11,21 @@
 
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { runSession } from "./cli-runner.js";
 import { getHarnessConfig } from "./harness-config.js";
 import { buildContextBundle } from "./context-manager.js";
 import {
+  createArtifact,
   listIssues, listStages, createStage, createTask, setStageStatus, updateIssueStatus,
   type IssueRow, type StageRow,
 } from "./harness-queries.js";
+
+/** Cap spec.md content size when harvesting (M2 v1 3.2-A')。
+ *  Char-level (cross m1 修：实际 .length 是 JS chars 不是 UTF-8 bytes — rename for clarity)。
+ *  > 16384 chars 的 spec 不正常，先削，记到 audit metadata。M3 上 token-aware budget 时去掉。 */
+const SPEC_HARVEST_MAX_CHARS = 16384;
 
 // Stage kind → agentProfile.stage 映射（M1 只走两段）
 const STAGE_SEQUENCE: StageKind[] = ["strategy", "implement"];
@@ -227,7 +235,14 @@ export class EvaScheduler {
       },
     });
 
-    // Stage 完成：用 "approved" 表示 M1 无 review gate 的完成状态
+    // M2 v1 (3.2-A')：strategy stage 必须产出 spec artifact 才能 approved（cross M1 修）
+    // 之前是 best-effort + 只 warn — 但 strategy 的 declared output 就是 spec，
+    // 缺 spec 还 approved 会让 implement 的 mustHave 才 fail，制造"过 gate 但流水线不可执行"。
+    // 现在改 fail-loud：harvest 失败 → throw → spawnAgent catch 把 stage 标 failed。
+    if (stage.kind === "strategy") {
+      this.harvestSpecArtifact(issue, stage, cwd);
+    }
+
     setStageStatus(this.db, stage.id, "approved");
 
     this.broadcast({
@@ -235,5 +250,33 @@ export class EvaScheduler {
       kind: "stage_done",
       payload: { issueId: issue.id, stageId: stage.id, taskId },
     });
+  }
+
+  /** Harvest strategy stage's spec.md output to harness_artifact (M2 v1 3.2-A', cross M1 修)。
+   *  **Fail-loud**：spec 缺失或 createArtifact 抛错 → throw，让 spawnAgent catch 把 stage 标 failed。
+   *  这跟 implement mustHave=['spec'] 配对：strategy approved ⟹ spec exists ⟹ implement 不会 build-time fail。 */
+  private harvestSpecArtifact(issue: IssueRow, stage: StageRow, cwd: string): void {
+    const specPath = join(cwd, "docs", "specs", `${issue.id}.md`);
+    if (!existsSync(specPath)) {
+      throw new Error(
+        `strategy stage ${stage.id.slice(0, 8)} produced no spec at ${specPath}. ` +
+          "Re-tick after agent writes the file, or mark issue wont_fix.",
+      );
+    }
+    const raw = readFileSync(specPath, "utf-8");
+    // Cap content (cross m1 修：char-level cap — 与 ContextManager TOTAL_CHAR_BUDGET 用同语义)
+    const content = raw.length > SPEC_HARVEST_MAX_CHARS
+      ? raw.slice(0, SPEC_HARVEST_MAX_CHARS) + `\n…[truncated, original ${raw.length} chars]`
+      : raw;
+    const artifact = createArtifact(this.db, {
+      stageId: stage.id,
+      kind: "spec",
+      ref: `docs/specs/${issue.id}.md`,
+      contentText: content,
+      metadata: { harvested_from: specPath, original_chars: raw.length },
+    });
+    console.log(
+      `[EvaScheduler] strategy ${stage.id} → spec artifact ${artifact.id.slice(0, 8)} (${content.length} chars, ref=${artifact.ref})`,
+    );
   }
 }
