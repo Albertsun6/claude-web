@@ -14,7 +14,15 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ModelHint, modelIdForHint } from "@claude-web/shared";
-import { runSession } from "./cli-runner.js";
+import { runSession, type RunSessionParams } from "./cli-runner.js";
+
+/**
+ * M2 Loop 4: spawnAgent 通过此函数类型调用 CLI runtime；e2e test 注入 mock 版本，
+ * 跳过真 Claude CLI subprocess（避免烧 token + 不可重复）。默认值 = 真实 runSession。
+ *
+ * 必须保持与 cli-runner.ts `runSession` 同签名 — 否则注入会 type-narrow 失败。
+ */
+export type RunSessionFn = (p: RunSessionParams) => Promise<void>;
 import { getHarnessConfig } from "./harness-config.js";
 import { buildContextBundle } from "./context-manager.js";
 import {
@@ -51,6 +59,12 @@ export class EvaScheduler {
   constructor(
     private db: Database.Database,
     private broadcast: (msg: unknown) => void,
+    /**
+     * M2 Loop 4: optional CLI runtime fn 注入。Default = 真 runSession（spawn claude CLI）。
+     * e2e test 注入 mock fn，跳过真 spawn，验证 scheduler 状态机端到端不调真 CLI。
+     * Production 用法不传第三参，行为与 v0.5.0 完全一致。
+     */
+    private runSessionFn: RunSessionFn = runSession,
   ) {
     this.cleanupOrphanStages();
   }
@@ -326,8 +340,9 @@ export class EvaScheduler {
     // Phase B — CLI 执行：runSession spawn claude CLI subprocess
     // M1: bypassPermissions — scheduler 无交互 UI，无法走 permission hub。
     // M2 改造点：注册 scheduler permission channel，广播 decision_requested 事件。
+    // M2 Loop 4: 通过 this.runSessionFn 间接调用，e2e test 可注入 mock 版本（默认真）。
     try {
-      await runSession({
+      await this.runSessionFn({
         prompt: bundle.prompt,
         cwd,
         model: modelClaudeId as any,

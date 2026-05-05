@@ -15,6 +15,7 @@
     "test:harness-schema": "tsx src/test-harness-schema.ts",
     "test:scheduler-cleanup": "tsx src/test-scheduler-orphan-cleanup.ts",
     "test:scheduler-failed-reasons": "tsx src/test-scheduler-failed-reasons.ts",
+    "test:e2e-pipeline": "tsx src/test-e2e-pipeline.ts",
     "test:inbox-concurrent": "tsx src/test-inbox-concurrent.ts"
   },
   "dependencies": {

@@ -93,6 +93,7 @@
 | **M2 Loop 1 — failed_reason + failed_at additive schema** | [retrospectives/M2-Loop1-failed-reason-schema.md](retrospectives/M2-Loop1-failed-reason-schema.md) | ✅ **ship**（2026-05-05，schema v102 additive；M2 master plan v2 loop-by-loop approval 第一圈，charter compliance held，cross-review 4.8/5 0 major）|
 | **M2 Loop 2 — failed_reason write paths in scheduler catch** | [retrospectives/M2-Loop2-failed-reason-write-paths.md](retrospectives/M2-Loop2-failed-reason-write-paths.md) | ✅ **ship**（2026-05-06，5 catch path + setStageFailed helper + 4 canonical reasons distribution-locked；charter held，cross-review 4.6/5 0 major；Loop 3 trigger 满足）|
 | **M2 Loop 3 — minimal skip API** | [retrospectives/M2-Loop3-minimal-skip-api.md](retrospectives/M2-Loop3-minimal-skip-api.md) | ✅ **ship**（2026-05-06，POST /stages/:id/skip failed→skipped only + 23 项 invariant/charter assertion + e2e dogfood 4/4；charter held，cross-review 4.64/5 0 major；M2 #1 pipeline stability coverage 推到 ~40-45%）|
+| **M2 Loop 4 — e2e reproducible pipeline test** | [retrospectives/M2-Loop4-e2e-pipeline-test.md](retrospectives/M2-Loop4-e2e-pipeline-test.md) | ✅ **ship**（2026-05-06，scheduler 注入 runSessionFn + 27 项 e2e assertion + reproducibility check + audit isolation 修真 prod 污染；cross-review 1B+3M+2m 全应用；M2 #1 推到 ~52-56%）|
 | M2 真 agent + dogfood | retrospectives/M2.md | — |
 | M3 质量与可观测 | retrospectives/M3.md | — |
 | M4 方法论沉淀 | retrospectives/M4.md | — |

@@ -43,3 +43,12 @@
 - **规则**：stage 状态机过滤时必须同时排除 `done` 和 `running`，防止并发 tick 对同一 Issue 重复 spawn
 - **边界**：如果有数据库行锁或幂等性保证可以替代（M2 ResourceLock），届时可放宽；M1 骨架必须在内存层面防止
 
+## 2026-05-06 (M2 Loop 4 e2e pipeline)
+
+### 6. 使用 DATA_DIR 的测试必须在模块 import 前隔离 CLAUDE_WEB_DATA_DIR
+
+- **来源**：m2-loop4-e2e-pipeline-cross-2026-05-06-0032.md B1
+- **触发场景**：任何 e2e / fixture test 会触发 `harness-queries.audit()`、telemetry、cache、projects store 等模块级 data-dir 写入
+- **规则**：如果被测模块在 import 时读取 `DATA_DIR`，测试必须用 bootstrap entry 或 dynamic import，在 import 前设置 `CLAUDE_WEB_DATA_DIR` 指向临时目录；只给 DB 传临时路径不够
+- **边界**：纯内存单测或只读测试不适用；如果生产代码显式支持路径注入，也可以用注入替代 env 隔离
+
