@@ -99,9 +99,9 @@
         "docs/reviews/eva-as-personal-jarvis-react-cross-2026-05-06-0050.md",
         "docs/reviews/eva-as-personal-jarvis-round2-cross-2026-05-06-0100.md"
       ],
-      "status": "active",
+      "status": "done",
       "since": "2026-05-05T23:35:00Z",
-      "note": "doc-only worktree. 不分配 port/dataDir。短期 + 长期两份 proposal，走 harness-review-workflow proposal mode 三相评审到收敛。与 M2 loop2+ 并行进行。"
+      "note": "doc-only worktree. PR #36 → dev（eva.json wildcard→显式路径）后收尾：status=done，本地 ~/Desktop/claude-web-jarvis 已 git worktree remove。提案与 reviews 已合入 dev。"
     }
   ]
 }
