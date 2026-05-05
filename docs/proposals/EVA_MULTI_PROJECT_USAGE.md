@@ -60,7 +60,7 @@
 
 ---
 
-## 3. 失败模式清单（v0.2 扩到 15 条，含 phase 2 揭示的 7 条新盲区）
+## 3. 失败模式清单（v0.2 扩到 15 个主题 / 16 个条目，含 F3 拆 a/b 业务子领域 + phase 2 揭示的 7 条新盲区）
 
 | # | 失败模式 | 出处 / 事实证据 | 缓解（对应 §5 P0/P1/P2） |
 |---|---|---|---|
@@ -415,7 +415,7 @@
 
 ### 7.1 在 [docs/HARNESS_RISKS.md](../HARNESS_RISKS.md) 新增
 
-加 §8 "多项目使用风险"组，含 **15 条**（v0.1 8 条扩到 v0.2 15 条）：
+加 §8 "多项目使用风险"组，含 **15 个主题 / 16 个条目**（v0.1 8 条扩到 v0.2 含 R8.3 拆 a/b）：
 
 - R8.1 凭据混杂（cli-runner.ts:80 `env: process.env`）→ P0-1
 - R8.2 不可逆操作误触 → P0-2
@@ -436,16 +436,16 @@
 
 ### 7.2 在 [docs/IDEAS.md](../IDEAS.md) 新增
 
-在 Borrow 池 H 段后新增 H18-H25：
+在 Borrow 池 H 段后新增 **H19-H26**（H18 已被 Provider Runtime Matrix 占用）：
 
-- **H18** spawn env 白名单 + injectEnv denylist → P0-1（⭐⭐⭐ 必做）
-- **H19** prod-guard.mjs + spike 前置 + 黑名单单源真相 → P0-2（⭐⭐⭐ 必做）
-- **H20** harness_project domain_profile + projects.json 同步规则 → P0-4
-- **H21** Scheduler per-project rate limit → P1-1
-- **H22** iOS 项目维度抽象（拆 P1-2a + P1-2b）→ P1-2
-- **H23** PreToolUse hook deny 优先级 spike → P0-2-spike（前置 1 天）
-- **H24** Swift Codable / TS Zod 跨端 enum graceful fallback → K12
-- **H25** harness.db 三层备份（覆盖范围 + 完整性 + 可恢复性）→ P1-3
+- **H19** spawn env 白名单 + injectEnv denylist → P0-1（⭐⭐⭐ 必做）
+- **H20** prod-guard.mjs + spike 前置 + 黑名单单源真相 → P0-2（⭐⭐⭐ 必做）
+- **H21** harness_project domain_profile + projects.json 同步规则 → P0-4
+- **H22** Scheduler per-project rate limit → P1-1
+- **H23** iOS 项目维度抽象（拆 P1-2a + P1-2b）→ P1-2
+- **H24** PreToolUse hook deny 优先级 spike → P0-2-spike（前置 1 天）
+- **H25** Swift Codable / TS Zod 跨端 enum graceful fallback → K12
+- **H26** harness.db 三层备份（覆盖范围 + 完整性 + 可恢复性）→ P1-3
 
 ### 7.3 在 [docs/HARNESS_ROADMAP.md](../HARNESS_ROADMAP.md) 修订
 
@@ -642,8 +642,8 @@ Phase 1+2+3 review trail：
 
 按 §7 合并建议：
 
-- [docs/HARNESS_RISKS.md](../HARNESS_RISKS.md) 加 §8（R8.1-R8.15 共 15 条）
-- [docs/IDEAS.md](../IDEAS.md) 加 H18-H25 共 8 条
+- [docs/HARNESS_RISKS.md](../HARNESS_RISKS.md) 加 §8（R8.1-R8.15 共 15 个主题 / 16 个条目，含 R8.3 拆 a/b）
+- [docs/IDEAS.md](../IDEAS.md) 加 H19-H26 共 8 条（H18 已被 Provider Runtime Matrix 占用）
 - [docs/HARNESS_ROADMAP.md](../HARNESS_ROADMAP.md) §0 #16 / #17 加注 + §0 加新原则 #23
 - [docs/HARNESS_DATA_MODEL.md](../HARNESS_DATA_MODEL.md) §1.1 / §1.6 / §2 修订
 - [docs/HARNESS_INDEX.md](../HARNESS_INDEX.md) 加本 proposal 入口

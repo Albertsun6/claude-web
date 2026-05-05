@@ -50,9 +50,24 @@ CREATE TABLE harness_project (
   default_branch  TEXT NOT NULL DEFAULT 'main',
   worktree_root   TEXT NOT NULL,        -- 例：<cwd>/.worktrees
   harness_enabled INTEGER DEFAULT 0,    -- 是否启用 harness 流水线
-  created_at      INTEGER NOT NULL
+  created_at      INTEGER NOT NULL,
+
+  -- v0.3 新增（0004 additive migration v103，源自 EVA_MULTI_PROJECT_USAGE.md §5 P0-4a）
+  -- 5 选 enum: software-enterprise|software-library|software-cli|infra-script|dogfood-self
+  -- migration 期 nullable + backfill；新建 API 强制必传
+  -- 用户拍板 U1-A: business_domain 进 PM spec 必填字段（不进 schema），3-5 个企业项目实践后再考虑升 schema
+  -- 用户拍板 U2-C: legacy backfill = 'software-enterprise' + needs_user_review flag
+  domain_profile      TEXT,
+  needs_user_review   INTEGER NOT NULL DEFAULT 0  -- 1 = legacy backfill 待用户确认 domain_profile
 );
 ```
+
+**projects.json ↔ harness_project 同步规则**（v0.3 新增）：
+- iOS POST `/api/projects` 时 backend 同步 INSERT 一行到 `harness_project`（cwd UNIQUE 已保证幂等）
+- 老 iOS 不传 domain_profile → backend log warning + INSERT 时 default `'software-enterprise'` + 设 `needs_user_review = 1`
+- minClientVersion 字段保护新建 API 强制传 domain_profile（低版本 picker 显示但不能创建非 default project）
+
+详见 [EVA_MULTI_PROJECT_USAGE.md §5 P0-4 跨端契约段](proposals/EVA_MULTI_PROJECT_USAGE.md)。
 
 ### 1.2 Initiative（战略目标）
 
@@ -164,7 +179,11 @@ CREATE TABLE methodology (
   id            TEXT PRIMARY KEY,
   stage_kind    TEXT NOT NULL,
   version       TEXT NOT NULL,    -- semver
-  applies_to    TEXT NOT NULL,    -- claude-web|enterprise-admin|universal
+  -- v1.0: ('claude-web','enterprise-admin','universal')
+  -- v0.3 0005 schema-rebuild migration v200: ('software-enterprise','software-library','software-cli',
+  --      'infra-script','dogfood-self','universal')，与 harness_project.domain_profile 对齐
+  -- 数据 copy: 'claude-web' → 'dogfood-self', 'enterprise-admin' → 'software-enterprise', 'universal' 不动
+  applies_to    TEXT NOT NULL,
   content_ref   TEXT NOT NULL,    -- 指向 methodologies/<stage>-v<version>.md
   approved_by   TEXT NOT NULL,    -- "user, reviewer-cross, reviewer-architecture"
   approved_at   INTEGER NOT NULL,
@@ -172,6 +191,8 @@ CREATE TABLE methodology (
 );
 CREATE INDEX idx_methodology_stage ON methodology(stage_kind, version DESC);
 ```
+
+**applies_to enum 与 harness_project.domain_profile 对齐**（v0.3）：5 个软件类型 + universal 兜底；详见 [EVA_MULTI_PROJECT_USAGE.md §5 P0-4b](proposals/EVA_MULTI_PROJECT_USAGE.md)。
 
 ### 1.7 Task（一次 agent 工作单元）
 
@@ -398,6 +419,76 @@ CREATE TABLE retrospective (
                                          │
                                          └─→ 喂回 Methodology v2 ritual
 ```
+
+---
+
+## 2.5 Cross-end enum graceful fallback contract（v0.3 新增，源自 [EVA_MULTI_PROJECT_USAGE.md K12](proposals/EVA_MULTI_PROJECT_USAGE.md)）
+
+> **关键不变量 K12**（[HARNESS_ROADMAP.md §0 #23](HARNESS_ROADMAP.md)）：所有跨端 wire enum 必须 graceful unknown-value fallback。
+
+**问题**：Swift Codable 默认对 unknown enum case 抛 `DecodingError.dataCorrupted` → 老 iOS 装包遇 backend 新加 enum 值（如 `software-cli`）整 DTO decode 失败 → 整个 project 列表显示空白（[EVA_MULTI_PROJECT_USAGE.md R8.12 实证](proposals/EVA_MULTI_PROJECT_USAGE.md)）。
+
+**契约**（所有跨端 wire enum 都遵守）：
+
+### 2.5.1 TS Zod 端
+
+```ts
+// packages/shared/src/protocol.ts
+export const DomainProfile = z.enum([
+  'software-enterprise', 'software-library', 'software-cli',
+  'infra-script', 'dogfood-self'
+]).catch('software-enterprise');  // graceful fallback to default
+```
+
+`.catch(default)` 在 unknown 值时返回 default 而不是 throw。
+
+### 2.5.2 Swift Codable 端
+
+```swift
+// packages/ios-native/Sources/ClaudeWeb/HarnessProtocol.swift
+enum DomainProfile: String, Codable {
+    case softwareEnterprise = "software-enterprise"
+    case softwareLibrary = "software-library"
+    case softwareCli = "software-cli"
+    case infraScript = "infra-script"
+    case dogfoodSelf = "dogfood-self"
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        // graceful fallback for unknown future values
+        self = DomainProfile(rawValue: raw) ?? .softwareEnterprise
+    }
+}
+```
+
+`init(from:)` 自定义 decoding，unknown 值 fallback 到 default（不 throw）。
+
+### 2.5.3 Fixture round-trip 测试
+
+```json
+// packages/shared/fixtures/harness/project-with-future-unknown-domain.json
+{
+  "id": "test-future-enum",
+  "domainProfile": "future-unknown-value-not-in-current-enum"
+}
+```
+
+**测试要求**：
+- TS Zod decode `'future-unknown-value-not-in-current-enum'` → fallback 到 `'software-enterprise'`，不 throw
+- Swift Codable 同样 fallback 到 `.softwareEnterprise`，不 throw
+- 整个 ProjectDTO decode 成功，project 列表正常显示
+
+### 2.5.4 适用范围
+
+K12 适用于**所有**跨端 wire enum，不只是 domain_profile。包括：
+- `Stage.kind` / `Stage.status` / `Stage.weight`
+- `AgentProfile.modelHint`
+- `ReviewVerdict.dimensions_json` 内 enum
+- `Decision.options_json` 内 enum
+- `IdeaCapture.source` / `Issue.source` / `Issue.priority` / `Issue.status`
+- 未来新增的所有 enum 字段
+
+每次新增 wire enum 都必须配套：(a) Swift `init(from:)` (b) TS `.catch()` (c) fixture round-trip 测试加 future-unknown 反例。
 
 ---
 
