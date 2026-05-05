@@ -10,11 +10,12 @@
 // M2 交付：ContextManager 真实编排、Review-Orchestrator、worktree 自动创建、permission hub 接入
 
 import type Database from "better-sqlite3";
+import { randomUUID } from "node:crypto";
 import { runSession } from "./cli-runner.js";
 import { getHarnessConfig } from "./harness-config.js";
 import { buildContextBundle } from "./context-manager.js";
 import {
-  listIssues, listStages, createStage, setStageStatus, updateIssueStatus,
+  listIssues, listStages, createStage, createTask, setStageStatus, updateIssueStatus,
   type IssueRow, type StageRow,
 } from "./harness-queries.js";
 
@@ -176,29 +177,45 @@ export class EvaScheduler {
     const config = getHarnessConfig();
     const profile = config.agentProfiles.find((p) => p.id === stage.assigned_agent_profile);
 
-    // M1 mini #3.1: create an auditable ContextBundle row + markdown snapshot.
-    // Full materialized context directories and cwd restriction stay in #3.2.
+    const modelHint = profile?.modelHint ?? "sonnet";
+    const model: "opus" | "sonnet" | "haiku" =
+      modelHint === "opus" ? "opus" : modelHint === "haiku" ? "haiku" : "sonnet";
+
+    // Cross M1 修：context_bundle.task_id 必须指向真 task 行（schema 注释明文 "外键
+    // 回指 Task"），过去 M1 #3.1 用 synthetic `<issueId>/<stageId>` 留下 orphan 行。
+    // 改：先 reserve taskUuid → buildContextBundle 写 context_bundle 行 task_id=taskUuid
+    // → createTask 写真 task 行 id=taskUuid 闭环引用。
+    // 注：synthetic taskId 仍用作 WS broadcast routing key（人类可读），与 task.id UUID
+    // 是两个不同概念，scheduler 内部双 ID。
+    const taskUuid = randomUUID();
+
     const bundle = buildContextBundle(this.db, {
       issue,
       stage,
-      taskId,
+      taskId: taskUuid,
       agentProfileId: profile?.id ?? stage.assigned_agent_profile,
     });
 
-    const modelHint = profile?.modelHint ?? "sonnet";
-    const model =
-      modelHint === "opus"
-        ? "claude-opus-4-5"
-        : modelHint === "haiku"
-          ? "claude-haiku-4-5-20251001"
-          : "claude-sonnet-4-6";
+    createTask(this.db, {
+      id: taskUuid,
+      stageId: stage.id,
+      agentProfileId: profile?.id ?? stage.assigned_agent_profile,
+      model,
+      cwd,
+      prompt: bundle.prompt,
+      permissionMode: "bypassPermissions",
+      contextBundleId: bundle.bundleId,
+    });
+
+    const modelClaudeId =
+      model === "opus" ? "claude-opus-4-5" : model === "haiku" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
 
     // M1: bypassPermissions — scheduler 无交互 UI，无法走 permission hub。
     // M2 改造点：注册 scheduler permission channel，广播 decision_requested 事件。
     await runSession({
       prompt: bundle.prompt,
       cwd,
-      model: model as any,
+      model: modelClaudeId as any,
       permissionMode: "bypassPermissions",
       taskId,
       onMessage: (msg) => {

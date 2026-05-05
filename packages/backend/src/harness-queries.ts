@@ -257,6 +257,67 @@ export function setStageStatus(
 }
 
 // ---------------------------------------------------------------------------
+// Task — M1 mini #3.1: 真 task 行（cross M1 修：避免 context_bundle.task_id orphan）
+// ---------------------------------------------------------------------------
+
+export interface TaskRow {
+  id: string;
+  stage_id: string;
+  agent_profile_id: string;
+  model: string;
+  cwd: string;
+  worktree_path: string | null;
+  prompt: string;
+  skill_set_json: string;
+  permission_mode: string;
+  context_bundle_id: string;
+  run_ids_json: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CreateTaskInput {
+  id: string; // caller-provided so context_bundle.task_id can match
+  stageId: string;
+  agentProfileId: string;
+  model: "opus" | "sonnet" | "haiku";
+  cwd: string;
+  worktreePath?: string | null;
+  prompt: string;
+  permissionMode: string;
+  contextBundleId: string;
+}
+
+export function createTask(db: Database.Database, input: CreateTaskInput): TaskRow {
+  const now = Date.now();
+  const row: TaskRow = {
+    id: input.id,
+    stage_id: input.stageId,
+    agent_profile_id: input.agentProfileId,
+    model: input.model,
+    cwd: input.cwd,
+    worktree_path: input.worktreePath ?? null,
+    prompt: input.prompt,
+    skill_set_json: "[]",
+    permission_mode: input.permissionMode,
+    context_bundle_id: input.contextBundleId,
+    run_ids_json: "[]",
+    status: "pending",
+    created_at: now,
+    updated_at: now,
+  };
+  db.prepare(`
+    INSERT INTO task(id,stage_id,agent_profile_id,model,cwd,worktree_path,prompt,skill_set_json,
+      permission_mode,context_bundle_id,run_ids_json,status,created_at,updated_at)
+    VALUES(@id,@stage_id,@agent_profile_id,@model,@cwd,@worktree_path,@prompt,@skill_set_json,
+      @permission_mode,@context_bundle_id,@run_ids_json,@status,@created_at,@updated_at)
+  `).run(row);
+  audit(db, "create", "task", input.id, { stageId: input.stageId, contextBundleId: input.contextBundleId });
+  return row;
+}
+
+// ---------------------------------------------------------------------------
 // ContextBundle
 // ---------------------------------------------------------------------------
 
