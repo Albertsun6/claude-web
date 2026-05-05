@@ -256,6 +256,82 @@ export function setStageStatus(
   return result.changes > 0;
 }
 
+// ---------------------------------------------------------------------------
+// ContextBundle
+// ---------------------------------------------------------------------------
+
+export interface ContextBundleRow {
+  id: string;
+  task_id: string;
+  artifact_refs_json: string;
+  max_tokens: number;
+  pruned_files_json: string;
+  summary: string;
+  snapshot_path: string;
+  created_at: number;
+}
+
+export interface CreateContextBundleInput {
+  id?: string;
+  taskId: string;
+  artifactRefs?: string[];
+  maxTokens: number;
+  prunedFiles?: string[];
+  summary: string;
+  snapshotPath: string;
+}
+
+export function createContextBundle(
+  db: Database.Database,
+  input: CreateContextBundleInput
+): ContextBundleRow {
+  const id = input.id ?? randomUUID();
+  const now = Date.now();
+  const row: ContextBundleRow = {
+    id,
+    task_id: input.taskId,
+    artifact_refs_json: JSON.stringify(input.artifactRefs ?? []),
+    max_tokens: input.maxTokens,
+    pruned_files_json: JSON.stringify(input.prunedFiles ?? []),
+    summary: input.summary,
+    snapshot_path: input.snapshotPath,
+    created_at: now,
+  };
+
+  db.prepare(`
+    INSERT INTO context_bundle(id,task_id,artifact_refs_json,max_tokens,pruned_files_json,summary,snapshot_path,created_at)
+    VALUES(@id,@task_id,@artifact_refs_json,@max_tokens,@pruned_files_json,@summary,@snapshot_path,@created_at)
+  `).run(row);
+  audit(db, "create", "context_bundle", id, { taskId: input.taskId, snapshotPath: input.snapshotPath });
+  return row;
+}
+
+export interface ArtifactRow {
+  id: string;
+  stage_id: string;
+  kind: string;
+  ref: string | null;
+  hash: string;
+  storage: "inline" | "file";
+  content_text: string | null;
+  content_path: string | null;
+  size_bytes: number;
+  metadata_json: string;
+  superseded_by: string | null;
+  created_at: number;
+}
+
+export function listArtifactsForIssue(db: Database.Database, issueId: string): ArtifactRow[] {
+  return db.prepare(`
+    SELECT artifact.*
+    FROM artifact
+    JOIN stage ON stage.id = artifact.stage_id
+    WHERE stage.issue_id = ?
+      AND artifact.superseded_by IS NULL
+    ORDER BY artifact.created_at ASC
+  `).all(issueId) as ArtifactRow[];
+}
+
 // M1 stub: ensure a placeholder methodology row exists for any stage kind
 function ensureStubMethodology(db: Database.Database, kind: string): string {
   const existing = db.prepare(

@@ -14,6 +14,7 @@
 
 | worktree 分支 | 占用文件/模块 | 开始日期 | 状态 |
 |---|---|---|---|
+| feat/eva-M1-context-manager-skeleton | packages/backend/src/context-manager.ts; packages/backend/src/harness-queries.ts context_bundle helpers; packages/backend/src/scheduler.ts spawnAgent | 2026-05-05 | active |
 
 ## 端口隔离约定
 
