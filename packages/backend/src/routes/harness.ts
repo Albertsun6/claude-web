@@ -37,7 +37,14 @@ export function buildHarnessRouter(
   broadcast: (msg: unknown) => void,
 ): Hono {
   const app = new Hono();
+
+  // M2 Loop 6: explicit boot ordering. Constructor is pure (no DB mutation);
+  // initialize() runs orphan-stage cleanup (active stages left over by crashed
+  // backend runs get marked failed). Must complete before routes mount below
+  // — otherwise tick calls could race with cleanup. Single-instance assumption
+  // makes synchronous initialize() sufficient.
   const scheduler = new EvaScheduler(db, broadcast);
+  scheduler.initialize();
 
   // -------------------------------------------------------------------------
   // Scheduler

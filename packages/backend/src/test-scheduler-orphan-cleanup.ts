@@ -1,8 +1,10 @@
 // F (M2 螺旋圈): scheduler orphan stage cleanup verification.
 //
 // 场景：backend 在 scheduler.spawnAgent fire-and-forget 中途崩溃，留下
-// pending/dispatched/running 的 stage 行。下次 backend 重启时 EvaScheduler
-// 实例化必须把这些标 failed + 广播 stage_changed。awaiting_review 不动。
+// pending/dispatched/running 的 stage 行。下次 backend 重启时 backend boot
+// 调用 EvaScheduler.initialize() 必须把这些标 failed + 广播 stage_changed
+// (Loop 6 起 initialize() 显式调用；Loop 6 前在 constructor 里隐式)。
+// awaiting_review 不动。
 //
 // 跑法：pnpm --filter @claude-web/backend test:scheduler-cleanup
 
@@ -52,13 +54,13 @@ try {
   insertStage.run("s-app",  "i1", "design",     "approved",        "heavy", 1, "PM", "m1", now);
   insertStage.run("s-rej",  "i1", "implement",  "rejected",        "heavy", 1, "PM", "m1", now);
 
-  // 模拟 backend 重启：实例化 EvaScheduler → constructor 应触发 cleanup
+  // 模拟 backend 重启：实例化 EvaScheduler + 显式 initialize() 应触发 cleanup（Loop 6 后）
   const broadcastCalls: Array<unknown> = [];
   const broadcast = (msg: unknown) => broadcastCalls.push(msg);
 
-  console.log("--- Instantiating EvaScheduler (triggers cleanup) ---");
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _scheduler = new EvaScheduler(handle.db, broadcast);
+  console.log("--- Instantiating EvaScheduler + explicit initialize() (Loop 6) ---");
+  const scheduler = new EvaScheduler(handle.db, broadcast);
+  scheduler.initialize();  // Loop 6: explicit boot step triggers cleanup
 
   // 校验 1: pending / dispatched / running 全部转 failed（3 行）
   const failed = handle.db
@@ -117,13 +119,64 @@ try {
     `broadcast covers exactly the 3 orphan stage ids`,
   );
 
-  // 校验 5: 第二次实例化 scheduler — 已无 orphan，应该 0 broadcast
+  // 校验 5: 第二次实例化 scheduler + initialize — 已无 orphan，应该 0 broadcast
   const broadcastCalls2: Array<unknown> = [];
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _scheduler2 = new EvaScheduler(handle.db, (m) => broadcastCalls2.push(m));
+  const scheduler2 = new EvaScheduler(handle.db, (m) => broadcastCalls2.push(m));
+  scheduler2.initialize();  // Loop 6: explicit boot step
   assert(
     broadcastCalls2.length === 0,
-    `idempotent: re-instantiate scheduler with no orphans → 0 broadcasts (got ${broadcastCalls2.length})`,
+    `idempotent: re-instantiate scheduler + initialize() with no orphans → 0 broadcasts (got ${broadcastCalls2.length})`,
+  );
+
+  // === Loop 6 charter test: 验证 pure constructor + explicit initialize 分离
+  // 这是 Loop 6 的核心价值锁——证明 constructor 是纯的（不动 DB），cleanup 仅在
+  // initialize() 时触发。如果未来有人把副作用搬回 constructor，本测试会失败。
+  console.log("\n--- Loop 6 charter: pure constructor + explicit initialize ---");
+
+  // 准备：插入 fresh orphan stage（pending）
+  const orphanIssueId = "i-charter";
+  const orphanStageId = "s-charter-pending";
+  handle.db.prepare(
+    `INSERT INTO issue(id,project_id,source,title,body,labels_json,priority,status,created_at,updated_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+  ).run(orphanIssueId, "p1", "manual", "charter", "x", "[]", "normal", "in_progress", now, now);
+  handle.db.prepare(
+    `INSERT INTO stage(id,issue_id,kind,status,weight,gate_required,assigned_agent_profile,methodology_id,created_at)
+     VALUES(?,?,?,?,?,?,?,?,?)`,
+  ).run(orphanStageId, orphanIssueId, "strategy", "pending", "heavy", 1, "PM", "m1", now);
+
+  // 行为 A: 只 new EvaScheduler，不调 initialize → orphan 不应被清
+  const broadcastsCharter1: Array<unknown> = [];
+  const schedulerCharter1 = new EvaScheduler(handle.db, (m) => broadcastsCharter1.push(m));
+  // 没调 initialize()
+  assert(
+    broadcastsCharter1.length === 0,
+    `Loop 6 charter: pure constructor emits 0 broadcasts (got ${broadcastsCharter1.length})`,
+  );
+  const stillPending = handle.db
+    .prepare("SELECT status FROM stage WHERE id = ?")
+    .get(orphanStageId) as { status: string };
+  assert(
+    stillPending.status === "pending",
+    `Loop 6 charter: pure constructor doesn't mutate DB (orphan still 'pending', got '${stillPending.status}')`,
+  );
+
+  // 行为 B: 调 initialize() → cleanup 触发，orphan 标 failed
+  schedulerCharter1.initialize();
+  const afterInit = handle.db
+    .prepare("SELECT status, failed_reason FROM stage WHERE id = ?")
+    .get(orphanStageId) as { status: string; failed_reason: string | null };
+  assert(
+    afterInit.status === "failed" && afterInit.failed_reason === "orphan_after_restart",
+    `Loop 6 charter: initialize() triggers cleanup (status=${afterInit.status}, reason=${afterInit.failed_reason})`,
+  );
+  // initialize() 应触发 stage_changed:failed broadcast
+  const charterFailedEvents = broadcastsCharter1.filter(
+    (m: any) => m && m.type === "harness_event" && m.kind === "stage_changed" && m.status === "failed",
+  );
+  assert(
+    charterFailedEvents.length === 1,
+    `Loop 6 charter: initialize() emits 1 stage_changed:failed broadcast`,
   );
 
   handle.close();
