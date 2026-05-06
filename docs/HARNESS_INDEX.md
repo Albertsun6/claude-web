@@ -97,6 +97,7 @@
 | **M2 Loop 4 — e2e reproducible pipeline test** | [retrospectives/M2-Loop4-e2e-pipeline-test.md](retrospectives/M2-Loop4-e2e-pipeline-test.md) | ✅ **ship**（2026-05-06，scheduler 注入 runSessionFn + 27 项 e2e assertion + reproducibility check + audit isolation 修真 prod 污染；cross-review 1B+3M+2m 全应用；M2 #1 推到 ~52-56%）|
 | **M2 Loop 5 — failure-path e2e pipeline test** | [retrospectives/M2-Loop5-failure-paths-e2e.md](retrospectives/M2-Loop5-failure-paths-e2e.md) | ✅ **ship**（2026-05-06，3 scenarios 覆盖 Phase B+C catch + bonus Phase A 跨 Loop 集成 + Loop 3 skip 集成；cross-review 4.68/5 0 major；4 canonical reasons 全 e2e 验证；M2 #1 推到 ~60-63%）|
 | **M2 Loop 6 — explicit boot ordering refactor** | [retrospectives/M2-Loop6-explicit-boot-ordering.md](retrospectives/M2-Loop6-explicit-boot-ordering.md) | ✅ **ship**（2026-05-06，pure constructor + explicit initialize() + 4 项 charter test + 10 call sites 全更新；cross-review **4.9/5 0 major**（史上最高）；MD8 完成，M2 #1 8 项 MUST-do 中 4 项 ✅）|
+| **M2 Loop 7 — CI gate for backend tests + 7a chokidar leak hot-fix** | [retrospectives/M2-Loop7-ci-e2e-gate.md](retrospectives/M2-Loop7-ci-e2e-gate.md) | ✅ **ship**（2026-05-06，CI 接 5 个 backend test step + Phase 8 chokidar charter mechanical lock；plan-level cross-review 0B+3M+2m 全应用；CI 30s 全绿；之前 6 小时 hang 由 module-level chokidar.watch() leak 导致）|
 | M2 真 agent + dogfood | retrospectives/M2.md | — |
 | M3 质量与可观测 | retrospectives/M3.md | — |
 | M4 方法论沉淀 | retrospectives/M4.md | — |
