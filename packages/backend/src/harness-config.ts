@@ -15,21 +15,48 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 let _cached: HarnessConfig | null = null;
+let _watcher: ReturnType<typeof chokidar.watch> | null = null;
 
 /** Fires "config_changed" when fallback-config.json is modified on disk. */
 export const harnessConfigEvents = new EventEmitter();
 
-// Watch the shared fallback-config.json at its source location. When tsx
-// watch detects changes it restarts the backend anyway, but we also emit
-// an event in the same process for the rare live-reload path (M1+).
+// Watch path resolved at module-load time (no side effect — just a string).
+// The actual chokidar.watch() call is deferred to startConfigWatcher() per
+// M2 Loop 7a: module-load chokidar.watch() opens an fs.watch handle that
+// keeps the Node event loop alive forever, breaking test process exit.
+// Production calls startConfigWatcher() in index.ts boot (live-reload path);
+// tests don't call it (clean exit). See Loop 7a retrospective.
 const _configPath = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../../../shared/fixtures/harness/fallback-config.json"
 );
-chokidar.watch(_configPath, { ignoreInitial: true }).on("change", () => {
-  _cached = null; // bust lazy cache so next GET recomputes
-  harnessConfigEvents.emit("config_changed");
-});
+
+/**
+ * Production-only: start watching fallback-config.json for live changes.
+ * Idempotent (safe to call twice). Tests should NOT call this — they
+ * import getHarnessConfig() which reads the cached frozen value with no
+ * watcher, so process can exit cleanly.
+ */
+export function startConfigWatcher(): void {
+  if (_watcher) return;
+  _watcher = chokidar.watch(_configPath, { ignoreInitial: true }).on("change", () => {
+    _cached = null; // bust lazy cache so next GET recomputes
+    harnessConfigEvents.emit("config_changed");
+  });
+}
+
+/**
+ * Close the chokidar watcher (release native fs.watch handle).
+ * Tests that explicitly start the watcher (e.g. watcher contract test)
+ * MUST await this in their finally block. chokidar.watch().close() is
+ * async — must await.
+ */
+export async function closeConfigWatcher(): Promise<void> {
+  if (_watcher) {
+    await _watcher.close();
+    _watcher = null;
+  }
+}
 
 /**
  * Lazy getter for the live HarnessConfig. Parses + freezes on first call.

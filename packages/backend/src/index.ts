@@ -29,7 +29,7 @@ import { inboxRouter } from "./routes/inbox.js";
 import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
 import { harnessConfigRouter } from "./routes/harness-config.js";
-import { harnessConfigEvents } from "./harness-config.js";
+import { harnessConfigEvents, startConfigWatcher } from "./harness-config.js";
 import { loadEvaConfig } from "./eva-config-loader.js";
 import { buildHarnessRouter } from "./routes/harness.js";
 import { openHarnessDb } from "./harness-store.js";
@@ -276,6 +276,12 @@ if (_harnessDb) {
 // Broadcast harness_event{config_changed} to all connected WS clients when
 // fallback-config.json is modified in-process (chokidar watch in harness-config.ts).
 // tsx watch restart also reconnects iOS, but this covers the rare in-process path.
+//
+// M2 Loop 7a: chokidar.watch() moved out of module load; production must
+// explicitly start the watcher before mounting the listener below. Tests
+// don't call startConfigWatcher() so process can exit cleanly.
+startConfigWatcher();
+
 harnessConfigEvents.on("config_changed", () => {
   const msg: ServerMessage = { type: "harness_event", kind: "config_changed" };
   const payload = JSON.stringify(msg);

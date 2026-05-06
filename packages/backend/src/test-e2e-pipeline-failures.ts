@@ -30,6 +30,7 @@ process.env.CLAUDE_WEB_DATA_DIR = dataDirRoot;
 const { openHarnessDb } = await import("./harness-store.js");
 const { EvaScheduler } = await import("./scheduler.js");
 const { skipFailedStage } = await import("./harness-queries.js");
+const { closeConfigWatcher } = await import("./harness-config.js");
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) {
@@ -362,5 +363,7 @@ try {
 
   console.log("\nLoop 5 failure-path e2e OK ✅");
 } finally {
+  // M2 Loop 7a: defensive close (no-op if watcher never started)
+  await closeConfigWatcher();
   rmSync(dataDirRoot, { recursive: true, force: true });
 }

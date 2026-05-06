@@ -35,6 +35,7 @@ process.env.CLAUDE_WEB_DATA_DIR = dataDirRoot;
 // 现在 dynamic import 业务模块（值），DATA_DIR 解析为 dataDirRoot
 const { openHarnessDb } = await import("./harness-store.js");
 const { EvaScheduler } = await import("./scheduler.js");
+const { closeConfigWatcher } = await import("./harness-config.js");
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) {
@@ -326,6 +327,8 @@ try {
 
   console.log("\nLoop 4 e2e pipeline OK ✅");
 } finally {
+  // M2 Loop 7a: defensive close (no-op if watcher never started by this test)
+  await closeConfigWatcher();
   // 清理隔离的 DATA_DIR（含 audit log）
   rmSync(dataDirRoot, { recursive: true, force: true });
 }

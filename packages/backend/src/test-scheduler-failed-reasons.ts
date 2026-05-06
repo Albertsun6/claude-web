@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openHarnessDb } from "./harness-store.js";
 import { EvaScheduler } from "./scheduler.js";
+import { closeConfigWatcher } from "./harness-config.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) {
@@ -175,5 +176,7 @@ try {
 
   console.log("\nLoop 2 — 4 canonical reasons distinguishable + idempotent guard correct ✅");
 } finally {
+  // M2 Loop 7a: defensive close (no-op if watcher never started)
+  await closeConfigWatcher();
   rmSync(tmp, { recursive: true, force: true });
 }

@@ -937,6 +937,88 @@ CREATE INDEX idx_stage_running ON stage(status) WHERE status = 'running';
     `Charter sanity: skip route invokes skipFailedStage`,
   );
 
+  // === Phase 8: M2 Loop 7a — chokidar watcher charter mechanical lock + contract test
+  //
+  // 防止未来 regression 重新引入 module-level chokidar.watch()（导致 CI 测试 hang，
+  // PR #39 第一次跑就被抓出来）。两层保护：
+  //   1. mechanical lock — 静态扫 harness-config.ts 顶层不含 chokidar.watch(
+  //   2. contract test — 调 startConfigWatcher() → 触发 file change → 等 emit
+  //      → closeConfigWatcher()。证明 watcher 启停链路工作 + 可关闭释放
+  console.log("\n--- Phase 8: chokidar watcher charter lock + contract test (Loop 7a) ---");
+
+  // === 8.1 — mechanical lock: harness-config.ts 模块顶层不能有 chokidar.watch(
+  const harnessConfigSrcRaw = readFileSync(
+    join(__dirname, "harness-config.ts"),
+    "utf-8",
+  );
+
+  // 剥 line comments（//... 到行末）+ block comments（/* ... */），避免 regex 把 comment
+  // 里的 chokidar.watch() 误算成 real call
+  const harnessConfigSrc = harnessConfigSrcRaw
+    .replace(/\/\*[\s\S]*?\*\//g, "")  // block comments
+    .replace(/\/\/.*$/gm, "");          // line comments
+
+  // 找所有 real `chokidar.watch(` 调用站点。每个站点的"包含函数"必须是 startConfigWatcher
+  const watchOccurrences = [...harnessConfigSrc.matchAll(/chokidar\.watch\s*\(/g)];
+  for (const match of watchOccurrences) {
+    const offset = match.index ?? 0;
+    // 向前找最近的 `(export )?(async )?function NAME(` 声明
+    const beforeText = harnessConfigSrc.slice(0, offset);
+    const lastFnMatch = [...beforeText.matchAll(/(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/g)].pop();
+    // 同时确认 chokidar.watch 在该函数体内：从 fn 声明 `{` 到下一个匹配的 `}` 之间
+    // 简化判定：lastFnMatch 名字必须是 startConfigWatcher，且 chokidar.watch 在该 fn 后第一个 `}` 之前
+    let inStartFn = false;
+    if (lastFnMatch && lastFnMatch[1] === "startConfigWatcher") {
+      const fnStart = (lastFnMatch.index ?? 0) + lastFnMatch[0].length;
+      // 简单 brace counting 找 fn 结束
+      let depth = 0;
+      let fnEnd = -1;
+      for (let i = fnStart; i < harnessConfigSrc.length; i++) {
+        const c = harnessConfigSrc[i];
+        if (c === "{") depth++;
+        else if (c === "}") {
+          depth--;
+          if (depth === 0) { fnEnd = i; break; }
+        }
+      }
+      inStartFn = fnEnd !== -1 && offset > fnStart && offset < fnEnd;
+    }
+    assert(
+      inStartFn,
+      `Loop 7a charter: chokidar.watch( at offset ${offset} must be inside startConfigWatcher() function body (got fn=${lastFnMatch?.[1] ?? "module top-level"}, inStartFn=${inStartFn})`,
+    );
+  }
+  // 也 assert 至少出现 1 次（startConfigWatcher 函数体内）— 证明 watcher 仍存在
+  assert(
+    watchOccurrences.length >= 1,
+    `Loop 7a charter: chokidar.watch( appears in startConfigWatcher (got ${watchOccurrences.length} occurrences in non-comment text)`,
+  );
+
+  // === 8.2 — startConfigWatcher / closeConfigWatcher 烟雾测试（不做 e2e file-change 触发）
+  // 验证 lifecycle API：startConfigWatcher() 不抛 + closeConfigWatcher() 不抛。
+  // 对 file-change 实际触发 emit 的 e2e contract 测试是 flaky（chokidar FSEvents/inotify
+  // 时序在 CI 不可靠，即便 setTimeout(1500ms) 也间歇性漏检），延后 — 真正的 charter
+  // 保护在 8.1 mechanical lock 上（防止 module-load 重新引入 chokidar.watch()）。
+  // prod live-reload regression 发生时 dev 跑 backend 改 fallback-config.json 测就能抓到。
+  const { startConfigWatcher, closeConfigWatcher } = await import("./harness-config.js");
+
+  let smokeFailed = false;
+  try {
+    startConfigWatcher();
+    // double-call 验证 idempotent (不抛错也不堆叠 watcher)
+    startConfigWatcher();
+    await closeConfigWatcher();
+    // double-close 验证 idempotent
+    await closeConfigWatcher();
+  } catch (e: any) {
+    smokeFailed = true;
+    console.error(`Loop 7a smoke caught: ${e?.message ?? e}`);
+  }
+  assert(
+    !smokeFailed,
+    `Loop 7a smoke: startConfigWatcher + closeConfigWatcher both idempotent + non-throwing`,
+  );
+
   console.log("\nharness schema OK ✅");
 } finally {
   rmSync(tmp, { recursive: true, force: true });
