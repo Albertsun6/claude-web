@@ -1,16 +1,19 @@
 {
-  "name": "claude-web",
+  "name": "vessel",
   "private": true,
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev:backend": "pnpm --filter @claude-web/backend dev",
-    "start:backend": "pnpm --filter @claude-web/backend start",
-    "dev:frontend": "pnpm --filter @claude-web/frontend dev",
-    "test:cli": "pnpm --filter @claude-web/backend test:cli",
-    "test:protocol": "pnpm --filter @claude-web/shared test",
+    "dev:backend": "pnpm --filter @vessel/backend dev",
+    "start:backend": "pnpm --filter @vessel/backend start",
+    "dev:frontend": "pnpm --filter @vessel/frontend dev",
+    "test:cli": "pnpm --filter @vessel/backend test:cli",
+    "test:protocol": "pnpm --filter @vessel/shared test",
+    "vessel-core": "pnpm --filter @vessel/backend exec tsx src/cli/vessel-core.ts",
     "eva:status": "node scripts/eva-status.mjs",
-    "eva:hook": "node scripts/eva-hook.mjs"
+    "eva:hook": "node scripts/eva-hook.mjs",
+    "migrate:eva-to-vessel": "pnpm --filter @vessel/backend exec tsx ../../scripts/migrate-eva-to-vessel.ts",
+    "import:debate-log": "pnpm --filter @vessel/backend exec tsx ../../scripts/import-debate-log.ts"
   },
   "packageManager": "pnpm@9.0.0"
 }
