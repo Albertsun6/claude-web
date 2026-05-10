@@ -6,16 +6,19 @@
 
 ## How it works
 
-`@huggingface/transformers` v4 caches downloaded ONNX models under
-`<repo-root>/node_modules/.pnpm/@huggingface+transformers@*/node_modules/@huggingface/transformers/.cache/`
-(per-package install, not under `~/.cache/huggingface/` like the Python lib).
-On first use of a model, the file is downloaded from `huggingface.co`.
-**HF CDN serves with HTTPS + ETag but does not GPG-sign weights.**
+vessel-core anchors `@huggingface/transformers` cache to `$VESSEL_DATA_DIR/models/`
+(default `~/.vessel/models/`) — set in `embedder.ts` at module load via
+`transformersEnv.cacheDir`. This is independent of `node_modules`, so
+`pnpm install` won't blow away the 90MB ONNX model.
 
-This file pins the SHA256 of expected weight files. `vessel-core memory status`
-**advisory only** — does not currently abort if SHA mismatches; surface as
-warning. M1C-B closeout MINOR-2: upgrade to enforced check in M1C-B+ once we
-have stable production usage.
+Operators can override with `HF_HOME` env var (transformers.js respects it).
+
+On first model use the file is downloaded from `huggingface.co`. **HF CDN serves
+HTTPS + ETag but does not GPG-sign weights.** This file pins the SHA256 of
+expected weight files.
+
+`vessel-core memory status` is **advisory only** — does not currently abort if
+SHA mismatches; surface as warning. M1C-B+ defer item: enforced check.
 
 ## Currently pinned models
 
@@ -26,16 +29,20 @@ have stable production usage.
 | `onnx/model.onnx` | `69a0b846f4f116b5e6aabf9546ea6754d02264f3211a13a1bd69b31b8040749a` | ~90 MB | [huggingface.co/Xenova/bge-small-zh-v1.5](https://huggingface.co/Xenova/bge-small-zh-v1.5) |
 
 **Pinned on**: 2026-05-10 (M1C-B closeout, after first e2e test download)
+**Cache location since 2026-05-11**: `$VESSEL_DATA_DIR/models/Xenova/bge-small-zh-v1.5/onnx/model.onnx`
 
 ## Verification command
 
 ```bash
-# Replace <pkg-version> with your installed @huggingface/transformers version
 expected_sha="69a0b846f4f116b5e6aabf9546ea6754d02264f3211a13a1bd69b31b8040749a"
-cache_path="node_modules/.pnpm/@huggingface+transformers@4.2.0/node_modules/@huggingface/transformers/.cache/Xenova/bge-small-zh-v1.5/onnx/model.onnx"
+cache_path="${VESSEL_DATA_DIR:-$HOME/.vessel}/models/Xenova/bge-small-zh-v1.5/onnx/model.onnx"
 actual=$(shasum -a 256 "$cache_path" | cut -d' ' -f1)
 [ "$expected_sha" = "$actual" ] && echo "OK" || { echo "MISMATCH"; exit 1; }
 ```
+
+> Older Vessel installs (pre-2026-05-11) cached under `node_modules/.pnpm/@huggingface+transformers@*/node_modules/@huggingface/transformers/.cache/`.
+> First post-upgrade run triggers a one-time redownload to the new location;
+> the old cache is safe to `rm -rf` after upgrade.
 
 ## Future automation (M1C-B+ defer)
 

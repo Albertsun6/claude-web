@@ -40,6 +40,7 @@ import { runIntent } from "./orchestrator.js";
 import { mcpManager, parseMcpSpecsFromEnv } from "./mcp/manager.js";
 import { cleanupMcpConfig } from "./mcp/cli-config.js";
 import { startMdnsPublisher, stopMdnsPublisher } from "./mdns/publisher.js";
+import { vesselMemoryRouter } from "./routes/vessel-memory.js";
 import { markInterruptedOnStartup } from "./memory/workflow-store.js";
 import { harnessConfigRouter } from "./routes/harness-config.js";
 import { harnessConfigEvents, startConfigWatcher } from "./harness-config.js";
@@ -134,6 +135,8 @@ app.route("/api/worktrees", worktreesRouter);
 app.route("/api/vessel", vesselRouter);
 // M1B: Vessel FS permission endpoint (separate router, same prefix — no route collision).
 app.route("/api/vessel", vesselFsRouter);
+// M1C-B+: long-term memory CRUD + KNN HTTP API
+app.route("/api/vessel", vesselMemoryRouter);
 // M1A-α minimal panel — self-contained HTML at `/vessel/min/`. Must register
 // BEFORE Eva's SPA `/*` fallback (~ line 201) which would otherwise route to index.html.
 app.get("/vessel/min", vesselPanelHandler() as never);

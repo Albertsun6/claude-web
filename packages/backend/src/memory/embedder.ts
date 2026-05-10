@@ -20,11 +20,33 @@
  *   - EmbeddingClient.health() in-process semantics (model loaded check)
  */
 
-import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
+import { pipeline, env as transformersEnv, type FeatureExtractionPipeline } from '@huggingface/transformers';
+import { join } from 'node:path';
+import { DATA_DIR } from '../data-dir.js';
 
 /** Default embedding model — see ADR-012 amendment + spike report. */
 export const DEFAULT_EMBED_MODEL = 'Xenova/bge-small-zh-v1.5';
 export const DEFAULT_EMBED_DIM = 512;
+
+// M1C-B+: anchor model cache to $VESSEL_DATA_DIR/models so a `pnpm install` (which
+// blows away node_modules including transformers.js's default `.cache`) doesn't
+// trigger another 90MB redownload.
+//
+// Override priority (highest first):
+//   1. VESSEL_HF_CACHE_DIR — explicit cache path (handy for tests that want
+//      memory.db in a tmp dir but reuse the production model cache)
+//   2. HF_HOME — standard Hugging Face env var (transformers.js respects on
+//      its own; we honor it by skipping our cacheDir override)
+//   3. $VESSEL_DATA_DIR/models (default)
+//
+// transformersEnv.cacheDir applies on first model load; subsequent loads
+// reuse cached files. mkdir is implicit on first download.
+const explicitCache = process.env.VESSEL_HF_CACHE_DIR;
+if (explicitCache && explicitCache.trim() !== '') {
+  transformersEnv.cacheDir = explicitCache;
+} else if (!process.env.HF_HOME) {
+  transformersEnv.cacheDir = join(DATA_DIR, 'models');
+}
 
 interface EmbedderState {
   model: string;
