@@ -36,7 +36,7 @@ describe("eva-config schema", () => {
           branch: "feat/eva-M1-test",
           path: "~/Desktop/claude-web-test",
           port: 3033,
-          dataDir: "~/.claude-web-test",
+          dataDir: "~/.vessel-test",
           owns: ["packages/backend/src/foo.ts", "packages/backend/src/bar.ts#section"],
           status: "active",
           since: "2026-05-05T16:00:00Z",
