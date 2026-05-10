@@ -167,3 +167,30 @@ migration 0004（v103）在 vessel-core 首次启动时自动跑（按 ADR-006 s
 **4-way Phase 1 评审 + Verify Gate 已跑**（详见 [P3 arbiter](../reviews/0-pre-review-p3-arbiter-2026-05-09-2255.md) + [escalation inbox](../../instance/inbox/2026-05-09-2255-0-pre-escalations.md)）。
 
 **待 owner 处理 inbox 3 项 escalation**（E1 rm -rf 已修 / E2 license 已加 Stage 6 / E3 frontend hung）后，进 0A。
+
+---
+
+## 实际实施 vs plan 偏差校正（2026-05-11 补）
+
+> 闭合 M1C-A closeout MINOR-arch-1。原 plan §6/§17/§33 假设 Vessel 自有数据落
+> Eva 既有 `harness.db`（schema_version=103+），实际实施时为了"Eva path 0 影响"
+> 把 Vessel 表落到独立的 `memory.db`。
+
+| 原 plan 假设 | 实际实施（M1C-A / M1C-B） | 原因 |
+|---|---|---|
+| `harness.db` schema_version=103 加 `workflow_state` 表（行 33–35）| **`memory.db` migration 0003** (`workflow_state`)，schema_version=3 | 不污染 Eva harness.db；Vessel 自有 db 由独立 `MIGRATIONS` 数组管 [packages/backend/src/memory/session-store.ts](../../packages/backend/src/memory/session-store.ts) |
+| `harness.db` schema_version=104 加 `embedding` 表（行 35 / 行 81 ②）| **`memory.db` migration 0004** (`memory_records` + sqlite-vec `vec_memory` 虚拟表)，schema_version=4 | 同上 — Vessel embedding store 完全独立于 Eva harness |
+| `0006_soul_history.sql` (schema_version=105) M2-Soul（行 81 ③）| **暂未实现**：M2-Soul 现阶段仅 `~/.vessel/soul.md` 单文件，无 history 表 | YAGNI；如果未来要 audit 修订史再加（M2-Soul 段已识别）|
+| `0007_capability.sql` (schema_version=106) M2+（行 81 ④）| **暂未实现**：M2-Voice defer 后 capability runtime loader 未做 | 待 capability runtime 实施时一起加 |
+
+`memory.db` schema 版本序列（独立于 harness.db v100+）：
+| version | migration | milestone |
+|---|---|---|
+| 1 | `0001_m0_sessions.sql` | M0 (sessions / intents / skill_invocations) |
+| 2 | `0002_m1_lessons.sql` | L1-minimal (lessons + FTS5) |
+| 3 | `0003_m1c_workflows.sql` | M1C-A (workflow_state) |
+| 4 | `0004_m1c_memory.sql` | M1C-B (memory_records + sqlite-vec runtime) |
+
+**校正生效后**：
+- 数据迁移脚本（`migrate-eva-to-vessel.ts`）只复制 Eva harness.db / inbox.jsonl，**不**期待 Vessel 表已在 harness.db 里；vessel-core 启动时独立创建 memory.db schema v4。
+- 文件路径校正：`packages/backend/src/migrations-memory/` 是 Vessel migration 文件夹（不是原 plan 提的 `migrations/`）。

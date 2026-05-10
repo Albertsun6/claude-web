@@ -1,4 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { writeFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ImageAttachment, ModelId, PermissionMode } from "@vessel/shared";
@@ -116,7 +118,14 @@ export async function getMemoryContextOrEmpty(prompt: string): Promise<string> {
   }
 }
 
-function buildArgs(p: RunSessionParams, resume?: string, memoryContext: string = ''): string[] {
+interface BuiltArgs {
+  args: string[];
+  /** Temp files created by buildArgs (currently: --append-system-prompt-file).
+   *  Caller MUST cleanupAppendSystemPromptFile each one after spawn exits. */
+  tempFiles: string[];
+}
+
+function buildArgs(p: RunSessionParams, resume?: string, memoryContext: string = ''): BuiltArgs {
   const args = [
     "--print",
     "--input-format", "stream-json",
@@ -140,10 +149,16 @@ function buildArgs(p: RunSessionParams, resume?: string, memoryContext: string =
   const mcpConfigPath = getMcpConfigPath();
   if (mcpConfigPath) args.push("--mcp-config", mcpConfigPath);
   // M2-Soul + M1C-B integration: render persona + relevant memory into a
-  // single --append-system-prompt block. Soul comes first (defines who Claude
-  // is), memory comes second (gives context for the current request).
+  // single --append-system-prompt-file block. Soul comes first (defines who
+  // Claude is), memory comes second (gives context for the current request).
   // Both are independent fail-soft — soul missing or memory empty just omits
   // that segment; CLI still spawns with default system prompt.
+  //
+  // M2-Soul closeout deferred MINOR (#7 from punch list): use the file form
+  // (--append-system-prompt-file) instead of inline string — same-host other
+  // processes can `ps aux` and read inline command-line args containing soul
+  // persona + retrieved memory snippets. The file form keeps the content out
+  // of process command-line; mode 0o600 limits read access to owner.
   const promptParts: string[] = [];
   try {
     const soul = loadSoulOrNull();
@@ -154,10 +169,35 @@ function buildArgs(p: RunSessionParams, resume?: string, memoryContext: string =
     } else { throw err; }
   }
   if (memoryContext) promptParts.push(memoryContext);
+  const tempFiles: string[] = [];
   if (promptParts.length > 0) {
-    args.push("--append-system-prompt", promptParts.join('\n\n'));
+    const promptFile = writeAppendSystemPromptFile(promptParts.join('\n\n'));
+    args.push("--append-system-prompt-file", promptFile);
+    tempFiles.push(promptFile);
   }
-  return args;
+  return { args, tempFiles };
+}
+
+/**
+ * Write `content` to a temp file (mode 0o600) and return the path. Caller is
+ * responsible for cleaning up via cleanupAppendSystemPromptFile() after the
+ * spawned CLI exits.
+ *
+ * Per-spawn unique filename (PID + timestamp) so concurrent spawns don't
+ * collide. Uses os.tmpdir() — typically /var/folders/.../T on macOS, also
+ * mode 0o600 owner-readable only.
+ */
+function writeAppendSystemPromptFile(content: string): string {
+  const fname = `vessel-append-system-prompt-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`;
+  const filePath = path.join(tmpdir(), fname);
+  writeFileSync(filePath, content, { mode: 0o600 });
+  return filePath;
+}
+
+/** Best-effort temp file cleanup. Safe to call even if file already gone. */
+function cleanupAppendSystemPromptFile(filePath: string | undefined): void {
+  if (!filePath) return;
+  try { unlinkSync(filePath); } catch { /* ignore — OS will clean tmpdir */ }
 }
 
 async function runOnce(p: RunSessionParams, resume: string | undefined): Promise<SpawnResult> {
@@ -165,13 +205,25 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
   // call — buildArgs is invoked again on stale-session retry, but the same memory
   // context applies). Fails to '' on any error so spawn proceeds with soul-only.
   const memoryContext = await getMemoryContextOrEmpty(p.prompt);
-  const args = buildArgs(p, resume, memoryContext);
+  const { args, tempFiles } = buildArgs(p, resume, memoryContext);
 
   const child: ChildProcessWithoutNullStreams = spawn(CLI_BIN, args, {
     cwd: p.cwd,
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env,
     detached: p.detached === true,
+  });
+
+  // M2-Soul deferred MINOR fix: clean up the --append-system-prompt-file
+  // temp file once the spawned CLI has read it. Claude CLI loads the file
+  // synchronously at startup, so we can unlink shortly after spawn — but
+  // wait for `spawn` event to be safe.
+  child.once('spawn', () => {
+    for (const f of tempFiles) cleanupAppendSystemPromptFile(f);
+  });
+  // Defensive: if spawn ever fails to fire (rare), still cleanup on exit.
+  child.once('exit', () => {
+    for (const f of tempFiles) cleanupAppendSystemPromptFile(f);
   });
 
   let killTimer: NodeJS.Timeout | undefined;

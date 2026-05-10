@@ -583,9 +583,40 @@ VESSEL_RUN_ID='<run_id>'
 
 ---
 
-## 6. Soul Spec Schema（**v0A.1 修订：拆 4 sibling 文件**，借鉴 OpenClaw + aaronjmars/soul.md）
+## 6. Soul Spec Schema（**M2-Soul 实施回归单文件 `soul.md`**；plan §6 4-sibling 设计 defer）
 
-> **v0A.1 修订（A1，2026-05-09）**：原单文件 `soul.md` 改为 **4 sibling 文件**结构。Prior Art：[OpenClaw](https://github.com/openclaw/openclaw)（2026 GitHub #1 by stars，~250-355K）+ [aaronjmars/soul.md](https://github.com/aaronjmars/soul.md)（460+ stars，MIT）。理由：git diff 友好 / 字段独立演进 / 跟业界 prior art 对齐。
+> **2026-05-11 update**（闭合 M2-Soul closeout MINOR-arch-1）：实际 M2-Soul
+> 实施**回归到单文件 `~/.vessel/soul.md`**（YAML frontmatter + Markdown body），
+> 不是 v0A.1 计划的 4 sibling 文件结构。理由：YAGNI — 单 instance / 单 owner
+> 场景下 4 sibling 字段独立演进的价值未显现，先用着；如果 dogfood 后真发现拆
+> 分必要（git diff 噪音 / 字段竞争编辑）再补 schema migration。
+>
+> 实际生效的 schema 见 [packages/backend/src/soul/parser.ts](../../packages/backend/src/soul/parser.ts) (`SoulSpec`)。
+>
+> **当前 schema** (`schema_version: 1`):
+> ```yaml
+> schema_version: 1
+> name: <Instance 名>                    # 必填
+> personality:                            # 必填（mapping）
+>   tone: <free text>                     # 可选
+>   values: [<string>, ...]               # 可选
+>   pronouns: <free text>                 # 可选
+>   signature_phrases: [<string>, ...]    # 可选
+> preferences:                            # 可选
+>   language: <BCP-47 tag>                # 可选
+>   verbosity: terse|balanced|verbose     # 可选
+> ---
+> <free-form markdown body>
+> ```
+> 渲染规则见 [soul/injector.ts](../../packages/backend/src/soul/injector.ts) `renderSoulPrompt()`：
+> 注入到 Claude CLI 通过 `--append-system-prompt-file` (M2-Soul 闭合 ps-aux 暴露
+> 风险后改用 file 形式)。空字段不渲染（不产生 "Tone: undefined" 噪音）。
+>
+> 下面 §6.1–§6.4 是 v0A.1 plan 的 4-sibling 设计，**保留作为未来演进参考**，
+> 当前**未实施**。如要真实落地需要 `soul.md` schema migration + parser 改造
+> + injector 重写 + 模板批量更新。
+
+> **v0A.1 plan 原文（保留为历史参考，未实施）**：原单文件 `soul.md` 改为 **4 sibling 文件**结构。Prior Art：[OpenClaw](https://github.com/openclaw/openclaw)（2026 GitHub #1 by stars，~250-355K）+ [aaronjmars/soul.md](https://github.com/aaronjmars/soul.md)（460+ stars，MIT）。理由：git diff 友好 / 字段独立演进 / 跟业界 prior art 对齐。
 
 ### 6.1 文件结构（M2-Soul 起，按 ADR-005 INSTANCE 隔离）
 
