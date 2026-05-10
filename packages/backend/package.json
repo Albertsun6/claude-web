@@ -34,7 +34,8 @@
     "test:soul-memory": "tsx src/test-soul-memory-integration.ts",
     "test:soul-memory:e2e": "VESSEL_MEMORY_E2E=1 tsx src/test-soul-memory-integration.ts",
     "test:vessel-memory-http": "tsx src/test-vessel-memory-http.ts",
-    "test:vessel-memory-http:e2e": "VESSEL_MEMORY_E2E=1 tsx src/test-vessel-memory-http.ts"
+    "test:vessel-memory-http:e2e": "VESSEL_MEMORY_E2E=1 tsx src/test-vessel-memory-http.ts",
+    "test:vessel-auth": "tsx src/test-vessel-auth.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",

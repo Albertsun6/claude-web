@@ -142,6 +142,17 @@ struct SettingsView: View {
                     Text("如果 backend 启用了 token 认证，粘贴这里。WS 用 ?token= 拼，HTTP 用 Bearer。改完会自动重连。")
                 }
                 Section {
+                    NavigationLink {
+                        VesselMemoryView()
+                    } label: {
+                        Label("Vessel 记忆", systemImage: "brain.head.profile")
+                    }
+                } header: {
+                    Text("Vessel 长期记忆")
+                } footer: {
+                    Text("查看 / 新增 / 搜索 Vessel 记忆条目。需要后端是 Vessel-flavored vessel-core（默认 :3032），普通 Eva 后端（:3030）这里会报 404。")
+                }
+                Section {
                     // M0 modelList Round: server-driven model list from HarnessStore.
                     // Filter enabled, but if current selection is in disabled list keep it
                     // displayed with "已停用" annotation (phase 3 cross m1 + arch MAJOR-4(3)).

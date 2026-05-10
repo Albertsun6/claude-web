@@ -98,8 +98,28 @@ export function checkAuth(c: Context): boolean {
   return tokenMatches(supplied);
 }
 
-/** Hono middleware: 401s requests without a valid token. */
+/**
+ * Paths under /api/* that bypass authMiddleware. Used for LAN service-discovery
+ * probes that have to work *before* the client has a token (iOS NWBrowser
+ * discovery flow per M2-iOS-α/β').
+ *
+ * Be conservative: only add paths whose response leaks no secrets and is
+ * already designed for unauthenticated callers. Currently:
+ *   - /api/vessel/health — public service identity (M2-iOS-α 已 review):
+ *     service / version / hostname / uptimeSec / sessions count / runs count /
+ *     bonjour metadata / soul.name. No secrets.
+ */
+const NO_AUTH_PATHS = new Set<string>([
+  '/api/vessel/health',
+]);
+
+/** Hono middleware: 401s requests without a valid token, except NO_AUTH_PATHS. */
 export const authMiddleware = async (c: Context, next: Next) => {
+  // Hono c.req.path is already normalized (no query string, no trailing slash variations).
+  if (NO_AUTH_PATHS.has(c.req.path)) {
+    await next();
+    return;
+  }
   if (!checkAuth(c)) {
     return c.json({ error: "unauthorized" }, 401);
   }

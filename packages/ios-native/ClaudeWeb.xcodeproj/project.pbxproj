@@ -33,12 +33,14 @@
 		57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA416505AC735C06A084E7EE /* ContentView.swift */; };
 		593A7592AA50BE3915A9627C /* RunsDashboardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481612632594972A31DFC674 /* RunsDashboardSheet.swift */; };
 		5FAABE3C23512413A97898E1 /* HarnessBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD3BC95C5C8D78000F492EB /* HarnessBoardView.swift */; };
+		66EA6DE2EB26723FC636D870 /* VesselMemoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34A4A896CCE708D25A879366 /* VesselMemoryView.swift */; };
 		69F0714A317BB99738DC18A9 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C189285FD2BC25E599008F0 /* ChatListView.swift */; };
 		6AD512C6C3EBFF3A522035BF /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7869FC7E7224F973A25D5A07 /* ConversationModels.swift */; };
 		6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */; };
 		767A29E33E102EBAAB5F03FB /* GitAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1938FAC36CF48013C9205F2 /* GitAPI.swift */; };
 		7777D446E5D1F743A234FCCB /* FileBrowserPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5A6AE07ADB47297221AE57 /* FileBrowserPanel.swift */; };
 		7A6541E53EADD7F1FC45BBC7 /* ContextAttachSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDC43410FF4DEACC7918356 /* ContextAttachSheet.swift */; };
+		7AA0A294EEA5B05671463D1D /* MemoryAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45DAE8C39F2242B6C213F77 /* MemoryAPI.swift */; };
 		7BAB4A70C3AA5D3D307A00A0 /* HarnessBoardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F21F1BACF0FC4CC27298FDC /* HarnessBoardUITests.swift */; };
 		8F34AD14FC08A306E5D74124 /* InboxCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A8B576D16DDD305D721AA33 /* InboxCaptureSheet.swift */; };
 		951378A0506A5A38CDB9F26D /* GitGateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141B19D309812F72DC751591 /* GitGateSheet.swift */; };
@@ -107,6 +109,7 @@
 		214D3C369B9B71EB97FA2F55 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
 		283735CE8528E94F44599D41 /* TTSPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSPlayer.swift; sourceTree = "<group>"; };
 		2C189285FD2BC25E599008F0 /* ChatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListView.swift; sourceTree = "<group>"; };
+		34A4A896CCE708D25A879366 /* VesselMemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VesselMemoryView.swift; sourceTree = "<group>"; };
 		350011A28BB99092BDE97C46 /* HealthCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheckView.swift; sourceTree = "<group>"; };
 		3A8B576D16DDD305D721AA33 /* InboxCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxCaptureSheet.swift; sourceTree = "<group>"; };
 		3E624BC3A86F193896A4424A /* ConversationsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsSheet.swift; sourceTree = "<group>"; };
@@ -144,6 +147,7 @@
 		AF2C287FAD57E3EE4B5AC077 /* PermissionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionSheet.swift; sourceTree = "<group>"; };
 		B1938FAC36CF48013C9205F2 /* GitAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitAPI.swift; sourceTree = "<group>"; };
 		B4588360C6A81FAB43597D8E /* DirectoryPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryPicker.swift; sourceTree = "<group>"; };
+		B45DAE8C39F2242B6C213F77 /* MemoryAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryAPI.swift; sourceTree = "<group>"; };
 		BB87B81434281D40E047F081 /* TitleHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleHelper.swift; sourceTree = "<group>"; };
 		BDC54C524ACD7548486C9F64 /* InboxAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxAPI.swift; sourceTree = "<group>"; };
 		BDD24330D2EB3BF5B5938822 /* WebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketClient.swift; sourceTree = "<group>"; };
@@ -236,6 +240,7 @@
 				5D56E3A8DF4DCA98024F7B77 /* HeartbeatMonitor.swift */,
 				BDC54C524ACD7548486C9F64 /* InboxAPI.swift */,
 				763A49693E0CE52A2C691B3C /* Info.plist */,
+				B45DAE8C39F2242B6C213F77 /* MemoryAPI.swift */,
 				D07DACBE8944013C0DE7EE79 /* NotesSession.swift */,
 				DE64375A8CB52018CBDAFF42 /* NotesView.swift */,
 				592C33B52949B8FC89528D76 /* ProjectRegistry.swift */,
@@ -315,6 +320,7 @@
 				E67AEC4B21826DE8E273887E /* SettingsView.swift */,
 				9C3CDA99E7C72B2FA85DB71A /* TelemetryDebugView.swift */,
 				4A14403D9F1DCF010FF040E9 /* VesselDiscoveryView.swift */,
+				34A4A896CCE708D25A879366 /* VesselMemoryView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -525,6 +531,7 @@
 				40497E1A0488B176FCBA6241 /* InboxListView.swift in Sources */,
 				458552BC134B372A7B368750 /* InputBar.swift in Sources */,
 				0C86C52D7F1B7E4195B48460 /* MacHeartbeatRow.swift in Sources */,
+				7AA0A294EEA5B05671463D1D /* MemoryAPI.swift in Sources */,
 				ED27D43A57EAFD4C28DF5C36 /* NewConversationSheet.swift in Sources */,
 				4AB7C9EA4DC767D7A0FA146E /* NotesSession.swift in Sources */,
 				15D7109C5F5E41C50324FE88 /* NotesView.swift in Sources */,
@@ -546,6 +553,7 @@
 				9C5CCC80588E51B11C14AA5D /* TranscriptParser.swift in Sources */,
 				4F64265D704AD7E131919906 /* VesselDiscovery.swift in Sources */,
 				D2115B5A7D5EAA920D4DBDFE /* VesselDiscoveryView.swift in Sources */,
+				66EA6DE2EB26723FC636D870 /* VesselMemoryView.swift in Sources */,
 				6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */,
 				14FF58C0ACCD40C590C4E172 /* VoiceSession.swift in Sources */,
 				D26C4CDFA3EED053DDB5AF93 /* WebSocketClient.swift in Sources */,
