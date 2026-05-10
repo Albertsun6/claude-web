@@ -47,7 +47,7 @@ export function buildNotificationHub(): NotificationHub | typeof NoOpHub {
 
   if (channels.length === 0) {
     console.log(
-      "[notify] no channels configured. Set SERVERCHAN_SENDKEY env or write ~/.claude-web/notify.json to enable push.",
+      "[notify] no channels configured. Set SERVERCHAN_SENDKEY env or write ~/.vessel/notify.json to enable push.",
     );
     return NoOpHub;
   }

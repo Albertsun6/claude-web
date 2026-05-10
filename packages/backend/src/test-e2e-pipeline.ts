@@ -4,8 +4,8 @@
 // 可重复跑（每次 mkdtemp 全新 DB + cwd），不调真 Claude CLI（mock runSessionFn 注入）。
 //
 // 设计：
-//   - **关键** (cross B1)：CLAUDE_WEB_DATA_DIR 在任何 DATA_DIR-touching dynamic import
-//     之前设到 mkdtemp 目录 — 防止 audit log 写到真 ~/.claude-web。harness-queries.ts
+//   - **关键** (cross B1)：VESSEL_DATA_DIR 在任何 DATA_DIR-touching dynamic import
+//     之前设到 mkdtemp 目录 — 防止 audit log 写到真 ~/.vessel。harness-queries.ts
 //     的 `const AUDIT_PATH = join(DATA_DIR, "harness-audit.jsonl")` 在模块求值时定型，
 //     必须用 dynamic import 让它在 env 之后加载。
 //   - mkdtemp 临时 DB 跑 schema v102；mkdtemp 临时 cwd 模拟 project working directory
@@ -17,7 +17,7 @@
 //   - tick → 等 stage_done broadcast → assert state machine + DB + audit
 //   - 跑两次完整 e2e 验证 reproducibility（结构等价，非 byte 等价；不同 issueId / stageId）
 //
-// 跑法：pnpm --filter @claude-web/backend test:e2e-pipeline
+// 跑法：pnpm --filter @vessel/backend test:e2e-pipeline
 
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,7 +30,7 @@ import type { RunSessionParams } from "./cli-runner.js";
 // 不能用 static value imports，因为 harness-queries.ts AUDIT_PATH 在模块求值时立即定型。
 // type-only imports（上面 `import type`）安全，TypeScript 编译时擦除。
 const dataDirRoot = mkdtempSync(join(tmpdir(), "loop4-datadir-"));
-process.env.CLAUDE_WEB_DATA_DIR = dataDirRoot;
+process.env.VESSEL_DATA_DIR = dataDirRoot;
 
 // 现在 dynamic import 业务模块（值），DATA_DIR 解析为 dataDirRoot
 const { openHarnessDb } = await import("./harness-store.js");
@@ -290,7 +290,7 @@ try {
   const auditPath = join(dataDirRoot, "harness-audit.jsonl");
   // 等 fire-and-forget audit appends 落地（每 audit() 调 appendFile + .catch()）
   await new Promise((r) => setTimeout(r, 50));
-  assert(existsSync(auditPath), `audit log written to isolated DATA_DIR (NOT to ~/.claude-web)`);
+  assert(existsSync(auditPath), `audit log written to isolated DATA_DIR (NOT to ~/.vessel)`);
 
   const auditLines = readFileSync(auditPath, "utf-8").split("\n").filter(Boolean);
   const auditByAction: Record<string, number> = {};

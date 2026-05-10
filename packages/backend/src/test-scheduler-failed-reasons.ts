@@ -9,7 +9,7 @@
 // 本测试用 mock 替换 buildContextBundle / runSession / harvestSpecArtifact 三个失败点，
 // 跑 EvaScheduler.spawnAgent 完整路径，断言 DB 里落入对应 canonical reason。
 //
-// 跑法：pnpm --filter @claude-web/backend test:scheduler-failed-reasons
+// 跑法：pnpm --filter @vessel/backend test:scheduler-failed-reasons
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

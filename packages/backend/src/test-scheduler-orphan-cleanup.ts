@@ -6,7 +6,7 @@
 // (Loop 6 起 initialize() 显式调用；Loop 6 前在 constructor 里隐式)。
 // awaiting_review 不动。
 //
-// 跑法：pnpm --filter @claude-web/backend test:scheduler-cleanup
+// 跑法：pnpm --filter @vessel/backend test:scheduler-cleanup
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";

@@ -7,8 +7,8 @@
 // - 改 modelList 只动 fallback-config.json → tsx watch 重启 → WS 重连 → iOS refetch
 // - M0 §7: 加 onConfigChanged 事件，供 index.ts broadcast harness_event{config_changed}
 
-import { HarnessConfigSchema, computeEtag, type HarnessConfig } from "@claude-web/shared";
-import fallback from "@claude-web/shared/fixtures/harness/fallback-config.json";
+import { HarnessConfigSchema, computeEtag, type HarnessConfig } from "@vessel/shared";
+import fallback from "@vessel/shared/fixtures/harness/fallback-config.json";
 import { EventEmitter } from "node:events";
 import chokidar from "chokidar";
 import { resolve, dirname } from "node:path";

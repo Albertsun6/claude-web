@@ -1,7 +1,7 @@
 // M-1 验收脚本：开 harness.db 跑迁移，验证 13 业务表 + FTS5 + 触发器全部建成功。
-// 用 tmp 路径避免污染 ~/.claude-web/harness.db。
+// 用 tmp 路径避免污染 ~/.vessel/harness.db。
 //
-// 跑法：pnpm --filter @claude-web/backend test:harness-schema
+// 跑法：pnpm --filter @vessel/backend test:harness-schema
 //
 // Round 1 评审修复：
 // - cross M6: 修测试 setup 顺序，先 methodology 后 stage，避免 FK 错误掩盖 CHECK 测试

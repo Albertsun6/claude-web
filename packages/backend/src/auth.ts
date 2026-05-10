@@ -1,10 +1,10 @@
 // Centralized auth + path-allowlist enforcement for the backend.
 //
 // Two independent gates:
-//   1. CLAUDE_WEB_TOKEN — shared bearer/query token. Required on every
+//   1. VESSEL_TOKEN — shared bearer/query token. Required on every
 //      /api/* request (except /health) and on the /ws upgrade. If empty,
 //      we log a one-time warning and allow no-auth (single-user dev mode).
-//   2. CLAUDE_WEB_ALLOWED_ROOTS — colon-separated absolute paths. Every
+//   2. VESSEL_ALLOWED_ROOTS — colon-separated absolute paths. Every
 //      cwd / root passed to fs / git / sessions / cli-runner must equal one
 //      of these or live below one of them. If empty, log a warning and
 //      allow any path.
@@ -17,8 +17,8 @@ import path from "node:path";
 import type { Context, Next } from "hono";
 import { SCRATCH_CWD } from "./projects-store.js";
 
-const TOKEN = (process.env.CLAUDE_WEB_TOKEN ?? "").trim();
-const RAW_ROOTS = (process.env.CLAUDE_WEB_ALLOWED_ROOTS ?? "").trim();
+const TOKEN = (process.env.VESSEL_TOKEN ?? "").trim();
+const RAW_ROOTS = (process.env.VESSEL_ALLOWED_ROOTS ?? "").trim();
 
 const ALLOWED_ROOTS: string[] = RAW_ROOTS
   ? Array.from(new Set([
@@ -84,7 +84,7 @@ export function checkAuth(c: Context): boolean {
   if (!isAuthEnabled()) {
     if (!warnedToken) {
       console.warn(
-        "[auth] CLAUDE_WEB_TOKEN is empty — running without authentication. " +
+        "[auth] VESSEL_TOKEN is empty — running without authentication. " +
         "Set it in env (and on launchd plist) for any non-localhost exposure.",
       );
       warnedToken = true;
@@ -123,7 +123,7 @@ export function verifyAllowedPath(absPath: string): string | null {
   if (!isPathAllowlistEnabled()) {
     if (!warnedRoots) {
       console.warn(
-        "[auth] CLAUDE_WEB_ALLOWED_ROOTS is empty — fs/git/sessions accept any absolute path. " +
+        "[auth] VESSEL_ALLOWED_ROOTS is empty — fs/git/sessions accept any absolute path. " +
         "Set it (e.g. /Users/you/code:/Users/you/Desktop) to lock this down.",
       );
       warnedRoots = true;

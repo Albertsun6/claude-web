@@ -56,7 +56,7 @@ export interface HarnessDb {
 }
 
 /**
- * Open ~/.claude-web/harness.db. Idempotent — safe to call multiple times.
+ * Open ~/.vessel/harness.db. Idempotent — safe to call multiple times.
  *
  * Migration filenames: `NNNN_<desc>.sql`. Each file MUST contain
  * `-- TARGET_VERSION = <int>` (e.g. `100`) somewhere in its first 20 lines.

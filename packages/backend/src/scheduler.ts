@@ -13,7 +13,7 @@ import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type ModelHint, modelIdForHint } from "@claude-web/shared";
+import { type ModelHint, modelIdForHint } from "@vessel/shared";
 import { runSession, type RunSessionParams } from "./cli-runner.js";
 
 /**

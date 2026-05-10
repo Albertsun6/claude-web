@@ -1,8 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ImageAttachment, ModelId, PermissionMode } from "@claude-web/shared";
+import type { ImageAttachment, ModelId, PermissionMode } from "@vessel/shared";
 import { verifyAllowedPath } from "./auth.js";
+import { getMcpConfigPath } from "./mcp/cli-config.js";
+import { loadSoulOrNull, SoulParseError } from "./soul/parser.js";
+import { renderSoulPrompt } from "./soul/injector.js";
 
 export interface RunSessionParams {
   prompt: string;
@@ -21,6 +24,13 @@ export interface RunSessionParams {
   signal?: AbortSignal;
   /** Scheduler task identifier for WS broadcast routing (e.g. "<issueId>/<stageId>"). */
   taskId?: string;
+  /**
+   * v0A.1 M0.5 (Vessel CodingDriver): when true, spawn child in its own process group
+   * so the adapter can `process.kill(-pgid, ...)` to take down the whole subtree
+   * (claude CLI + any tool subprocesses). Eva web/iOS path keeps default false.
+   * @see ADR-016 path C
+   */
+  detached?: boolean;
 }
 
 const CLI_BIN = process.env.CLAUDE_CLI ?? "claude";
@@ -68,6 +78,24 @@ function buildArgs(p: RunSessionParams, resume?: string): string[] {
   if (p.permissionToken && p.backendBase && p.permissionMode !== "bypassPermissions") {
     args.push("--settings", buildSettings(p.permissionToken, p.backendBase, p.authToken));
   }
+  // M1B+: when VESSEL_MCP_SERVERS is set, mirror it to a temp .mcp.json and
+  // pass --mcp-config so Claude CLI children can call MCP tools. Stdio MCP is
+  // 1:1 with its spawning process — CLI must launch its own copies (not share
+  // McpServerManager's vessel-core-side instances).
+  const mcpConfigPath = getMcpConfigPath();
+  if (mcpConfigPath) args.push("--mcp-config", mcpConfigPath);
+  // M2-Soul: if $VESSEL_DATA_DIR/soul.md exists, render it and append to the
+  // default system prompt so the spawned CLI takes on the Instance persona.
+  // Parse failures are surfaced as warnings — don't crash the run, just skip
+  // injection (operator can fix soul.md without losing the ability to coding).
+  try {
+    const soul = loadSoulOrNull();
+    if (soul) args.push("--append-system-prompt", renderSoulPrompt(soul));
+  } catch (err) {
+    if (err instanceof SoulParseError) {
+      console.warn(`[cli-runner] skipping soul injection: ${err.message}`);
+    } else { throw err; }
+  }
   return args;
 }
 
@@ -78,21 +106,39 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
     cwd: p.cwd,
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env,
+    detached: p.detached === true,
   });
 
   let killTimer: NodeJS.Timeout | undefined;
   const onAbort = () => {
     if (child.killed || child.exitCode !== null) return;
-    try { child.kill("SIGTERM"); } catch { /* ignore */ }
+    try {
+      // v0A.1 M0.5: detached mode → child.pid is its own pgid → negative pid kills group
+      if (p.detached === true && typeof child.pid === "number") {
+        process.kill(-child.pid, "SIGTERM");
+      } else {
+        child.kill("SIGTERM");
+      }
+    } catch { /* ignore */ }
     // Escalate to SIGKILL if it doesn't exit promptly. Fixes hangs where
     // the CLI is blocked in a hook fetch and won't ack SIGTERM.
     killTimer = setTimeout(() => {
       if (child.exitCode === null && !child.killed) {
-        try { child.kill("SIGKILL"); } catch { /* ignore */ }
+        try {
+          if (p.detached === true && typeof child.pid === "number") {
+            process.kill(-child.pid, "SIGKILL");
+          } else {
+            child.kill("SIGKILL");
+          }
+        } catch { /* ignore */ }
       }
     }, KILL_GRACE_MS);
   };
   p.signal?.addEventListener("abort", onAbort);
+  // Handle the case where the signal was already aborted before spawn finished
+  // wiring the listener (M0.5 risk-officer R-M0.5-2). Without this, an early
+  // cancel would never propagate to the child.
+  if (p.signal?.aborted) onAbort();
 
   // Build content: plain string when no images (cheap), array when images present.
   const content: string | any[] =

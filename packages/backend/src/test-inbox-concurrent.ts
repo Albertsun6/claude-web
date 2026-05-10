@@ -3,10 +3,10 @@
 // Verifies that promise-queue write lock + atomic temp+rename prevent the
 // lost-update race that existed in the pre-Stage-A version (raw appendFileSync
 // + writeFileSync). Run via:
-//   pnpm --filter @claude-web/backend test:inbox-concurrent
+//   pnpm --filter @vessel/backend test:inbox-concurrent
 //
 // Strategy:
-//   1. Backup user's real ~/.claude-web/inbox.jsonl, redirect tests to TMP path
+//   1. Backup user's real ~/.vessel/inbox.jsonl, redirect tests to TMP path
 //   2. 100 parallel appendInbox → assert all 100 ids present + unique
 //   3. 100 parallel setTriage on those items (mix archive + ideas) → assert
 //      file is valid JSONL + every item has correct status
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
 
   // ─────────── Test 4: file integrity ───────────
   console.log("[test] T4: file is valid JSONL …");
-  const filePath = path.join(TEST_HOME, ".claude-web", "inbox.jsonl");
+  const filePath = path.join(TEST_HOME, ".vessel", "inbox.jsonl");
   const raw = fs.readFileSync(filePath, "utf8");
   const lines = raw.split("\n").filter((l) => l.trim().length > 0);
   if (lines.length !== 100) {
