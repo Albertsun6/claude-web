@@ -1,0 +1,41 @@
+# Capability App: coding
+#
+# 第一个 Capability App（M0.5）— 提供 CodingSkill (调 ClaudeCodeDriver wrapping
+# Eva cli-runner per ADR-016 path C)。
+#
+# v0A.1 M0.5 守边界：本 manifest 仅声明契约，runtime 加载机制 (CapabilityApp.boot)
+# 留给 M2+。当前由 orchestrator 直接 import 使用，manifest 用于：
+#   1) Zod 校验跑通（AppManifest schema 实现验证）
+#   2) M2+ runtime 上线后零修改即可装载
+#
+# @see interfaces/app.ts AppManifest
+# @see ADR-007 license / ADR-003 v0.1 仅 CC
+
+id: coding
+name: Coding
+version: 0.0.1
+description: Spawn Coding CLI subprocess to write files in an isolated workspace.
+author: Vessel core team
+schemaVersion: 1
+
+skills:
+  - coding
+
+# Tools 本 capability 不暴露 — CodingDriver 是 internal driver，不是 Tool。
+tools: []
+
+# 不依赖 ML worker（CC CLI 本身就是 model client）。
+mlWorkers: []
+
+# Permission scope（M1B 起 enforced；M0.5 仅声明）。
+permissionScope:
+  paths:
+    # 仅允许在 instance/workspace/<runId>/ 下读写
+    - "${VESSEL_DATA_DIR}/workspace/**"
+  ops:
+    - file.read
+    - file.write
+    - process.spawn
+
+# Soul Spec 注入：cli-runner-only（按 ADR-004）
+soulInjection: cli-runner-only
