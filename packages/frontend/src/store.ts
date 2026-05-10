@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ModelId, PermissionMode } from "@claude-web/shared";
+import type { ModelId, PermissionMode } from "@vessel/shared";
 
 export interface RenderedMessage {
   id: string;

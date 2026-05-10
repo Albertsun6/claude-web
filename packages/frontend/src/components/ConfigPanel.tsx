@@ -1,5 +1,5 @@
 import { useStore } from "../store";
-import type { ModelId, PermissionMode } from "@claude-web/shared";
+import type { ModelId, PermissionMode } from "@vessel/shared";
 
 const MODELS: { id: ModelId; label: string }[] = [
   { id: "claude-opus-4-7", label: "Opus 4.7" },
