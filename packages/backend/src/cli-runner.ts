@@ -6,6 +6,7 @@ import { verifyAllowedPath } from "./auth.js";
 import { getMcpConfigPath } from "./mcp/cli-config.js";
 import { loadSoulOrNull, SoulParseError } from "./soul/parser.js";
 import { renderSoulPrompt } from "./soul/injector.js";
+import { searchMemory } from "./memory/memory-store.js";
 
 export interface RunSessionParams {
   prompt: string;
@@ -61,7 +62,61 @@ interface SpawnResult {
   stderr: string;
 }
 
-function buildArgs(p: RunSessionParams, resume?: string): string[] {
+/**
+ * M1C-B integration: retrieve top-K memory records relevant to the user's
+ * prompt and format as a markdown system-prompt block to append to soul prompt.
+ *
+ * Failure modes — all fail-soft, returns '':
+ *   - VESSEL_MEMORY_AUGMENT=0 → skip retrieval entirely
+ *   - embedder model not loaded yet (cold start) → skip
+ *   - search throws (sqlite-vec error / DB lock) → warn + skip
+ *   - empty result set → return ''
+ *
+ * Top-K default 3 — small enough to keep prompt cache stable, big enough
+ * to bring useful context. Tunable via VESSEL_MEMORY_TOPK.
+ *
+ * Distance threshold: cosine distance > 1.5 (very loose match) is filtered
+ * out so we don't pollute the prompt with unrelated records.
+ */
+export async function getMemoryContextOrEmpty(prompt: string): Promise<string> {
+  if (process.env.VESSEL_MEMORY_AUGMENT === '0') return '';
+  if (!prompt || prompt.trim().length < 3) return ''; // too short to be useful
+
+  const k = (() => {
+    const env = process.env.VESSEL_MEMORY_TOPK;
+    if (!env) return 3;
+    const n = parseInt(env, 10);
+    return Number.isFinite(n) && n > 0 && n <= 20 ? n : 3;
+  })();
+  const distMax = 1.5;
+
+  try {
+    const hits = await searchMemory(prompt, k);
+    const relevant = hits.filter(h => h.distance <= distMax);
+    if (relevant.length === 0) return '';
+
+    const lines: string[] = [
+      '# Relevant memories from previous sessions',
+      '',
+      'These records were retrieved by similarity to the current request. Use only',
+      'when material to the answer; do not narrate retrieval.',
+      '',
+    ];
+    for (const h of relevant) {
+      // Trim each record to keep prompt size bounded; full record id available
+      // via `vessel-core memory list` if needed.
+      const snippet = h.content.replace(/\s+/g, ' ').slice(0, 240);
+      lines.push(`- (${h.kind}) ${snippet}`);
+    }
+    return lines.join('\n');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[cli-runner] skipping memory augmentation: ${msg}`);
+    return '';
+  }
+}
+
+function buildArgs(p: RunSessionParams, resume?: string, memoryContext: string = ''): string[] {
   const args = [
     "--print",
     "--input-format", "stream-json",
@@ -84,23 +139,33 @@ function buildArgs(p: RunSessionParams, resume?: string): string[] {
   // McpServerManager's vessel-core-side instances).
   const mcpConfigPath = getMcpConfigPath();
   if (mcpConfigPath) args.push("--mcp-config", mcpConfigPath);
-  // M2-Soul: if $VESSEL_DATA_DIR/soul.md exists, render it and append to the
-  // default system prompt so the spawned CLI takes on the Instance persona.
-  // Parse failures are surfaced as warnings — don't crash the run, just skip
-  // injection (operator can fix soul.md without losing the ability to coding).
+  // M2-Soul + M1C-B integration: render persona + relevant memory into a
+  // single --append-system-prompt block. Soul comes first (defines who Claude
+  // is), memory comes second (gives context for the current request).
+  // Both are independent fail-soft — soul missing or memory empty just omits
+  // that segment; CLI still spawns with default system prompt.
+  const promptParts: string[] = [];
   try {
     const soul = loadSoulOrNull();
-    if (soul) args.push("--append-system-prompt", renderSoulPrompt(soul));
+    if (soul) promptParts.push(renderSoulPrompt(soul));
   } catch (err) {
     if (err instanceof SoulParseError) {
       console.warn(`[cli-runner] skipping soul injection: ${err.message}`);
     } else { throw err; }
   }
+  if (memoryContext) promptParts.push(memoryContext);
+  if (promptParts.length > 0) {
+    args.push("--append-system-prompt", promptParts.join('\n\n'));
+  }
   return args;
 }
 
 async function runOnce(p: RunSessionParams, resume: string | undefined): Promise<SpawnResult> {
-  const args = buildArgs(p, resume);
+  // M1C-B integration: retrieve relevant memory once per spawn (not per buildArgs
+  // call — buildArgs is invoked again on stale-session retry, but the same memory
+  // context applies). Fails to '' on any error so spawn proceeds with soul-only.
+  const memoryContext = await getMemoryContextOrEmpty(p.prompt);
+  const args = buildArgs(p, resume, memoryContext);
 
   const child: ChildProcessWithoutNullStreams = spawn(CLI_BIN, args, {
     cwd: p.cwd,

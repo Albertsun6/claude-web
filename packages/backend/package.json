@@ -30,7 +30,9 @@
     "test:soul": "tsx src/test-soul.ts",
     "test:m2-ios-alpha": "tsx src/test-m2-ios-alpha.ts",
     "test:memory": "tsx src/test-memory.ts",
-    "test:memory:e2e": "VESSEL_MEMORY_E2E=1 tsx src/test-memory.ts"
+    "test:memory:e2e": "VESSEL_MEMORY_E2E=1 tsx src/test-memory.ts",
+    "test:soul-memory": "tsx src/test-soul-memory-integration.ts",
+    "test:soul-memory:e2e": "VESSEL_MEMORY_E2E=1 tsx src/test-soul-memory-integration.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
