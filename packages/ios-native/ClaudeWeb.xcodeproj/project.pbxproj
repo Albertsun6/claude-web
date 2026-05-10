@@ -27,6 +27,8 @@
 		4AA49DDD76AE150CB43E459F /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BC150255A000C4B594FB34 /* Telemetry.swift */; };
 		4AB7C9EA4DC767D7A0FA146E /* NotesSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07DACBE8944013C0DE7EE79 /* NotesSession.swift */; };
 		4E80C1DFC56B47FB3E35F5F0 /* ContextAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CC90A35D2B5C0F8ECFFA3D6 /* ContextAPI.swift */; };
+		4F64265D704AD7E131919906 /* VesselDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0D4D08E7469AC7907BC216 /* VesselDiscovery.swift */; };
+		4F995EB43AA541BDEF8006DB /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BB2B4DA09805CFC58464D4E /* BonjourBrowser.swift */; };
 		577BE076AA69A32AC0F06F12 /* ProtocolFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1FDBA5369B9FB21BC91821 /* ProtocolFixtureTests.swift */; };
 		57AB27DCEB2587267E313F97 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA416505AC735C06A084E7EE /* ContentView.swift */; };
 		593A7592AA50BE3915A9627C /* RunsDashboardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481612632594972A31DFC674 /* RunsDashboardSheet.swift */; };
@@ -54,6 +56,7 @@
 		CBC22CAD60B6F38CC3E4D28B /* TelemetryDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3CDA99E7C72B2FA85DB71A /* TelemetryDebugView.swift */; };
 		CFA45A687AD8455E7380FC19 /* InboxAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC54C524ACD7548486C9F64 /* InboxAPI.swift */; };
 		D0731F6CAC254AB33956E0FB /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90163FEB077BB408157C916 /* Protocol.swift */; };
+		D2115B5A7D5EAA920D4DBDFE /* VesselDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A14403D9F1DCF010FF040E9 /* VesselDiscoveryView.swift */; };
 		D236A7D09D60FE98BD6705D2 /* HealthCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350011A28BB99092BDE97C46 /* HealthCheckView.swift */; };
 		D26C4CDFA3EED053DDB5AF93 /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD24330D2EB3BF5B5938822 /* WebSocketClient.swift */; };
 		D9EA35CC1324C85BAFB52082 /* ProjectsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C686BBF22FF0FA13BF0020D7 /* ProjectsAPI.swift */; };
@@ -93,6 +96,7 @@
 /* Begin PBXFileReference section */
 		03EB85EB534A11AFEBB9A548 /* VoiceSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSession.swift; sourceTree = "<group>"; };
 		0AEA687523D42FE5BEA84075 /* HarnessProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessProtocol.swift; sourceTree = "<group>"; };
+		0D0D4D08E7469AC7907BC216 /* VesselDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VesselDiscovery.swift; sourceTree = "<group>"; };
 		0DE3519D5D4B6BA73D2C4D5D /* RunRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunRouter.swift; sourceTree = "<group>"; };
 		141B19D309812F72DC751591 /* GitGateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitGateSheet.swift; sourceTree = "<group>"; };
 		1513F54E80C419639B1D1705 /* HistorySessionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySessionRow.swift; sourceTree = "<group>"; };
@@ -110,6 +114,7 @@
 		42AA631E277EDCEFDF480163 /* InputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBar.swift; sourceTree = "<group>"; };
 		45BC150255A000C4B594FB34 /* Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Telemetry.swift; sourceTree = "<group>"; };
 		481612632594972A31DFC674 /* RunsDashboardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunsDashboardSheet.swift; sourceTree = "<group>"; };
+		4A14403D9F1DCF010FF040E9 /* VesselDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VesselDiscoveryView.swift; sourceTree = "<group>"; };
 		4E6E919BA558154CE8CEECE4 /* fallback-config.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "fallback-config.json"; sourceTree = "<group>"; };
 		4E9E61B8F5FAAAD6873C8B4C /* BackendClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendClient.swift; sourceTree = "<group>"; };
 		55DF4DA3445654EBE1E3F69B /* ConversationNamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNamer.swift; sourceTree = "<group>"; };
@@ -133,6 +138,7 @@
 		950F8E2DCA452C46977B3762 /* ClaudeWebTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ClaudeWebTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		989ACA299187F4EE9220555C /* FsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsAPI.swift; sourceTree = "<group>"; };
 		9AF5FF381485944DDD277DA6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9BB2B4DA09805CFC58464D4E /* BonjourBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourBrowser.swift; sourceTree = "<group>"; };
 		9C3CDA99E7C72B2FA85DB71A /* TelemetryDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryDebugView.swift; sourceTree = "<group>"; };
 		ABDC43410FF4DEACC7918356 /* ContextAttachSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextAttachSheet.swift; sourceTree = "<group>"; };
 		AF2C287FAD57E3EE4B5AC077 /* PermissionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionSheet.swift; sourceTree = "<group>"; };
@@ -253,6 +259,8 @@
 		60865AB66DC4C76EE13C09E6 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
+				9BB2B4DA09805CFC58464D4E /* BonjourBrowser.swift */,
+				0D0D4D08E7469AC7907BC216 /* VesselDiscovery.swift */,
 				BDD24330D2EB3BF5B5938822 /* WebSocketClient.swift */,
 			);
 			path = Networking;
@@ -306,6 +314,7 @@
 				350011A28BB99092BDE97C46 /* HealthCheckView.swift */,
 				E67AEC4B21826DE8E273887E /* SettingsView.swift */,
 				9C3CDA99E7C72B2FA85DB71A /* TelemetryDebugView.swift */,
+				4A14403D9F1DCF010FF040E9 /* VesselDiscoveryView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -482,6 +491,7 @@
 			files = (
 				04577420B30BF962BA44E712 /* AtFilePicker.swift in Sources */,
 				2EFE065198E9ECF3647CA798 /* BackendClient.swift in Sources */,
+				4F995EB43AA541BDEF8006DB /* BonjourBrowser.swift in Sources */,
 				FC7B963AADF2DB485172748D /* BuildInfo.swift in Sources */,
 				E09093E9B0F2E9C3F716B609 /* Cache.swift in Sources */,
 				69F0714A317BB99738DC18A9 /* ChatListView.swift in Sources */,
@@ -534,6 +544,8 @@
 				F72F1EAEFF34149B7BC359BE /* TitleHelper.swift in Sources */,
 				038BDDC936F51C44239636F0 /* ToolCards.swift in Sources */,
 				9C5CCC80588E51B11C14AA5D /* TranscriptParser.swift in Sources */,
+				4F64265D704AD7E131919906 /* VesselDiscovery.swift in Sources */,
+				D2115B5A7D5EAA920D4DBDFE /* VesselDiscoveryView.swift in Sources */,
 				6F5D4B75B20EC166AFCCC9D5 /* VoiceRecorder.swift in Sources */,
 				14FF58C0ACCD40C590C4E172 /* VoiceSession.swift in Sources */,
 				D26C4CDFA3EED053DDB5AF93 /* WebSocketClient.swift in Sources */,

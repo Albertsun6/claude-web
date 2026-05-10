@@ -59,6 +59,11 @@ targets:
         NSLocalNetworkUsageDescription: Seaidea connects to your Mac running the backend on the local network.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # M2-iOS-β: NWBrowser requires explicit Bonjour service declaration in
+        # Info.plist (iOS 14+). Without this, browsing `_vessel._tcp` silently
+        # returns no results.
+        NSBonjourServices:
+          - _vessel._tcp
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.albertsun6.claudeweb-native

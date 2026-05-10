@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var draftMode: String = "plan"
     @State private var showResetConfirm = false
     @State private var showResetDone = false
+    @State private var showDiscoverySheet = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
@@ -100,6 +101,11 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
+                    Button {
+                        showDiscoverySheet = true
+                    } label: {
+                        Label("自动发现局域网 Vessel", systemImage: "wifi.circle")
+                    }
                     Button("Prod — 模拟器 (localhost:3030)") {
                         draftURL = "http://localhost:3030"
                     }
@@ -115,7 +121,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Backend")
                 } footer: {
-                    Text("Prod = launchd 跑的稳定副本（:3030）。Dev = 你正在编辑的工作树（:3031），watch 模式，改了就重启。dogfood 时连 Prod，验证新代码时切 Dev。")
+                    Text("Prod = launchd 跑的稳定副本（:3030）。Dev = 你正在编辑的工作树（:3031），watch 模式，改了就重启。dogfood 时连 Prod，验证新代码时切 Dev。\n「自动发现」浏览 `_vessel._tcp` 服务，需要 Mac 端 vessel-core 已启动。")
                 }
                 Section {
                     TextField("/Users/you/Desktop", text: $draftCwd)
@@ -396,6 +402,12 @@ struct SettingsView: View {
                 Button("好", role: .cancel) {}
             } message: {
                 Text("数据已清除。请双击 Home 上滑关闭 app，再重新打开以应用。")
+            }
+            .sheet(isPresented: $showDiscoverySheet) {
+                VesselDiscoveryView { resolvedURL in
+                    draftURL = resolvedURL
+                    if let u = URL(string: resolvedURL) { settings.backendURL = u }
+                }
             }
             .navigationTitle("设置")
             .toolbar {
