@@ -1,0 +1,16 @@
+{
+  "id": "mr-01HJK5XL0CDEF12A",
+  "stage": "architecture",
+  "failurePattern": "Phase A 7-question anchor gate missed Q7 rollback path",
+  "fix": "Phase A risks.yaml MUST include a non-empty entry with risk_id 'RISK-Q7' for Rollback question",
+  "source": "workspace-pending",
+  "verifiedBy": "auto",
+  "appliesTo": {
+    "domain": ["*"],
+    "stage": ["architecture"],
+    "techStack": ["*"]
+  },
+  "shipCount": 0,
+  "promoteCount": 0,
+  "sourceWorkspaceId": "ws-01HJK5XF0CDEF07A"
+}

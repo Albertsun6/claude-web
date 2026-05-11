@@ -1,0 +1,19 @@
+{
+  "id": "att-01HJK5XK0CDEF11B",
+  "stageRunId": "sr-01HJK5XH0CDEF09B",
+  "attemptN": 2,
+  "invocation": {
+    "cmd": "claude --print --input-format=stream-json --output-format=stream-json",
+    "cwd": "/Users/yongqian/Desktop/Vessel",
+    "model": "claude-opus-4-7",
+    "promptHash": "sha256:abababababababababababababababababababababababababababababababab"
+  },
+  "reviewState": "fact_checked",
+  "outputArtifactIds": [],
+  "status": "failed",
+  "exitCode": 1,
+  "stderrUri": "file:///Users/yongqian/Desktop/Vessel/.aisep/tmp/att-01HJK5XK0CDEF11B.stderr.log",
+  "error": "Phase A produced 7-page brief; exceeds 5-page hard limit. Revise.",
+  "startedAt": 1747930200000,
+  "endedAt": 1747930550000
+}

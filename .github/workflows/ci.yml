@@ -27,6 +27,12 @@ jobs:
       - name: Protocol fixture tests
         run: pnpm test:protocol
 
+      - name: AISEP protocol fixture tests
+        run: pnpm test:protocol:aisep
+
+      - name: dependency-cruiser one-way enforcement
+        run: pnpm dep-cruiser:check
+
       - name: Frontend TypeScript build
         run: pnpm --filter @claude-web/frontend build
 
