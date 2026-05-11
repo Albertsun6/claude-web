@@ -169,6 +169,30 @@ auto-triggers on phrases like "完成了 / 搞定 / ship 了 / 更新手册" or 
 
 When in doubt: ask the user "要更新手册吗？" rather than assume.
 
+## Session boot ritual (Steward v0)
+
+每个新 Claude 会话在第一次回应用户前**应**：
+
+1. 读 [`docs/BACKLOG.md`](docs/BACKLOG.md)（必须）
+2. 若顶部"最近更新" > 72h，提醒 "Backlog stale"
+3. Echo: `"Backlog: N in_progress · M planned · K blocked"`
+
+**Lazy**：`pnpm eva:sessions` 不在 boot 时跑——用户问"下一步"/"活窗口"再跑。
+
+**Fallback**：若 Claude 没主动 echo，用户粘 `/boot` 或 `看 backlog 推荐下一步` 触发，5 秒内响应。
+
+**契约 + 用户面**：
+- 9 个用户 prompt 短语：[`docs/STEWARD_PROMPTS.md`](docs/STEWARD_PROMPTS.md)
+- 详细使用手册：[`docs/STEWARD_USAGE.md`](docs/STEWARD_USAGE.md)
+- Schema 契约（10 个 invariants）：[`docs/adr/vessel/ADR-019-steward-v0-contract.md`](docs/adr/vessel/ADR-019-steward-v0-contract.md)
+
+**Claude 跑命令前的 3 层执行白名单（I8）**：
+- **read-only auto**：`git status` / `ls` / `cat` / `pnpm eva:sessions` 等只读 → 默许自动跑
+- **write needs ack**：`git commit` / 改文件 / `gh pr edit` → echo 命令 + 等用户 `ok`/`yes`/`继续`
+- **destructive needs explicit affirmative**：`rm -rf` / `git push --force` / `git worktree remove` → 永不静默；要求用户主动短语肯定
+
+**BACKLOG.md commit 守门（I9）**：改 BACKLOG.md 后 `git status --porcelain` 检查——纯净则自动 commit；有其它 dirty 文件则只 stage BACKLOG + ack 后 commit；决不静默 stage 用户其它文件。
+
 ## Docs map
 
 | File | Purpose |
