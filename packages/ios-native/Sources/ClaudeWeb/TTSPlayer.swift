@@ -46,6 +46,12 @@ final class TTSPlayer: NSObject {
     private let settings: () -> AppSettings
     private weak var telemetry: Telemetry?
 
+    /// False between `speakAssistantTurn` entry and the first `play()` of that
+    /// turn; flipped true at first `play()` so `voice.first_audio.played` only
+    /// fires once per round-trip. (Replay path does not reset; replays don't
+    /// contribute to the mic-to-first-audio measurement.)
+    private var firstAudioOfTurn: Bool = true
+
     /// Bumped on cancel / new turn so in-flight fetches abandon.
     private var generation: Int = 0
 
@@ -114,6 +120,7 @@ final class TTSPlayer: NSObject {
 
         let gen = generation
         state = .fetching
+        firstAudioOfTurn = false
         telemetry?.log(
             "tts.fetch.start",
             props: ["style": s.speakStyle, "sourceLen": String(cleanedSource.count)],
@@ -332,6 +339,10 @@ final class TTSPlayer: NSObject {
             p.prepareToPlay()
             p.play()
             player = p
+            if !firstAudioOfTurn {
+                firstAudioOfTurn = true
+                telemetry?.log("voice.first_audio.played", conversationId: playingConversation)
+            }
         } catch {
             state = .error("播放失败: \(error.localizedDescription)")
         }

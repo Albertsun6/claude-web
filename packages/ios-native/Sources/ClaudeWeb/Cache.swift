@@ -2,7 +2,7 @@
 // reads and crash-survival of conversation→sessionId bindings.
 //
 // Layout:
-//   Application Support/com.albertsun6.claudeweb-native/cache/
+//   Application Support/com.albertsun6.vessel/cache/
 //   ├── projects.json            # last GET /api/projects snapshot
 //   ├── conversations.json       # all known conversation metadata
 //   └── sessions/
@@ -37,7 +37,7 @@ final class Cache {
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let bundleId = Bundle.main.bundleIdentifier ?? "com.albertsun6.claudeweb-native"
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.albertsun6.vessel"
         let cacheRoot = support.appendingPathComponent(bundleId).appendingPathComponent("cache")
         self.root = cacheRoot
         self.projectsPath = cacheRoot.appendingPathComponent("projects.json")

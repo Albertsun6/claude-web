@@ -20,22 +20,22 @@ struct Project: Identifiable, Codable, Equatable {
 @MainActor
 @Observable
 final class AppSettings {
-    private static let backendKey = "com.albertsun6.claudeweb-native.backendURL"
-    private static let cwdKey = "com.albertsun6.claudeweb-native.cwd"
-    private static let permissionModeKey = "com.albertsun6.claudeweb-native.permissionMode"
-    private static let ttsEnabledKey = "com.albertsun6.claudeweb-native.ttsEnabled"
-    private static let speakStyleKey = "com.albertsun6.claudeweb-native.speakStyle"
-    private static let slowTtsKey = "com.albertsun6.claudeweb-native.slowTts"
-    private static let authTokenKey = "com.albertsun6.claudeweb-native.authToken"
-    private static let modelKey = "com.albertsun6.claudeweb-native.model"
-    private static let silentKeepaliveKey = "com.albertsun6.claudeweb-native.silentKeepalive"
-    private static let currentConversationIdKey = "com.albertsun6.claudeweb-native.currentConversationId"
-    private static let fontSizeKey = "com.albertsun6.claudeweb-native.fontSize"
-    private static let alwaysExpandThinkingKey = "com.albertsun6.claudeweb-native.alwaysExpandThinking"
-    private static let verboseToolsKey = "com.albertsun6.claudeweb-native.verboseTools"
-    private static let autoEnterVoiceKey = "com.albertsun6.claudeweb-native.autoEnterVoice"
-    private static let gitGateEnabledKey = "com.albertsun6.claudeweb-native.gitGateEnabled"
-    private static let completionChimeEnabledKey = "com.albertsun6.claudeweb-native.completionChimeEnabled"
+    private static let backendKey = "com.albertsun6.vessel.backendURL"
+    private static let cwdKey = "com.albertsun6.vessel.cwd"
+    private static let permissionModeKey = "com.albertsun6.vessel.permissionMode"
+    private static let ttsEnabledKey = "com.albertsun6.vessel.ttsEnabled"
+    private static let speakStyleKey = "com.albertsun6.vessel.speakStyle"
+    private static let slowTtsKey = "com.albertsun6.vessel.slowTts"
+    private static let authTokenKey = "com.albertsun6.vessel.authToken"
+    private static let modelKey = "com.albertsun6.vessel.model"
+    private static let silentKeepaliveKey = "com.albertsun6.vessel.silentKeepalive"
+    private static let currentConversationIdKey = "com.albertsun6.vessel.currentConversationId"
+    private static let fontSizeKey = "com.albertsun6.vessel.fontSize"
+    private static let alwaysExpandThinkingKey = "com.albertsun6.vessel.alwaysExpandThinking"
+    private static let verboseToolsKey = "com.albertsun6.vessel.verboseTools"
+    private static let autoEnterVoiceKey = "com.albertsun6.vessel.autoEnterVoice"
+    private static let gitGateEnabledKey = "com.albertsun6.vessel.gitGateEnabled"
+    private static let completionChimeEnabledKey = "com.albertsun6.vessel.completionChimeEnabled"
 
     var backendURL: URL {
         didSet {
