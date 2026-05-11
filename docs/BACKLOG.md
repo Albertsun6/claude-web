@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T04:10:00Z
+**最近更新**: 2026-05-12T04:20:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -11,6 +11,16 @@
 
 ```yaml
 items:
+  - id: project-health-check-2026-05-12
+    title: 项目健康度检查 (S 快速版 — git / CI / 基础设施 三维)
+    priority: P1
+    size: S
+    status: in_progress
+    assigned_kind: main
+    parallel_safe_files: []
+    depends_on: []
+    note: "Read-only audit pass，输出 docs/retrospectives/HEALTH_CHECK_2026-05-12.md。即时代办 fastpath dogfood。"
+
   - id: voice-roundtrip-measure
     title: 真机 voice round-trip ≤ 8 秒实测
     priority: P2
