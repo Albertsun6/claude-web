@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T03:00:00Z
+**最近更新**: 2026-05-12T03:30:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -92,17 +92,6 @@ items:
     depends_on: []
     note: "调研 whisper-large > 500MB 走 worker subprocess (ADR-012)；写到 docs/proposals/M2-VOICE-CAPABILITY.md；可并行候选"
 
-  - id: ai-coding-agent-execution-control-survey
-    title: 在 AI coding agent (Claude Code / Cursor / Aider / Windsurf / OpenHands 等) 项目里如何精确控制每一个执行过程
-    priority: P2
-    size: L
-    status: in_progress
-    assigned_kind: worktree
-    assigned_cwd: ~/Desktop/Vessel-coding-agent-survey
-    parallel_safe_files: ["docs/proposals/"]
-    depends_on: []
-    note: "用 /survey skill Deep 模式 (Claude × 2 + cursor-agent gpt-5.5-medium 异构) 调研 5+ AI coding agent 的执行控制机制；输出 docs/proposals/AI_CODING_AGENT_EXECUTION_CONTROL.md；走 Steward V0.4 即时代办 spawn 路径 (PR #51)"
-
 ```
 
 ---
@@ -190,4 +179,11 @@ items:
     completed_at: 2026-05-12T17:40:00Z
     refs: ["adr:019"]
     note: "契约 API 升级；JSON shape 锁进 ADR-019 §eva:sessions JSON contract（Steward 消费侧依赖）"
+
+  - id: ai-coding-agent-execution-control-survey
+    title: AI coding agent (Claude Code / Cursor / Aider / Windsurf / OpenHands 等) 执行控制机制横向调研
+    status: done
+    completed_at: 2026-05-12T03:30:00Z
+    refs: ["pr:#55", "pr:#52", "commit:de249c2"]
+    note: "/survey Deep + hetero + strict 跑 9 工具 × 7 维度，~100 sources，Phase 6 cursor-agent verdict Refine。worktree ~/Desktop/Vessel-coding-agent-survey 待 PR merge 后 pre-remove"
 ```
