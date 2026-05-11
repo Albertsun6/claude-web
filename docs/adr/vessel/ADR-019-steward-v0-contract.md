@@ -1,6 +1,6 @@
-# ADR-019: Steward V0 contract — BACKLOG.md + 9-prompt UI + boot ritual
+# ADR-019: Steward V0 contract — BACKLOG.md + 10-prompt UI + boot ritual
 
-**Status**: Accepted (amended in-place 2026-05-12 with I11)
+**Status**: Accepted (amended in-place 2026-05-12: v0.3 added I11 dispatch protocol; v0.4 added `即时代办` as 10th prompt + §3.7 combined add+start flow)
 **Date**: 2026-05-12
 **Reviewers**: harness-architecture-review (Claude) + reviewer-cross (cursor-agent gpt-5.5-medium)
 **Review trail**: see `docs/reviews/steward-v0-{arch,cross,react-arch,react-cross,arbitration}-2026-05-12-0026.md`
@@ -30,7 +30,7 @@ Vessel 项目任务追踪状态分散在 5 个 surface（docs/IMPROVEMENTS.md / 
 - `refs`: 数组，元素格式 `<kind>:<id>` (例: `pr:#42` / `commit:<sha>` / `inbox:<uuid>` / `lesson:<id>` / `adr:<num>`)
 - `harness_issue_id`: Phase 0 留空；Phase 2 promote 时填
 
-### 用户面 9 个 prompt 短语（docs/STEWARD_PROMPTS.md）
+### 用户面 10 个 prompt 短语（docs/STEWARD_PROMPTS.md）
 
 1. `/boot` 或 `看 backlog 推荐下一步`
 2. `开始干 <task-id>`
@@ -41,6 +41,7 @@ Vessel 项目任务追踪状态分散在 5 个 surface（docs/IMPROVEMENTS.md / 
 7. `<task-id> unblock`
 8. `<task-id> drop 因为 <reason>`
 9. `现在哪些窗口在干啥`
+10. `即时代办: <title>; [P<0-3>]; [<S/M/L>]; [note]` — v0.4 amendment：`加待办` + `开始干` 双步合一，1 个 ack 替代 2 个
 
 ### Session boot ritual (CLAUDE.md addition)
 

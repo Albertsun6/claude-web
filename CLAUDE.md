@@ -195,6 +195,8 @@ When in doubt: ask the user "要更新手册吗？" rather than assume.
 
 **Dispatch 决策必经用户拍板（I11，v0.3 amendment）**：`开始干 <id>` 触发时 Claude **不直接动手**——先 echo task size + parallel_safe_files + 主窗口状态 + spawn 推荐 + 理由，等用户回 `ok spawn` / `ok stay` / `用户做` 才执行下一步。永不静默选边。
 
+**即时代办 fastpath（v0.4 amendment）**：粘 `即时代办: <title>` 时 Claude **一次 echo 同时提议**：新增 backlog 条目 (`status=in_progress` 跳过 `planned`) + 跑 dispatch 协议（size 分析 + spawn 推荐）。用户 1 个 `ok` 同时承认两件事。等价于 `加待办` + `开始干` 双步合一；不破任何契约（仍走 I1/I5/I7/I8/I9/I10/I11）。
+
 ## Docs map
 
 | File | Purpose |

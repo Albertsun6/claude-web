@@ -1,6 +1,6 @@
 # Steward V0 — 总管系统设计提案
 
-**Status**: **Converged after Phase 1+2+3 review** · Version **v0.3** (amended in-place 2026-05-12 with §3.5 dispatch protocol + I11; lightweight refinement within v0.2 contract spirit — no new review)
+**Status**: **Converged after Phase 1+2+3 review** · Version **v0.4** (in-place amended 2026-05-12: v0.3 added §3.5 dispatch protocol + I11; v0.4 added `即时代办` as 10th prompt + §3.7 combined add+start flow — both are lightweight refinements within v0.2 contract spirit, no new review)
 **Review verdict**: ✅ accepted (with 5 partial-accepts + 1 rebuttal) — see [`steward-v0-arbitration-2026-05-12-0026.md`](../reviews/steward-v0-arbitration-2026-05-12-0026.md)
 **Reviewers**: harness-architecture-review (Claude general-purpose) + reviewer-cross (cursor-agent gpt-5.5-medium)
 **Author**: Albert (via Claude main session) · **Date**: 2026-05-12
@@ -34,7 +34,7 @@ Vessel 项目目前的**任务追踪状态分散在 5 个地方**：
 - **(G1)** **用户从不在终端敲命令；Claude 代执行命令需明确归类 + 用户授权**（v0.2 改写——见 §4 I8 三层执行白名单）
 - **(G2)** 单一 source of truth — 所有待办落在一个文件
 - **(G3)** 跨 session 可见 — 任何窗口的 Claude 启动时都能读
-- **(G4)** ≤ 9 个 prompt 短语 — 覆盖 80% 操作（v0.1 是 6 个，review 后扩 9）
+- **(G4)** ≤ 10 个 prompt 短语 — 覆盖 80% 操作（v0.1 是 6 个，review 后扩 9，v0.4 加 `即时代办` 成 10）
 - **(G5)** 可演化 — Phase 1 加 CLI / 自动同步 / Phase 2 升级到 harness Issue 表时不破坏 Phase 0 的人工编辑
 
 **非目标**：REST API / 后端服务、DB schema 改动、iOS UI / 移动端总管、自动 tick scheduler、inbox auto-promote、自动 lesson 写入。这些都留给 Phase 1+。
@@ -258,6 +258,68 @@ Claude 读完 BACKLOG.md，对 `看下一步` 请求：
 7. commit (I9 守门)：chore(backlog): close <id>
 ```
 
+### 3.7 "即时代办" 流程 (`即时代办: <title>; ...`) — v0.4 amendment
+
+合并 §3.5（开始干）+ §3.4（加待办）为一个 user-facing prompt，**1 个 ack 替代 2 个**。
+
+**触发**：用户粘 `即时代办: <title>; [P<0-3>]; [<S/M/L>]; [note]`
+
+**默认字段**：
+- `priority` 默认 `P1`（P0 留给真阻塞，不默认）
+- `size` Claude 推断（讲不准就问）
+- `status` 直接 `in_progress`（跳过 planned）
+- `assigned_kind 候选` Claude 推断（main / user-manual / worktree）
+
+**Claude 行为**（**1 次** echo 同时确认两件事）：
+
+```
+1. 解析 title + 字段；slugify id (撞了加 -2)
+2. 跑 eva:sessions 看活窗口（dispatch 协议需要）
+3. echo 完整提议：
+     即时代办 提议:
+       id: <slug>
+       title: <你给的>
+       priority: <P，默认 P1>
+       size: <S/M/L，Claude 推>
+       status: in_progress      ← 跳过 planned
+       assigned_kind 候选: <main|user-manual>
+
+     dispatch 分析:
+       • size 维度 → ...
+       • parallel_safe_files <推测> ↔ 主窗口 <重叠/零重叠>
+       • 主窗口状态 <idle/busy/in-context>
+       • eva:sessions：N 个活窗口
+
+     建议: <STAY | SPAWN | USER-MANUAL>
+     理由: <1-2 句>
+
+     你的选择: ok | ok spawn | 用户做 | 改 P / 改 size / drop
+
+4. 等用户 1 个 ack (I8 mid-tier + I11)
+5. 用户 `ok` → 同时执行：
+   a. 写 BACKLOG.md：新增条目 (status=in_progress)
+   b. 按 dispatch 选择执行 spawn/stay/user-manual 实际动作（若 spawn 还要 I8 再 ack 一次 git worktree/eva.json/Cursor open）
+   c. commit (I9 守门)：chore(backlog): immediate <id>
+```
+
+**为什么不破契约**：
+- I1：仍是 BACKLOG.md 单一写入点
+- I5：用户 ack 后 Claude 才写
+- I7：id 不写入 harness.issue.id
+- I8：用户 ack（mid-tier write）
+- I10：status 字段权威（in_progress）
+- I11：dispatch 决策仍经用户拍板
+
+**对比表**：
+
+| 短语 | 步数 | status 起点 | 何时用 |
+|---|---|---|---|
+| `加待办: ...` | 1（加） | `planned` | 想到先记着，**暂不**做 |
+| `开始干 <id>` | 1（启动） | `planned → in_progress` | 启动已 backlog 的项 |
+| `即时代办: ...` | **1（合并）** | 直接 `in_progress` | 想到一件事**马上做** |
+
+合 2 步 = 1 ack 是语法糖；功能等价于先 `加待办` 再 `开始干`。
+
 ## 4. Invariants
 
 **v0.2 锁死的不变量**：
@@ -307,7 +369,7 @@ I3 × I8 × I9 × I10 两两兼容性自查：
 | 文件位置 | `docs/BACKLOG.md` (in-repo) | out-of-repo `~/.vessel/backlog.yaml` — **拒**：换问题不解问题（path 发现 + 跨 session 知晓） |
 | 是否带 CLI | **不带（Phase 0）** | YAGNI；Claude 直接读写文件够；Phase 1 再加 |
 | 是否动 harness.db Issue 表 | **不动** | 留 `harness_issue_id` 字段做 Phase 2 桥接 (I7) |
-| 用户接口 | **9 个 prompt 短语** | 自然语言任意 = 收敛操作范围；6 个不够（review F6） |
+| 用户接口 | **10 个 prompt 短语** | 自然语言任意 = 收敛操作范围；6 个不够（review F6）；v0.4 加 `即时代办` 合并 `加待办`+`开始干` |
 | 删除 done 项? | **200KB 阈值后 quarterly archive** | 永久保留 = 文件膨胀；季度 archive 平衡了审计与膨胀 |
 | 并发写? | **single-session 假设 + I9 commit 守门** | 文件锁 / merge driver 太重；I9 用 git status 检查替代 |
 | `bl-` 前缀 强制? | **拒** | review F1 反驳：`harness_issue_id` 字段 + I7 已够，prefix 是冗余 |
