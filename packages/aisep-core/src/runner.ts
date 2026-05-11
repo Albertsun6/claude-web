@@ -50,10 +50,26 @@ export interface StageExecutorResult {
   ok: boolean;
 }
 
+/**
+ * Optional memory provider injected by aisep-cli (or whoever owns the
+ * AisepMemoryStore instance). The runner does NOT depend on
+ * aisep-memory directly (R6 + module dep direction). If absent,
+ * memoryHits is always an empty array.
+ *
+ * R11 red line: retrieve MUST be tier-explicit — implementations choose
+ * which tier (typically `global-verified` to avoid mixing low-trust
+ * workspace-pending content into prompts).
+ */
+export interface MemoryProvider {
+  retrieve(stage: AisepStage, phase: AisepStagePhase): Promise<unknown[]>;
+}
+
 export interface AisepRunnerOptions {
   store: AisepStore;
   workspace: AisepWorkspace;
   executor: StageExecutor;
+  /** Optional. If absent, executor receives memoryHits=[] for every stage. */
+  memoryProvider?: MemoryProvider;
 }
 
 export class AisepRunner {
@@ -101,6 +117,12 @@ export class AisepRunner {
       ? store.listArtifactsByStageRun(run.predecessorId)
       : [];
 
+    // 3b. Retrieve memoryHits via injected provider (AlphaEvolve loop).
+    //     If no provider was injected, defaults to empty (R11 compatible).
+    const memoryHits = this.opts.memoryProvider
+      ? await this.opts.memoryProvider.retrieve(args.stage, phase)
+      : [];
+
     // 4. Execute.
     try {
       const result = await executor.execute({
@@ -108,7 +130,7 @@ export class AisepRunner {
         phase,
         workspace,
         upstreamArtifacts,
-        memoryHits: [],
+        memoryHits,
       });
 
       // 5. Persist artifacts produced.
