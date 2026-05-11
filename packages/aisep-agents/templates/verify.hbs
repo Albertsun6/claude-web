@@ -1,0 +1,105 @@
+{{systemPrompt}}
+
+# Stage: verify — run the deterministic checks
+
+## Goal
+
+Produce a machine-verifiable `verify-report.json` covering build / lint /
+unit / integration / e2e / security checks. Every failed assertion MUST
+have a runnable `repro` command. Verify is the G-v gate before review.
+
+Verify is DETERMINISTIC: it MUST NOT use generative judgment. Every
+finding either passes or fails based on a runnable command. If a check
+can't be expressed as a command, it doesn't belong in verify (it
+belongs in review).
+
+## Inputs
+
+{{#if upstreamArtifactsWithContent.length}}
+{{#each upstreamArtifactsWithContent}}
+### Upstream `{{this.ref.kind}}` @ `{{this.ref.key}}`
+
+```
+{{this.contentPreview}}
+{{#if this.truncated}}
+[... {{this.truncatedBytes}} bytes truncated]
+{{/if}}
+```
+
+{{/each}}
+{{else}}
+(read `patch.diff` + `contract/*` + `plan.md` from cwd)
+{{/if}}
+
+## Memory hits
+
+{{#each memoryHits}}
+- **{{this.failurePattern}}** → {{this.fix}}
+{{/each}}
+
+## Output format (MANDATORY: JSON, then human summary)
+
+```json
+{
+  "build": {
+    "ok": true | false,
+    "command": "<runnable cmd>",
+    "stderr_excerpt": "<≤ 500 chars or null>"
+  },
+  "lint": {
+    "ok": true | false,
+    "command": "<runnable cmd>",
+    "issues": [ { "file": "<path>", "line": N, "rule": "<id>", "message": "..." } ]
+  },
+  "unit": {
+    "ok": true | false,
+    "passed": N,
+    "failed": [ { "name": "<test name>", "repro": "<runnable cmd>" } ]
+  },
+  "integration": {
+    "ok": true | false,
+    "passed": N,
+    "failed": [ { "name": "...", "repro": "..." } ]
+  },
+  "e2e": {
+    "ok": true | false | "skipped",
+    "reason_if_skipped": "..."
+  },
+  "security": {
+    "ok": true | false,
+    "findings": [ { "id": "<CVE/rule>", "severity": "...", "repro": "..." } ]
+  },
+  "size_budget": {
+    "ok": true | false,
+    "check": "wc -l <file> <= 200",
+    "actual": N,
+    "limit": N
+  },
+  "contract_grep": {
+    "ok": true | false,
+    "checks": [
+      { "name": "patch implements ZOD-Foo", "command": "grep -F 'ZOD-Foo' patch.diff", "ok": true }
+    ]
+  }
+}
+```
+
+Then a HUMAN SUMMARY (≤ 100 words) AFTER the JSON.
+
+## Hard limits
+
+- The JSON above is the ONLY artifact. No prose inside the JSON.
+- `size_budget` is REQUIRED: if seed/intake/plan specified a line or word
+  count, encode it here. Default check: `wc -l <newly added .md files> ≤ 200`.
+- `contract_grep` is REQUIRED: for each contract symbol the patch SHOULD
+  reference (ZOD-Foo, ADR-001, etc.), include a grep check.
+- Every `failed[].repro` MUST be runnable as-is in the workspace cwd. If
+  you can't construct one, the failure stays — DO NOT redact.
+- If a category genuinely doesn't apply (e.g. e2e for a docs-only patch),
+  use `"ok": "skipped"` and `reason_if_skipped`.
+
+## Refuse conditions
+
+- Patch is missing or empty → set all categories to ok=false and put the
+  reason in a top-level `"blocker"` field
+- Contract artifact is missing → same

@@ -1,0 +1,100 @@
+{{systemPrompt}}
+
+# Stage: implement — produce the patch
+
+## Goal
+
+Read the **frozen contract** (`contract/*` upstream) and the **task DAG**
+(`plan.md`), then produce a single unified-diff patch that implements
+EXACTLY what the contract specifies. Nothing more, nothing less.
+
+Implement is downstream of contract — it MUST NOT propose alternative
+designs. If contract is ambiguous, output a `question` fence (see below).
+
+## Inputs
+
+{{#if upstreamArtifactsWithContent.length}}
+{{#each upstreamArtifactsWithContent}}
+### Upstream `{{this.ref.kind}}` @ `{{this.ref.key}}`
+
+```
+{{this.contentPreview}}
+{{#if this.truncated}}
+[... {{this.truncatedBytes}} bytes truncated]
+{{/if}}
+```
+
+{{/each}}
+{{else}}
+(no upstream artifacts; read `contract/*` + `plan.md` from cwd)
+{{/if}}
+
+## Memory hits
+
+{{#each memoryHits}}
+- **{{this.failurePattern}}** → {{this.fix}}
+{{/each}}
+
+## Output (MANDATORY: ONE of two forms only)
+
+### Form A — Unified-diff patch
+
+````
+```diff
+--- a/path/to/file.ts
++++ b/path/to/file.ts
+@@ -L,N +L,N @@
+ unchanged context line
+-removed line
++added line
+ unchanged context line
+```
+````
+
+For NEW files, use `/dev/null` as the source:
+
+````
+```diff
+--- /dev/null
++++ b/path/to/new-file.md
+@@ -0,0 +1,N @@
++content line 1
++content line 2
+```
+````
+
+Concatenate multiple per-file diffs back-to-back inside ONE fence (no
+prose between them).
+
+### Form B — Question fence (only if contract is ambiguous)
+
+````
+```question
+<your specific blocking question — reference the contract section + line
+that you can't resolve>
+```
+````
+
+A `question` fence HALTS the implement stage. The runner will mark the
+stage failed and surface the question. Use sparingly; default to making
+a conservative choice and noting it in the diff comment.
+
+## Hard limits
+
+- ≤ 400 LOC in the patch (SmartBear code-review threshold from Pilot-02
+  research)
+- NO commentary outside the fence
+- NO partial patches — either complete diff or `question`
+- NO refactoring unrelated to the contract surface
+- Every added line that is a NON-OBVIOUS implementation choice MUST have
+  an inline `// ref: ADR-NNN` or `// ref: contract/<name>` comment
+  pointing to the upstream artifact that justifies it
+
+## Reject conditions (you MUST refuse and emit `question` instead)
+
+- Contract says "TBD" / "later" anywhere — that's a contract bug, halt
+- Contract requires touching a file NOT in `plan.md` task descriptions
+- A risk in `plan.md` risk register has `Escalate if...` triggered by
+  what the contract actually demands
+
+When in doubt: refuse, ask, do not silently expand scope.
