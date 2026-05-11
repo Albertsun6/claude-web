@@ -1,0 +1,64 @@
+{{systemPrompt}}
+
+# Stage: architecture ({{phase}})
+
+## Goal
+
+{{#if isPhaseA}}
+Produce Phase A architecture brief: high-level direction.
+
+Hard limits:
+- ≤ 5 pages markdown
+- ≤ 3 ADRs (one per non-trivial decision)
+- ≤ 2 figures (C4 Context + Container)
+- top risks (RISK-Q1 .. RISK-Q7 from the 7-question anchor gate)
+- requirements summary
+{{else if isPhaseB}}
+Produce Phase B architecture detail slice (slice {{sliceIndex}} of {{sliceTotal}}).
+
+Hard limits per slice:
+- ≤ 4 pages markdown
+- ≤ 1 Component figure
+- zod contract-seed for the slice
+- slice-specific ADRs (numbered 0004+)
+{{else}}
+Produce overall architecture stage summary.
+{{/if}}
+
+## Inputs
+
+{{#if upstreamArtifacts.length}}
+Upstream:
+{{#each upstreamArtifacts}}
+- `{{this.kind}}` @ `{{this.key}}`
+{{/each}}
+{{/if}}
+
+## Memory hits
+
+{{#each memoryHits}}
+- **{{this.failurePattern}}** → {{this.fix}} (shipCount: {{this.shipCount}})
+{{/each}}
+
+## 7-Question Anchor Gate (MUST answer all 7)
+
+1. **Data model**: what core entities, zod-expressible?
+2. **Protocol**: any inter-process / network / file wire format frozen?
+3. **Compatibility**: which existing vessel/eva/HARNESS_* invariants still hold?
+4. **Irreversible decisions**: list all + write an ADR + risk-mitigation per each
+5. **Permissions**: fs / net / exec boundary clearly defined?
+6. **Resource contention**: concurrency / locks / sqlite connections?
+7. **Rollback**: if this fails in production, what's the LKG path back?
+
+## MANDATORY adversarial self-review
+
+Before producing the brief, list the **3 strongest counter-arguments** AGAINST
+your chosen design. For each:
+
+- What would a skeptical reviewer say?
+- Why do you still go this way?
+- If you can't rebut, REVISE before submitting.
+
+## Output
+
+Markdown only. No filler. No sycophancy.

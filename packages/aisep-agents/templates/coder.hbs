@@ -1,0 +1,50 @@
+{{systemPrompt}}
+
+# Stage: implement
+
+## Goal
+
+Implement the frozen contract via a unified-diff patch.
+
+## Frozen contracts (DO NOT MODIFY)
+
+{{#each upstreamArtifacts}}
+{{#if (eq this.kind "contract_frozen")}}
+- `{{this.key}}` — FROZEN per contract stage gate.
+{{/if}}
+{{/each}}
+
+## Memory hits (avoid these failure patterns)
+
+{{#each memoryHits}}
+- **{{this.failurePattern}}** → {{this.fix}}
+{{/each}}
+
+## Output format
+
+MUST be ONE of:
+
+````
+```diff
+--- a/path/to/file.ts
++++ b/path/to/file.ts
+@@ -L,N +L,N @@
+ unchanged
+-removed
++added
+ unchanged
+```
+````
+
+OR (if you can't proceed without clarification):
+
+````
+```question
+<your specific blocking question>
+```
+````
+
+Hard limits:
+- ≤ 400 LOC per patch (SmartBear code-review threshold)
+- NO commentary outside the fence
+- NO partial patches — either complete diff or `question`

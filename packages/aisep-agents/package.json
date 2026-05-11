@@ -1,12 +1,13 @@
 {
-  "name": "@claude-web/aisep-cli",
+  "name": "@claude-web/aisep-agents",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "bin": {
-    "aisep": "./src/cli.ts"
+  "exports": {
+    ".": "./src/index.ts",
+    "./templates/*": "./templates/*"
   },
   "scripts": {
     "test": "vitest run"
@@ -14,9 +15,7 @@
   "dependencies": {
     "@claude-web/aisep-protocol": "workspace:*",
     "@claude-web/aisep-core": "workspace:*",
-    "@claude-web/aisep-workspace": "workspace:*",
-    "@claude-web/aisep-memory": "workspace:*",
-    "@claude-web/aisep-agents": "workspace:*"
+    "handlebars": "^4.7.8"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
