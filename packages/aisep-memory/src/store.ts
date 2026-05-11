@@ -104,6 +104,44 @@ export class AisepMemoryStore {
   }
 
   /**
+   * Record a new entry directly into the global tier.
+   *
+   * Use case: a human reviewer reads a retrospective's `§5 memory candidate`
+   * list and decides up-front "this is verified, skip the
+   * workspace-pending stage." Replaces the one-off
+   * `/tmp/seed-memory-from-pilot-NN.mjs` scripts.
+   *
+   * Dedup key: `(stage, failurePattern.slice(0, 100))` — same as `promote()`.
+   *
+   * Returns the persisted record, or `null` if a duplicate was rejected.
+   */
+  recordGlobal(
+    input: Omit<AisepMemoryRecord, "id" | "source" | "shipCount" | "promoteCount"> & {
+      verifiedBy?: AisepMemoryRecord["verifiedBy"];
+    },
+  ): AisepMemoryRecord | null {
+    const log = loadFile(this.globalPath);
+    const key = `${input.stage}::${input.failurePattern.slice(0, 100)}`;
+    const dup = log.records.find(
+      (r) => `${r.stage}::${r.failurePattern.slice(0, 100)}` === key,
+    );
+    if (dup) return null;
+
+    const record: AisepMemoryRecord = {
+      ...input,
+      id: generateMemoryId(),
+      source: "global-verified",
+      verifiedBy: input.verifiedBy ?? "human",
+      verifiedAt: input.verifiedAt ?? Date.now(),
+      shipCount: 0,
+      promoteCount: 1, // counts as one promote even though it skipped workspace
+    };
+    log.records.push(record);
+    saveFile(this.globalPath, log);
+    return record;
+  }
+
+  /**
    * Promote workspace-pending records to global-verified.
    *
    * - `filter.stage`: required

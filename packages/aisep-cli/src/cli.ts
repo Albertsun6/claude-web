@@ -25,6 +25,13 @@ Commands:
   aisep memory promote [--workspace <path>] --stage <name> --fix <text> [--pattern <substring>]
       Promote workspace-pending records to global-verified.
 
+  aisep memory record [--tier global|workspace] --stage <name> --pattern <text> --fix <text>
+                      [--verified-by human|auto] [--applies-to-domain a,b]
+                      [--applies-to-stages s1,s2] [--applies-to-tech-stack t1,t2]
+                      [--source-workspace-id <id>] [--workspace <path>]
+      Insert a new memory record directly (global tier = human-verified by default).
+      Replaces ad-hoc /tmp/seed-from-retro.mjs scripts. Dedup on (stage, failurePattern[:100]).
+
   aisep memory retrieve [--workspace <path>] --stage <name> [--tier global|workspace]
       Retrieve top-K records for a given stage.
 
