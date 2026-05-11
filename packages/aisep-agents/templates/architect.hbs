@@ -50,6 +50,23 @@ Upstream:
 6. **Resource contention**: concurrency / locks / sqlite connections?
 7. **Rollback**: if this fails in production, what's the LKG path back?
 
+## Size-budget calibration policy (Phase 2.D #6, MANDATORY when budgets appear)
+
+If any ADR introduces a `size_budget` (page count, line count, word count,
+LOC, file count, etc.):
+
+- The budget MUST be tagged either `provisional: true` OR `measured-reference: <path>`.
+- `provisional: true` is the ONLY allowed escape valve when no comparable
+  shipped artifact exists. State explicitly that the budget will auto-
+  promote to the measured value after the first implementation if the
+  overshoot is single-digit (per memory rule, Pilot-03 retro F#6).
+- `measured-reference: <path>` cites a real on-disk artifact of similar
+  shape whose `wc -l` / page count is within ±10% of the proposed budget.
+  Without one, the budget MUST be `provisional`.
+- Never write a hard cap like "≤ 200 lines" without one of these tags.
+  Bare numeric caps trigger unnecessary ADR-revision thrash when reality
+  overshoots by 1-2 lines (Pilot-03 retro).
+
 ## MANDATORY adversarial self-review
 
 Before producing the brief, list the **3 strongest counter-arguments** AGAINST

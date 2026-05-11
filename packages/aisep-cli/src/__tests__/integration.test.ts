@@ -1,7 +1,7 @@
 // Integration test: drive a mock 10-stage chain through the runner +
 // workspace + memory + store stack, end-to-end.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,6 +12,7 @@ import { NodeWorkspace } from "@claude-web/aisep-workspace";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { memoryCommand } from "../commands/memory.js";
+import { verifyCommand } from "../commands/verify.js";
 import { MockStageExecutor } from "../mock-executor.js";
 
 let cwd: string;
@@ -147,6 +148,68 @@ describe("integration: 10-stage chain (mock executor)", () => {
     expect(exitCode).toBe(1);
     expect(errSpy.mock.calls.flat().join(" ")).toContain("--stage <name> --pattern <text> --fix <text>");
     errSpy.mockRestore();
+  });
+
+  it("CLI `verify --recheck` re-runs contract_grep checks and flips ok in place (Phase 2.D #12)", async () => {
+    // Construct a minimal verify.md with one passing and one failing check.
+    // implement.md contains "TARGET_SYMBOL" so grep ok=true; we deliberately
+    // write ok:false in the report and let recheck flip it.
+    writeFileSync(join(cwd, "implement.md"), "line1\nTARGET_SYMBOL\nline3\n", "utf-8");
+    const initialReport = {
+      outcome: "tests_passed",
+      contract_grep: {
+        ok: false,
+        checks: [
+          {
+            name: "target symbol present",
+            command: "grep -Fq 'TARGET_SYMBOL' implement.md",
+            ok: false,
+            read_from_disk: true,
+          },
+          {
+            name: "missing symbol absent",
+            command: "grep -Fq 'NEVER_PRESENT' implement.md",
+            ok: true,   // stale optimistic value; recheck must flip to false
+            read_from_disk: true,
+          },
+        ],
+      },
+    };
+    const verifyMd = "preamble\n```json\n" + JSON.stringify(initialReport, null, 2) + "\n```\n\npostamble\n";
+    writeFileSync(join(cwd, "verify.md"), verifyMd, "utf-8");
+
+    const exit = await verifyCommand(["--recheck", "--workspace", cwd]);
+    expect(exit).toBe(0);
+
+    const after = JSON.parse(readFileSync(join(cwd, "verify.md"), "utf-8").match(/```json\s*\n([\s\S]*?)\n```/)![1]!);
+    expect(after.contract_grep.checks[0].ok).toBe(true);    // flipped ✓
+    expect(after.contract_grep.checks[1].ok).toBe(false);   // flipped ✗
+    expect(after.contract_grep.ok).toBe(false);             // not all checks passed
+  });
+
+  it("CLI `verify --recheck --check-name` only re-runs matching checks", async () => {
+    writeFileSync(join(cwd, "implement.md"), "FOO\nBAR\n", "utf-8");
+    const initialReport = {
+      contract_grep: {
+        ok: true,
+        checks: [
+          { name: "foo present", command: "grep -Fq 'FOO' implement.md", ok: true },
+          { name: "stale bar miss claim", command: "grep -Fq 'BAR' implement.md", ok: false },
+        ],
+      },
+    };
+    writeFileSync(
+      join(cwd, "verify.md"),
+      "```json\n" + JSON.stringify(initialReport, null, 2) + "\n```",
+      "utf-8",
+    );
+
+    const exit = await verifyCommand(["--recheck", "--workspace", cwd, "--check-name", "stale bar"]);
+    expect(exit).toBe(0);
+
+    const after = JSON.parse(readFileSync(join(cwd, "verify.md"), "utf-8").match(/```json\s*\n([\s\S]*?)\n```/)![1]!);
+    expect(after.contract_grep.checks[0].ok).toBe(true);    // untouched (filter didn't match)
+    expect(after.contract_grep.checks[1].ok).toBe(true);    // flipped by recheck
   });
 
   it("memory: record pending → promote to global closes the loop", () => {

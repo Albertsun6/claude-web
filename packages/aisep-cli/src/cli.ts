@@ -8,6 +8,7 @@
 
 import { memoryCommand } from "./commands/memory.js";
 import { runCommand } from "./commands/run.js";
+import { verifyCommand } from "./commands/verify.js";
 
 const HELP = `aisep — AI Software Engineering Platform CLI (v0.1)
 
@@ -35,6 +36,11 @@ Commands:
   aisep memory retrieve [--workspace <path>] --stage <name> [--tier global|workspace]
       Retrieve top-K records for a given stage.
 
+  aisep verify --recheck [--workspace <path>] [--check-name <substring>]
+      Deterministically re-run contract_grep.checks[] against on-disk
+      artifacts; update verify.md in place. Avoids full stage re-issue
+      when only a single deterministic check needs flipping (Phase 2.D #12).
+
   aisep --help / -h
       Show this message.
 `;
@@ -53,6 +59,8 @@ async function main(): Promise<number> {
       return runCommand(argv.slice(1));
     case "memory":
       return memoryCommand(argv.slice(1));
+    case "verify":
+      return verifyCommand(argv.slice(1));
     default:
       console.error(`[aisep] Unknown command: ${command}\n`);
       console.error(HELP);

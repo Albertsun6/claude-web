@@ -59,10 +59,28 @@ Rationale: hand-off truncation produces false-negative anchor checks
 (seen in Pilot-04). Verify is the G-v gate; a false negative here
 strands integrate with a blocker that resolves to a no-op.
 
+## Manifest cross-check (Phase 2.D #11)
+
+Implement-stage output begins with an `aisep-manifest` block listing every
+created / modified file. BEFORE running any other check:
+
+1. Parse the manifest from `implement.md`'s leading `aisep-manifest` fence
+2. For every entry in `new_files` + `modified_files`: confirm the path is
+   referenced in the diff fence body. If a manifest entry has no
+   corresponding `--- /dev/null` or `+++ b/<path>` line in the diff, that's
+   a `manifest_mismatch` error — fail `contract_grep` with a check named
+   `manifest matches diff` and `ok: false`.
+3. For every entry in `runtime_imports_added`: scan the diff for that
+   package's presence in any patched `package.json`. If missing, fail
+   `contract_grep` with `runtime_import_unbacked` (Phase 2.D #3 fallback —
+   in theory implement.hbs Hard limits already enforce this, but verify
+   double-checks).
+
 ## Output format (MANDATORY: JSON, then human summary)
 
 ```json
 {
+  "outcome": "build_failed" | "tests_failed" | "tests_passed" | "skipped_no_runtime",
   "build": {
     "ok": true | false,
     "command": "<runnable cmd>",
@@ -117,6 +135,17 @@ Then a HUMAN SUMMARY (≤ 100 words) AFTER the JSON.
 ## Hard limits
 
 - The JSON above is the ONLY artifact. No prose inside the JSON.
+- **`outcome` is REQUIRED (Phase 2.D #5)**. Pick the exact one that fits:
+    - `build_failed` — tsc/swift/etc. compile step failed; tests cannot
+      meaningfully run because the binary isn't producible
+    - `tests_failed` — build passed but unit/integration/e2e produced a
+      failure. Distinguish from `build_failed` so retrospective fixes
+      target the right layer.
+    - `tests_passed` — build ok + every applicable test category ok
+    - `skipped_no_runtime` — docs-only patch / config-only / no executable
+      surface. `build` `unit` `integration` `e2e` all skipped.
+  This prevents Pilot-03 retro #5: verify reported "all-fail" without
+  distinguishing whether tests reported failure or never compiled.
 - `size_budget` is REQUIRED: if seed/intake/plan specified a line or word
   count, encode it here. Default check: `wc -l <newly added .md files> ≤ 200`.
 - `contract_grep` is REQUIRED: for each contract symbol the patch SHOULD
