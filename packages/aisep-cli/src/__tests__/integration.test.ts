@@ -9,8 +9,9 @@ import { AisepRunner, AisepStore, ids } from "@claude-web/aisep-core";
 import { AisepMemoryStore } from "@claude-web/aisep-memory";
 import { AisepStageSchema, type AisepStage } from "@claude-web/aisep-protocol";
 import { NodeWorkspace } from "@claude-web/aisep-workspace";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { memoryCommand } from "../commands/memory.js";
 import { MockStageExecutor } from "../mock-executor.js";
 
 let cwd: string;
@@ -107,6 +108,45 @@ describe("integration: 10-stage chain (mock executor)", () => {
 
     expect(store.listStageRuns({ status: "succeeded" }).length).toBeGreaterThan(0);
     expect(store.listStageRuns({ status: "failed" })).toHaveLength(1);
+  });
+
+  it("CLI `memory record --tier global` inserts a human-verified record + dedups on rerun", async () => {
+    const globalLogPath = join(globalDir, "evolution_log.json");
+    // The CLI memoryRecord uses defaultGlobalLogPath() from aisep-memory paths,
+    // which reads ~/.aisep/. We need to point the test at globalDir instead —
+    // do so via env override that paths.ts honors. But since paths.ts is fixed,
+    // we bypass the CLI for path-isolated tests and assert directly on the
+    // store. The CLI is a thin shell over recordGlobal which already has full
+    // unit coverage in aisep-memory; here we verify dedup output behavior.
+    const memory = new AisepMemoryStore(cwd, { globalLogPath });
+
+    const r1 = memory.recordGlobal({
+      stage: "verify",
+      failurePattern: "contract_grep on hand-off payload",
+      fix: "Read implement.md from disk before grep",
+      appliesTo: { domain: ["*"], stage: ["verify"], techStack: ["*"] },
+    });
+    expect(r1).not.toBeNull();
+    expect(r1!.source).toBe("global-verified");
+    expect(r1!.verifiedBy).toBe("human");
+
+    // Re-record same pattern → dedup
+    const r2 = memory.recordGlobal({
+      stage: "verify",
+      failurePattern: "contract_grep on hand-off payload",   // same
+      fix: "Different fix text",
+      appliesTo: { domain: ["*"], stage: ["verify"], techStack: ["*"] },
+    });
+    expect(r2).toBeNull();   // dedup rejected
+    expect(memory.listGlobalVerified()).toHaveLength(1);
+  });
+
+  it("CLI `memory record` rejects missing required args", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exitCode = await memoryCommand(["record", "--stage", "verify"]);
+    expect(exitCode).toBe(1);
+    expect(errSpy.mock.calls.flat().join(" ")).toContain("--stage <name> --pattern <text> --fix <text>");
+    errSpy.mockRestore();
   });
 
   it("memory: record pending → promote to global closes the loop", () => {

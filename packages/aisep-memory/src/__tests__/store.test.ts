@@ -32,6 +32,55 @@ describe("AisepMemoryStore", () => {
     expect(store.listGlobalVerified()).toEqual([]);
   });
 
+  it("recordGlobal writes to global tier with verifiedBy=human by default", () => {
+    const store = newStore();
+    const r = store.recordGlobal({
+      stage: "verify",
+      failurePattern: "contract_grep on hand-off payload not on-disk file",
+      fix: "Read implement.md before grep",
+      appliesTo: { domain: ["*"], stage: ["verify"], techStack: ["*"] },
+    });
+    expect(r).not.toBeNull();
+    expect(r!.source).toBe("global-verified");
+    expect(r!.verifiedBy).toBe("human");
+    expect(r!.verifiedAt).toBeTypeOf("number");
+    expect(r!.promoteCount).toBe(1);
+    expect(store.listGlobalVerified()).toHaveLength(1);
+    expect(store.listWorkspacePending()).toHaveLength(0);
+  });
+
+  it("recordGlobal honors explicit verifiedBy=auto", () => {
+    const store = newStore();
+    const r = store.recordGlobal({
+      stage: "verify",
+      failurePattern: "P",
+      fix: "F",
+      appliesTo: { domain: ["*"], stage: ["verify"], techStack: ["*"] },
+      verifiedBy: "auto",
+    });
+    expect(r!.verifiedBy).toBe("auto");
+  });
+
+  it("recordGlobal dedups on (stage, failurePattern[:100])", () => {
+    const store = newStore();
+    const first = store.recordGlobal({
+      stage: "verify",
+      failurePattern: "same pattern",
+      fix: "F1",
+      appliesTo: { domain: ["*"], stage: ["verify"], techStack: ["*"] },
+    });
+    const second = store.recordGlobal({
+      stage: "verify",
+      failurePattern: "same pattern",
+      fix: "F2",
+      appliesTo: { domain: ["*"], stage: ["verify"], techStack: ["*"] },
+    });
+    expect(first).not.toBeNull();
+    expect(second).toBeNull();   // dedup
+    expect(store.listGlobalVerified()).toHaveLength(1);
+    expect(store.listGlobalVerified()[0]!.fix).toBe("F1");   // first wins
+  });
+
   it("recordPending writes to workspace tier", () => {
     const store = newStore();
     const r = store.recordPending({
