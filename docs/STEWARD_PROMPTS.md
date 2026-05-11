@@ -24,19 +24,29 @@
 
 ## 1 — Boot ritual / 看下一步
 
+**两种触发，等价**：
+
 ```
 /boot
 ```
 
-或同义：
+或自然语言（**总是能用，不依赖 skill**）：
 
 ```
 看 backlog 推荐下一步
 ```
 
+或最短：
+
+```
+看 backlog
+```
+
 **Claude 会**：读 `docs/BACKLOG.md` → 若顶部"最近更新"> 72h 提醒 stale → echo `"Backlog: N in_progress · M planned · K blocked"`。若加了"看下一步"，进一步：跑 `pnpm eva:sessions` 看活窗口 → 输出 top 3 候选 + 每项标签（"本窗口直接做" / "需开新窗口" / "等着"）+ 给"开新窗口"的具体命令模板。
 
 **何时用**：新会话开始时，或者你忘了下一步该干啥。
+
+**关于 `/boot`**：这是 Claude Code 注册的 slash command，对应 [`.claude/skills/boot/SKILL.md`](../.claude/skills/boot/SKILL.md)。在 Cursor 里粘 `/boot` 时 Claude Code 自动加载 skill 内容到 Claude context。**前提**：该 skill 文件存在且被 Cursor 索引到（每个 Vessel workspace 启动时自动）。如果 `/boot` 没反应，用自然语言版本兜底。
 
 ---
 

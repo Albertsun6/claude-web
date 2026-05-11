@@ -248,7 +248,12 @@ m2-voice-impl unblock
 
 **现实**：Cursor 没暴露 session-start hook，Claude 是否主动读靠 CLAUDE.md 约定 ≈ 80% 命中。
 
-**Fallback**：你**总能粘 `/boot` 手动触发**。这就是为什么 `/boot` 是 9 个短语的第 1 个。
+**Fallback 有两条**（任挑一个）：
+
+1. **Slash command**：`/boot` —— 对应 [`.claude/skills/boot/SKILL.md`](../.claude/skills/boot/SKILL.md)。Cursor 启动时把 skill 列表注入 Claude；如果 skill 未被索引到（罕见），slash command 不会触发。
+2. **自然语言（永远可用）**：`看 backlog 推荐下一步` 或更短 `看 backlog`。不依赖任何 skill，靠 Claude 读了 CLAUDE.md 后理解。
+
+**实操建议**：先试 `/boot`，没反应就换 `看 backlog`。后者跨所有 session 状态可靠。
 
 **Lazy 化**：boot 时只读 BACKLOG.md + 检查 stale，**不**自动跑 `pnpm eva:sessions`（避免 boot 慢）。等你问"下一步"或"活窗口"时才跑。
 
@@ -283,7 +288,7 @@ Claude 会主动告诉你解析失败 + 显示有问题的行号。**不要**靠
 
 ### 2. Claude 没主动跑 boot ritual
 
-粘 `/boot`。问题解决。
+试 `/boot`（slash command，依赖 [`.claude/skills/boot/SKILL.md`](../.claude/skills/boot/SKILL.md)）。如果没反应（skill 未被 Cursor 索引到等），用自然语言兜底：`看 backlog 推荐下一步` 或更短 `看 backlog`。
 
 ### 3. 两个 Cursor 窗口同时改 BACKLOG.md
 
