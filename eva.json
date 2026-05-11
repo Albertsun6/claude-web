@@ -102,6 +102,17 @@
       "status": "done",
       "since": "2026-05-05T23:35:00Z",
       "note": "doc-only worktree. PR #36 → dev（eva.json wildcard→显式路径）后收尾：status=done，本地 ~/Desktop/claude-web-jarvis 已 git worktree remove。提案与 reviews 已合入 dev。"
+    },
+    {
+      "name": "coding-agent-survey",
+      "branch": "docs/eva-ai-coding-agent-execution-control",
+      "path": "~/Desktop/Vessel-coding-agent-survey",
+      "owns": [
+        "docs/proposals/AI_CODING_AGENT_EXECUTION_CONTROL.md"
+      ],
+      "status": "active",
+      "since": "2026-05-12T01:59:00Z",
+      "note": "/survey skill 调研：Claude Code / Cursor / Aider / Windsurf / OpenHands 等如何精确控制 AI coding agent 执行过程。BACKLOG id=ai-coding-agent-execution-control-survey。"
     }
   ]
 }
