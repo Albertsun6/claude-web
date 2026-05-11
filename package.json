@@ -9,8 +9,13 @@
     "dev:frontend": "pnpm --filter @claude-web/frontend dev",
     "test:cli": "pnpm --filter @claude-web/backend test:cli",
     "test:protocol": "pnpm --filter @claude-web/shared test",
+    "test:protocol:aisep": "pnpm --filter @claude-web/aisep-protocol test",
+    "dep-cruiser:check": "dependency-cruiser packages/",
     "eva:status": "node scripts/eva-status.mjs",
     "eva:hook": "node scripts/eva-hook.mjs"
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.0.0",
+  "devDependencies": {
+    "dependency-cruiser": "^17.4.0"
+  }
 }

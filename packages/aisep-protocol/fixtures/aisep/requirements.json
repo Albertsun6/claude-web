@@ -1,0 +1,35 @@
+{
+  "goals": [
+    {
+      "id": "G-1",
+      "name": "Bootstrap AISEP that builds large software via AI",
+      "successCriteria": "v0 pilot ships 1 trivial bug fix through full 10-stage chain"
+    }
+  ],
+  "drivers": [
+    { "id": "D-1", "name": "Personal productivity" },
+    { "id": "D-2", "name": "Long-term Odoo ERP development support" }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "realizes": "G-1",
+      "description": "Architecture stage gate must enforce executable skeleton before implement"
+    },
+    {
+      "id": "REQ-002",
+      "realizes": "G-1",
+      "description": "AlphaEvolve memory must persist cross-workspace fixes"
+    }
+  ],
+  "constraints": [
+    { "id": "C-1", "description": "TypeScript full-stack, personal single-machine, no daemons" }
+  ],
+  "principles": [
+    { "id": "P-1", "description": "Protocol before implementation" },
+    { "id": "P-2", "description": "Spawn claude CLI, never call Anthropic Agent SDK" }
+  ],
+  "stakeholders": [
+    { "id": "S-1", "role": "user (yongqian)" }
+  ]
+}

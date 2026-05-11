@@ -1,0 +1,10 @@
+{
+  "id": "sr-01HJK5XH0CDEF09B",
+  "workspaceId": "ws-01HJK5XF0CDEF07A",
+  "stage": "architecture",
+  "phase": "architecture-brief",
+  "predecessorId": "sr-01HJK5XH0CDEF08C",
+  "status": "running",
+  "inputHash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "startedAt": 1747929600000
+}

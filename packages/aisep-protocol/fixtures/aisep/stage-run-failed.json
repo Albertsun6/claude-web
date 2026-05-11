@@ -1,0 +1,11 @@
+{
+  "id": "sr-01HJK5XH0CDEF09F",
+  "workspaceId": "ws-01HJK5XF0CDEF07A",
+  "stage": "verify",
+  "phase": "none",
+  "predecessorId": "sr-01HJK5XH0CDEF09D",
+  "status": "failed",
+  "inputHash": "sha256:aaaa00000000111111112222222233333333444444445555555566666666eeee",
+  "startedAt": 1747931000000,
+  "endedAt": 1747931200000
+}
