@@ -64,7 +64,7 @@ describe("PromptCompiler", () => {
     expect(promptText).toContain("≤ 4 pages");
   });
 
-  it("renders coder template with diff-fence requirement", async () => {
+  it("renders implement template with diff-fence requirement", async () => {
     const compiler = new PromptCompiler();
     const { promptText, profile } = await compiler.render({
       stage: "implement",
@@ -72,16 +72,25 @@ describe("PromptCompiler", () => {
       upstreamArtifacts: [
         { kind: "contract_frozen", key: "contracts/stage.ts" },
       ],
+      upstreamArtifactsWithContent: [
+        {
+          ref: { kind: "contract_frozen", key: "contracts/stage.ts" },
+          contentPreview: "export const FooSchema = z.object({});",
+          truncated: false,
+          truncatedBytes: 0,
+        },
+      ],
       memoryHits: [],
     });
 
     expect(profile).toBe("coder");
     expect(promptText).toContain("```diff");
     expect(promptText).toContain("400 LOC");
-    expect(promptText).toContain("contracts/stage.ts");
+    expect(promptText).toContain("contracts/stage.ts");   // ref rendered via inline-content section
+    expect(promptText).toContain("question");             // mandatory question-fence form
   });
 
-  it("renders reviewer template with logic-only focus", async () => {
+  it("renders review template with logic-only focus", async () => {
     const compiler = new PromptCompiler();
     const { promptText, profile } = await compiler.render({
       stage: "review",
@@ -89,11 +98,19 @@ describe("PromptCompiler", () => {
       upstreamArtifacts: [
         { kind: "patch", key: "impl-backend.diff" },
       ],
+      upstreamArtifactsWithContent: [
+        {
+          ref: { kind: "patch", key: "impl-backend.diff" },
+          contentPreview: "--- a/foo.ts\n+++ b/foo.ts",
+          truncated: false,
+          truncatedBytes: 0,
+        },
+      ],
       memoryHits: [],
     });
 
     expect(profile).toBe("reviewer");
-    expect(promptText).toContain("Logic-only review focus");
+    expect(promptText).toContain("Logic-only focus");
     expect(promptText).toContain("pass_with_comments");
     expect(promptText).toContain("impl-backend.diff");
   });
