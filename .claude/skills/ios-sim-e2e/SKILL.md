@@ -60,8 +60,8 @@ sleep 5
 
 ```bash
 xcodebuild build \
-  -project packages/ios-native/ClaudeWeb.xcodeproj \
-  -scheme ClaudeWeb \
+  -project packages/ios-native/Vessel.xcodeproj \
+  -scheme Vessel \
   -destination "id=$SIM_ID" \
   -derivedDataPath /tmp/claude-web-sim-build \
   -quiet 2>&1 | tail -1
@@ -82,11 +82,11 @@ xcodebuild build ... 2>&1 | grep error:
 ## 3. 安装 + 启动 App
 
 ```bash
-APP="/tmp/claude-web-sim-build/Build/Products/Debug-iphonesimulator/ClaudeWeb.app"
+APP="/tmp/claude-web-sim-build/Build/Products/Debug-iphonesimulator/Vessel.app"
 
-xcrun simctl terminate $SIM_ID com.albertsun6.claudeweb-native 2>/dev/null || true
+xcrun simctl terminate $SIM_ID com.albertsun6.vessel 2>/dev/null || true
 xcrun simctl install $SIM_ID "$APP"
-xcrun simctl launch $SIM_ID com.albertsun6.claudeweb-native
+xcrun simctl launch $SIM_ID com.albertsun6.vessel
 ```
 
 **验证**：launch 返回 PID，exit 0。

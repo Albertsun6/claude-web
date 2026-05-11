@@ -14,8 +14,8 @@ set -uo pipefail
 
 MODE="${1:-device}"
 DEVICE_ID="${DEVICE_ID:-C6B030B2-E211-57C5-957F-F2A40831937A}"
-BUNDLE_ID="${BUNDLE_ID:-com.albertsun6.claudeweb-native}"
-SCHEME="ClaudeWeb"
+BUNDLE_ID="${BUNDLE_ID:-com.albertsun6.vessel}"
+SCHEME="Vessel"
 CONFIG="${CONFIG:-Debug}"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$HOME/Library/Developer/Xcode/DerivedData/claude-web-native"
@@ -49,7 +49,7 @@ if [[ "$MODE" == "--sim" || "$MODE" == "sim" ]]; then
   APP_BUNDLE="$BUILD_DIR/Build/Products/$CONFIG-iphonesimulator/$SCHEME.app"
 
   echo "[1/3] xcodebuild for simulator $SIM_ID"
-  xcodebuild -project ClaudeWeb.xcodeproj -scheme "$SCHEME" -configuration "$CONFIG" \
+  xcodebuild -project Vessel.xcodeproj -scheme "$SCHEME" -configuration "$CONFIG" \
     -destination "platform=iOS Simulator,id=$SIM_ID" \
     -derivedDataPath "$BUILD_DIR" \
     -sdk iphonesimulator \
@@ -66,7 +66,7 @@ if [[ "$MODE" == "--sim" || "$MODE" == "sim" ]]; then
   }
 
   echo "[3/3] ✓ launched in simulator $SIM_ID"
-  echo "  log:   xcrun simctl spawn $SIM_ID log stream --predicate 'subsystem contains \"ClaudeWeb\"'"
+  echo "  log:   xcrun simctl spawn $SIM_ID log stream --predicate 'subsystem contains \"Vessel\"'"
   exit 0
 fi
 
@@ -74,7 +74,7 @@ fi
 APP_BUNDLE="$BUILD_DIR/Build/Products/$CONFIG-iphoneos/$SCHEME.app"
 
 echo "[1/3] xcodebuild for device"
-xcodebuild -project ClaudeWeb.xcodeproj -scheme "$SCHEME" -configuration "$CONFIG" \
+xcodebuild -project Vessel.xcodeproj -scheme "$SCHEME" -configuration "$CONFIG" \
   -destination "id=$DEVICE_ID" \
   -allowProvisioningUpdates \
   -derivedDataPath "$BUILD_DIR" \
