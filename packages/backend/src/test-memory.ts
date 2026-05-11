@@ -44,7 +44,7 @@ const { openMemoryDb, closeMemoryDb, MEMORY_SCHEMA_VERSION } = await import('./m
   const names = new Set(tables.map(t => t.name));
   assert(names.has('memory_records'), 'memory_records table created by migration 0004');
   const userVer = db.pragma('user_version', { simple: true }) as number;
-  assert(userVer === MEMORY_SCHEMA_VERSION && userVer === 4, `user_version = 4 after migration (got ${userVer})`);
+  assert(userVer === MEMORY_SCHEMA_VERSION && userVer === 5, `user_version = 5 after migration (got ${userVer})`);
 
   // Check column shape (defensive — SQLite is forgiving)
   const cols = db.prepare("PRAGMA table_info('memory_records')").all() as { name: string }[];

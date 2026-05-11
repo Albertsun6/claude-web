@@ -34,6 +34,7 @@ import { makeCodingSkill } from './skills/coding.js';
 import { ClaudeCodeDriver } from './drivers/cli-runner-driver.js';
 import { workspaceFor } from './drivers/cli-runner-driver.js';
 import type { CodingDriver } from './drivers/types.js';
+import { classify } from './intent-classifier.js';
 
 export interface IntentInput {
   text: string;
@@ -81,11 +82,18 @@ export async function runIntent(input: IntentInput): Promise<AgentResult> {
 
   const nowIso = (): string => new Date().toISOString();
 
-  // 1. intent.received
+  // 1. classify intent → execution_depth + domain (Intent Classifier v1)
+  const classifierResult = await classify(input.text);
+
+  // 2. intent.received
   const intentId = writeIntent({
     sessionId: session.id,
     traceId: rootCtx.trace_id,
     text: input.text,
+    executionDepth: classifierResult.execution_depth,
+    domain: classifierResult.domain,
+    confidence: classifierResult.confidence,
+    classifierMethod: classifierResult.method,
   });
   await trace.write(makeEvent({
     ctx: rootCtx,
@@ -94,11 +102,18 @@ export async function runIntent(input: IntentInput): Promise<AgentResult> {
     session_id: session.id,
     run_id: runId,
     status: 'success',
-    payload: { intent_id: intentId, text_len: input.text.length },
+    payload: {
+      intent_id: intentId,
+      text_len: input.text.length,
+      execution_depth: classifierResult.execution_depth,
+      domain: classifierResult.domain,
+      confidence: classifierResult.confidence,
+    },
     timestamp: nowIso(),
   }));
 
-  // 2. dispatch — M0.5 echo or coding by prefix heuristic.
+  // 3. dispatch — M0.5 echo or coding by prefix heuristic.
+  // TODO(ops-mvp): route depth=operations to OperationsDispatcher when built.
   // OTEL convention: one span = one finalized record (skill.completed carries duration).
   const driver = input.codingDriver ?? new ClaudeCodeDriver();
   const { id: skillId, skill } = resolveSkill(input, driver);

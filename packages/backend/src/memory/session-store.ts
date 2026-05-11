@@ -26,13 +26,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // 互相吞食对方 migration（v0A.1 M0 4-way review BLOCKER unanimous fix）。
 const MIGRATIONS_DIR = join(__dirname, '..', 'migrations-memory');
 
-// memory.db 独立版本序列：M0=1; M1=2 (lessons); M1C-A=3 (workflow_state); M1C-B=4 (memory_records)
-export const MEMORY_SCHEMA_VERSION = 4;
+// memory.db 独立版本序列：M0=1; M1=2 (lessons); M1C-A=3 (workflow_state); M1C-B=4 (memory_records); v5=intent_v2
+export const MEMORY_SCHEMA_VERSION = 5;
 const MIGRATIONS = [
   { version: 1, file: '0001_m0_sessions.sql' },
   { version: 2, file: '0002_m1_lessons.sql' },
   { version: 3, file: '0003_m1c_workflows.sql' },
   { version: 4, file: '0004_m1c_memory.sql' },
+  { version: 5, file: '0005_intent_v2.sql' },
 ];
 
 let dbInstance: Database.Database | null = null;
@@ -99,11 +100,27 @@ export function bootSession(sessionId?: string): SessionRow {
   return db.prepare('SELECT id, created_at, last_seen_at FROM sessions WHERE id = ?').get(id) as SessionRow;
 }
 
-export function writeIntent(args: { sessionId: string; traceId: string; text: string }): string {
+export function writeIntent(args: {
+  sessionId: string;
+  traceId: string;
+  text: string;
+  executionDepth?: string;
+  domain?: string;
+  confidence?: number;
+  classifierMethod?: string;
+}): string {
   const db = openMemoryDb();
   const id = randomUUID();
-  db.prepare('INSERT INTO intents (id, session_id, trace_id, text) VALUES (?, ?, ?, ?)').run(
+  db.prepare(`
+    INSERT INTO intents
+      (id, session_id, trace_id, text, execution_depth, domain, confidence, classifier_method)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
     id, args.sessionId, args.traceId, args.text,
+    args.executionDepth ?? null,
+    args.domain ?? null,
+    args.confidence ?? null,
+    args.classifierMethod ?? null,
   );
   return id;
 }
