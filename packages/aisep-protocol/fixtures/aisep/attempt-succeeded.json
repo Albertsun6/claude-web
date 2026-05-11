@@ -3,9 +3,11 @@
   "stageRunId": "sr-01HJK5XH0CDEF09B",
   "attemptN": 1,
   "invocation": {
-    "cmd": "claude --print --input-format=stream-json --output-format=stream-json",
-    "cwd": "/Users/yongqian/Desktop/Vessel",
+    "provider": "claude-cli",
     "model": "claude-opus-4-7",
+    "argv": ["--print", "--input-format=stream-json", "--output-format=stream-json"],
+    "cwd": "/Users/yongqian/Desktop/Vessel",
+    "rawCmd": "claude --print --input-format=stream-json --output-format=stream-json",
     "promptHash": "sha256:dededededededededededededededededededededededededededededededede"
   },
   "reviewState": "approved",

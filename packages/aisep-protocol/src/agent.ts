@@ -2,7 +2,12 @@
 //
 // AgentProfile is defined here (semantic home); attempt.ts re-imports it
 // via the barrel. Memory + Artifact refs flow into ContextBundle for
-// each spawn `claude --print` invocation.
+// each agent invocation.
+//
+// Round-2 change (per reviewer-cross M7): `ba` renamed to `planner` —
+// industry-standard term (OpenHands / SWE-agent / Cursor / CrewAI all
+// use "planner"). Organizational role names belong in app config, not
+// the protocol enum.
 
 import { z } from "zod";
 
@@ -10,15 +15,25 @@ import { AisepArtifactRefSchema } from "./artifact.js";
 import { AisepMemoryRecordSchema } from "./memory.js";
 
 /**
- * Five AISEP agent profiles. Each maps to a prompt template in
- * ~/.aisep/reference-library/prompt-templates/<profile>.hbs.
+ * Five AISEP agent profiles (capability-typed, not role-typed).
+ *
+ * - planner: high-level decomposition (intake / research / plan stages)
+ * - architect: architecture stage Phase A + B
+ * - coder: implement stage; primary code generation
+ * - reviewer: review stage; cross-AI verdict producer
+ * - tester: verify stage; deterministic test runs
+ *
+ * Each maps to a prompt template in
+ * `~/.aisep/reference-library/prompt-templates/<profile>.hbs`.
+ *
+ * Renaming a profile is a MAJOR bump; adding new ones is MINOR.
  */
 export const AisepAgentProfileSchema = z.enum([
-  "ba",          // intake / research helper
-  "architect",   // architecture stage (Phase A + B)
-  "coder",       // implement stage
-  "reviewer",    // review stage (also used for cross-reviewer)
-  "tester",      // verify / test stage
+  "planner",
+  "architect",
+  "coder",
+  "reviewer",
+  "tester",
 ]);
 export type AisepAgentProfile = z.infer<typeof AisepAgentProfileSchema>;
 
