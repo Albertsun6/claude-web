@@ -150,7 +150,7 @@ export function buildHarnessRouter(
   // 严格语义：仅 failed → skipped 单向（plan v2 OQ-G）；其他 status 返回 409。
   // 已 skipped 视为 idempotent no-op。**不**自动触发 tick — operator 须显式调
   // POST /scheduler/tick 推进。
-  // 全局 authMiddleware 已强制 CLAUDE_WEB_TOKEN bearer auth（cross m3 from plan v2）。
+  // 全局 authMiddleware 已强制 VESSEL_TOKEN bearer auth（cross m3 from plan v2）。
   app.post("/stages/:id/skip", (c) => {
     const result = skipFailedStage(db, c.req.param("id"));
     if (result.ok) {

@@ -11,7 +11,7 @@ import {
   parseEvaConfig,
   summarizeEvaConfig,
   type EvaConfig,
-} from "@claude-web/shared";
+} from "@vessel/shared";
 
 let cached: EvaConfig | null = null;
 

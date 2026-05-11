@@ -18,7 +18,7 @@
 import chokidar, { type FSWatcher } from "chokidar";
 import { statSync } from "node:fs";
 import { open, stat } from "node:fs/promises";
-import type { ServerMessage } from "@claude-web/shared";
+import type { ServerMessage } from "@vessel/shared";
 import { normalizeJsonlEntry, sessionFilePath } from "./routes/sessions.js";
 
 type Send = (msg: ServerMessage) => void;

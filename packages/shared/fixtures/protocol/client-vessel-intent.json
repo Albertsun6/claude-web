@@ -1,0 +1,8 @@
+{
+  "type": "vessel_intent",
+  "runId": "run-vessel-abc123",
+  "text": "明天下午3点提醒我吃药",
+  "vesselSessionId": "sess-2026-05-11",
+  "conversationId": "conv-1",
+  "skill": "echo"
+}

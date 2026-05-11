@@ -75,6 +75,17 @@ describe("protocol fixtures — ClientMessage", () => {
       expect(msg.sessionId).toBe("session-xyz789");
     }
   });
+
+  it("client-vessel-intent — minimal (M1A-β kernel)", () => {
+    const msg = loadFixture<ClientMessage>("client-vessel-intent.json");
+    expect(msg.type).toBe("vessel_intent");
+    if (msg.type === "vessel_intent") {
+      expect(msg.runId).toBe("run-vessel-abc123");
+      expect(msg.text).toBe("明天下午3点提醒我吃药");
+      expect(msg.vesselSessionId).toBe("sess-2026-05-11");
+      expect(msg.skill).toBe("echo");
+    }
+  });
 });
 
 describe("protocol fixtures — ServerMessage", () => {
@@ -272,6 +283,16 @@ describe("protocol fixtures — ServerMessage", () => {
     if (msg.type === "harness_event") {
       expect(msg.kind).toBe("stage_failed");
       expect(msg.payload).toBeDefined();
+    }
+  });
+
+  it("server-vessel-completed — minimal (M1A-β kernel)", () => {
+    const msg = loadFixture<ServerMessage>("server-vessel-completed.json");
+    expect(msg.type).toBe("vessel_completed");
+    if (msg.type === "vessel_completed") {
+      expect(msg.runId).toBe("run-vessel-abc123");
+      expect(msg.vesselSessionId).toBe("sess-2026-05-11");
+      expect(msg.result).toBeDefined();
     }
   });
 });

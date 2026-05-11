@@ -1,4 +1,4 @@
-// Append-only JSONL telemetry log at ~/.claude-web/telemetry.jsonl. Used by
+// Append-only JSONL telemetry log at ~/.vessel/telemetry.jsonl. Used by
 // the iOS app (and potentially future clients) to ship structured event logs
 // for bug diagnosis. Personal-sideload semantics — no PII filter, no SaaS,
 // just a local file the user greps.

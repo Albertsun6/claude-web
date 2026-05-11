@@ -9,7 +9,7 @@
 //   1. In Telegram, find @BotFather → /newbot → save the BOT_TOKEN
 //   2. Send any message to the new bot (e.g. "hi") — this opens a chat
 //   3. curl https://api.telegram.org/bot<TOKEN>/getUpdates → find chat.id
-//   4. Put both into ~/.claude-web/notify.json under "telegram"
+//   4. Put both into ~/.vessel/notify.json under "telegram"
 //
 // Reference: https://core.telegram.org/bots/api#sendmessage
 

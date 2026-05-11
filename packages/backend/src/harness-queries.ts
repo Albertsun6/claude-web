@@ -473,7 +473,7 @@ export interface ArtifactRow {
 /** M2 v1 (3.2-A'): create artifact row with hash + size_bytes computed.
  *
  * Inline storage only in v1 — content_text 必填，content_path 不支持（file 存储留 v2，
- * 因为需要决定 ~/.claude-web/artifacts/<hash>.<ext> 的 file 写入路径策略）。
+ * 因为需要决定 ~/.vessel/artifacts/<hash>.<ext> 的 file 写入路径策略）。
  *
  * Schema 约束（migration 0001_initial.sql）：
  * - kind ∈ enum (methodology / spec / design_doc / architecture_doc / adr / patch / pr_url

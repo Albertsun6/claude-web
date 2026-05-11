@@ -1,4 +1,4 @@
-// Project registry endpoints. Backed by ~/.claude-web/projects.json via the
+// Project registry endpoints. Backed by ~/.vessel/projects.json via the
 // projects-store module (which serializes mutations through a promise queue
 // so concurrent POSTs can't race).
 
