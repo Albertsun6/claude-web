@@ -1,6 +1,6 @@
 # ADR-019: Steward V0 contract — BACKLOG.md + 9-prompt UI + boot ritual
 
-**Status**: Accepted
+**Status**: Accepted (amended in-place 2026-05-12 with I11)
 **Date**: 2026-05-12
 **Reviewers**: harness-architecture-review (Claude) + reviewer-cross (cursor-agent gpt-5.5-medium)
 **Review trail**: see `docs/reviews/steward-v0-{arch,cross,react-arch,react-cross,arbitration}-2026-05-12-0026.md`
@@ -52,7 +52,7 @@ Claude 新 session 应主动：
 **Lazy**：`pnpm eva:sessions` 不在 boot 时跑，问"下一步/活窗口"再跑。
 **Fallback**：用户粘 `/boot` 或 `看 backlog 推荐下一步` 手动触发。
 
-### Invariants (10 条)
+### Invariants (11 条)
 
 - **I1**: BACKLOG.md 是唯一写入点
 - **I2**: id 永久不变；rename 算新建
@@ -67,6 +67,7 @@ Claude 新 session 应主动：
   - destructive needs explicit affirmative: 用户主动短语肯定 (`rm -rf` / `git push --force` / `git worktree remove`)
 - **I9**: commit 守门：BACKLOG.md 改后 `git status --porcelain` 检查；纯净则自动 commit；有其它 dirty 文件则只 stage BACKLOG + ack 后 commit；决不静默 stage 其它
 - **I10**: `status` 字段是状态唯一权威；section header (Active / Blocked / Done) 仅人眼导航；Claude 解析时只看 `status`
+- **I11** (v0.3 amendment 2026-05-12): Dispatch 决策必经用户拍板。`开始干 <id>` 触发时 Claude 给 spawn 分析 + 推荐 + 等用户回 `ok spawn` / `ok stay` / `用户做`；永不静默选边。这是 I8 mid-tier 在 dispatch 场景的细化，**不是新决策**——in-place amendment，无新 review。详见 `docs/proposals/STEWARD-V0-DESIGN.md` v0.3 §3.5。
 
 ## Consequences
 

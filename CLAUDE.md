@@ -184,7 +184,7 @@ When in doubt: ask the user "要更新手册吗？" rather than assume.
 **契约 + 用户面**：
 - 9 个用户 prompt 短语：[`docs/STEWARD_PROMPTS.md`](docs/STEWARD_PROMPTS.md)
 - 详细使用手册：[`docs/STEWARD_USAGE.md`](docs/STEWARD_USAGE.md)
-- Schema 契约（10 个 invariants）：[`docs/adr/vessel/ADR-019-steward-v0-contract.md`](docs/adr/vessel/ADR-019-steward-v0-contract.md)
+- Schema 契约（11 个 invariants）：[`docs/adr/vessel/ADR-019-steward-v0-contract.md`](docs/adr/vessel/ADR-019-steward-v0-contract.md)
 
 **Claude 跑命令前的 3 层执行白名单（I8）**：
 - **read-only auto**：`git status` / `ls` / `cat` / `pnpm eva:sessions` 等只读 → 默许自动跑
@@ -192,6 +192,8 @@ When in doubt: ask the user "要更新手册吗？" rather than assume.
 - **destructive needs explicit affirmative**：`rm -rf` / `git push --force` / `git worktree remove` → 永不静默；要求用户主动短语肯定
 
 **BACKLOG.md commit 守门（I9）**：改 BACKLOG.md 后 `git status --porcelain` 检查——纯净则自动 commit；有其它 dirty 文件则只 stage BACKLOG + ack 后 commit；决不静默 stage 用户其它文件。
+
+**Dispatch 决策必经用户拍板（I11，v0.3 amendment）**：`开始干 <id>` 触发时 Claude **不直接动手**——先 echo task size + parallel_safe_files + 主窗口状态 + spawn 推荐 + 理由，等用户回 `ok spawn` / `ok stay` / `用户做` 才执行下一步。永不静默选边。
 
 ## Docs map
 

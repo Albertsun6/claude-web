@@ -52,10 +52,31 @@
 开始干 m2-voice-proposal
 ```
 
-**Claude 会**：找到这个 id → 验 `status=planned` + `depends_on` 全 done → 跑 `pnpm eva:sessions` 看活窗口 → 决策"本窗口直接做"或"开新窗口"：
-- 本窗口做 → 改 BACKLOG: `status: in_progress` + `assigned_kind: main`
-- 开新窗口 → echo 5 步命令 (worktree + eva.json + Cursor open) → **等你 `ok` 后 (I8 mid-tier)** 执行
-- commit (I9 守门)
+**Claude 会**：找到这个 id → 验 `status=planned` + `depends_on` 全 done → 跑 `pnpm eva:sessions` 看活窗口 → **不直接动手**，先给 spawn 分析 + 推荐 + 等你拍板：
+
+```
+Task: m2-voice-proposal
+  size=M · priority=P2 · parallel_safe_files=["docs/proposals/"]
+  depends_on=[] · assigned_kind 候选=main
+
+Spawn 分析：
+  • size=M  → 倾向 spawn（≤ 半天，单独 session 不算亏）
+  • parallel_safe_files 跟主窗口最近改的文件零重叠 → spawn 安全
+  • 主窗口状态：idle / busy / in-context
+  • eva:sessions：除我外 N 个活窗口
+
+建议：SPAWN（或 STAY / USER-MANUAL）
+理由：<1-2 句>
+```
+
+你回 1 个短语：
+
+- `ok spawn` → Claude echo 5 步命令 (worktree + eva.json + Cursor open + 给新 session 的 prompt 模板) → 再等一次 ack (I8 mid-tier) → 执行 → commit (I9 守门)
+- `ok stay` → Claude 改 BACKLOG: `status: in_progress` + `assigned_kind: main` → commit (I9 守门) → 在本窗口开始做
+- `用户做` → Claude 改 BACKLOG: `status: in_progress` + `assigned_kind: user-manual` → commit (I9 守门) → 主窗口只跟踪
+- 改主意：`<id> drop 因为 ...` / `<id> blocked 因为 ...` / `<id> 改 P<n>`
+
+**关键**：所有 spawn / stay / 用户做决策都过你的眼。Claude 不静默选边。
 
 ---
 

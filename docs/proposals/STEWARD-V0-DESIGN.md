@@ -1,6 +1,6 @@
 # Steward V0 — 总管系统设计提案
 
-**Status**: **Converged after Phase 1+2+3 review** · Version **v0.2**
+**Status**: **Converged after Phase 1+2+3 review** · Version **v0.3** (amended in-place 2026-05-12 with §3.5 dispatch protocol + I11; lightweight refinement within v0.2 contract spirit — no new review)
 **Review verdict**: ✅ accepted (with 5 partial-accepts + 1 rebuttal) — see [`steward-v0-arbitration-2026-05-12-0026.md`](../reviews/steward-v0-arbitration-2026-05-12-0026.md)
 **Reviewers**: harness-architecture-review (Claude general-purpose) + reviewer-cross (cursor-agent gpt-5.5-medium)
 **Author**: Albert (via Claude main session) · **Date**: 2026-05-12
@@ -181,23 +181,64 @@ Claude 读完 BACKLOG.md，对 `看下一步` 请求：
 7. 输出 top 3 + 标签 + 给"开新窗口"的具体命令
 ```
 
-### 3.5 "开始一项" 流程 (`开始干 <id>`)
+### 3.5 "开始一项" 流程 (`开始干 <id>`) — Dispatch 协议（v0.3 amendment）
 
 ```
 1. 读 BACKLOG 找 id
 2. 检查 status=planned（否则报错）
 3. 检查 depends_on 全 done（否则报错: "computed-blocked by X, Y"）
-4. 跑 eva:sessions 看冲突
-5. 决策（§3.4 算法）：
-   - 本窗口能做 → 更新 (status: in_progress, assigned_kind: main)
-   - 需开新窗口 → Claude **生成** 5 步命令 + 用户 ack (I8) → Claude 执行：
-     a. git worktree add -b feat/eva-<id> ~/Desktop/Vessel-<id> dev
-     b. 编辑 eva.json（add worktree entry）
-     c. open -a Cursor ~/Desktop/Vessel-<id>
-     d. 给新窗口的 prompt 模板: "开始干 <id>，详情见 docs/BACKLOG.md"
-     e. update BACKLOG (status: in_progress, assigned_kind: worktree, assigned_cwd: <path>)
-6. commit (I9 守门)：chore(backlog): start <id>
+4. 跑 eva:sessions 看活窗口冲突
+
+5. Claude **不直接动手**，先给 spawn 分析 + 推荐：
+
+   echo:
+     Task: <id>
+       size=<S/M/L> · priority=<P0-3> · parallel_safe_files=[...]
+       depends_on=[...] · assigned_kind 候选=<main|user-manual>
+
+     Spawn 分析：
+       • size 维度 → <SPAWN 倾向 | STAY 倾向 | 中性>
+       • parallel_safe_files 跟主窗口最近改的文件 <重叠 / 零重叠>
+       • 主窗口状态 <idle | busy | in-context>
+       • eva:sessions：除我外 N 个活窗口
+
+     建议：<SPAWN | STAY | USER-MANUAL>
+     理由：<1-2 句>
+
+     你的选择：ok spawn | ok stay | 用户做 | drop / blocked / 改 P<n>
+
+6. 等用户回复 1 个短语 (I8 mid-tier ack):
+   - `ok spawn` → 执行 spawn 流程 (a-e)，每步执行前再 echo 一次
+       a. git worktree add -b feat/eva-<id> ~/Desktop/Vessel-<id> dev
+       b. 编辑 eva.json（add worktree entry）
+       c. open -a Cursor ~/Desktop/Vessel-<id>
+       d. 给新窗口的 prompt 模板: "开始干 <id>，详情见 docs/BACKLOG.md"
+       e. update BACKLOG (status: in_progress, assigned_kind: worktree, assigned_cwd: <path>)
+   - `ok stay` → 更新 (status: in_progress, assigned_kind: main)
+   - `用户做` → 更新 (status: in_progress, assigned_kind: user-manual)
+   - drop / blocked / 改 P → 对应 prompt 处理
+
+7. commit (I9 守门)：chore(backlog): start <id>
 ```
+
+**关键不变量**（新增）：
+
+- **I11**：所有 spawn / stay / user-manual 决策必须由用户显式拍板。Claude 给推荐 + 理由，但永远不静默选边。这是 I8 mid-tier "write needs ack" 在 dispatch 场景的细化体现。
+
+**推荐启发式表** (Claude 给推荐时参考)：
+
+| 场景 | Claude 建议 |
+|---|---|
+| `size=L` 任意 | SPAWN |
+| `size=M` + parallel_safe_files 跟主窗口零重叠 | SPAWN |
+| `size=M` + 主窗口刚 commit 完 idle | SPAWN |
+| `size=M` + 主窗口在做相关工作 | STAY |
+| `size=S` + docs / scripts 小作用域 | STAY |
+| `size=S` + 改产品代码 | 中性（让用户拍） |
+| `assigned_kind 候选=user-manual` | USER-MANUAL |
+| 主窗口在等 (CI / Apple / review) + task 独立 | SPAWN |
+
+启发式不是硬规则；Claude 可结合 parallel_safe_files、conflicts_with、主窗口最近 git activity 调整。
 
 ### 3.6 "收线" 流程 (`<id> 收线`)
 
@@ -238,6 +279,7 @@ Claude 读完 BACKLOG.md，对 `看下一步` 请求：
   - **有其它 dirty 文件** → 只 `git add docs/BACKLOG.md`，commit 前给用户 diff 摘要 + ack (I8)
   - 决不静默 stage 用户其它 dirty 文件
 - **I10 (新)** `status` 字段是 backlog 状态的**唯一权威**。Section header (Active / Blocked / Done) 仅作人眼导航。Claude 解析 BACKLOG 时**只看 `status`**。
+- **I11 (v0.3 amendment)** Dispatch 决策必经用户拍板。`开始干 <id>` 触发时 Claude 给 spawn 分析 + 推荐 + 等用户回 `ok spawn` / `ok stay` / `用户做`；永不静默选边。这是 I8 mid-tier "write needs ack" 在 dispatch 场景的细化。
 
 ### 4.5 不变量兼容性矩阵（F13 NEW）
 
