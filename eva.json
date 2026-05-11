@@ -110,9 +110,9 @@
       "owns": [
         "docs/proposals/AI_CODING_AGENT_EXECUTION_CONTROL.md"
       ],
-      "status": "active",
+      "status": "done",
       "since": "2026-05-12T01:59:00Z",
-      "note": "/survey skill 调研：Claude Code / Cursor / Aider / Windsurf / OpenHands 等如何精确控制 AI coding agent 执行过程。BACKLOG id=ai-coding-agent-execution-control-survey。"
+      "note": "/survey skill 调研：9 工具 × 7 维度执行控制机制横向。PR #55 → dev (merged feb4f5d 之前)。worktree ~/Desktop/Vessel-coding-agent-survey 已 git worktree remove + 本地 branch 已 -D。BACKLOG id=ai-coding-agent-execution-control-survey 同步 done。"
     }
   ]
 }
