@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T00:30:00Z
+**最近更新**: 2026-05-12T17:40:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -64,16 +64,6 @@ items:
     depends_on: []
     note: "调研 whisper-large > 500MB 走 worker subprocess (ADR-012)；写到 docs/proposals/M2-VOICE-CAPABILITY.md；可并行候选"
 
-  - id: eva-sessions-json-output
-    title: pnpm eva:sessions 加 --format json
-    priority: P2
-    size: S
-    status: planned
-    assigned_kind: main
-    parallel_safe_files: ["scripts/"]
-    depends_on: []
-    note: "Steward boot ritual 依赖；契约 API 升级，单独 PR"
-    refs: ["adr:019"]
 ```
 
 ---
@@ -132,4 +122,11 @@ items:
     status: done
     completed_at: 2026-05-12T00:00:00Z
     refs: ["pr:#44", "pr:#45", "tag:v0.7.2", "commit:8743fc5"]
+
+  - id: eva-sessions-json-output
+    title: pnpm eva:sessions 加 --format json
+    status: done
+    completed_at: 2026-05-12T17:40:00Z
+    refs: ["adr:019"]
+    note: "契约 API 升级；JSON shape 锁进 ADR-019 §eva:sessions JSON contract（Steward 消费侧依赖）"
 ```
