@@ -162,3 +162,16 @@ console.log(
     "37",
   ),
 );
+
+// Live Claude Code sessions (Step 2 of 并行 session 协调). Pure derived view —
+// see scripts/eva-sessions.mjs. Print after worktree table.
+console.log("\n");
+try {
+  const { execSync } = await import("node:child_process");
+  execSync(`node "${path.join(__dirname, "eva-sessions.mjs")}"`, {
+    stdio: "inherit",
+  });
+} catch {
+  // sessions scanner failure shouldn't break worktree status
+  console.log(color("(eva-sessions.mjs failed — skipping live sessions section)", "37"));
+}
