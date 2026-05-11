@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T03:30:00Z
+**最近更新**: 2026-05-12T04:00:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -53,34 +53,6 @@ items:
     parallel_safe_files: []
     note: "跑 IOS_NATIVE_DEVICE_TEST.md §6.6 / §6.7 / §8.1-8.3 + cache 回退"
     refs: ["commit:9b6d091"]
-
-  - id: steward-v05-r1-worker-signal-fileflag
-    title: R1 worker→master signaling — file flag canonical (Steward V0.5)
-    priority: P0
-    size: S
-    status: planned
-    parallel_safe_files:
-      - "scripts/steward-signal-done.sh"
-      - "packages/backend/src/lib/spawn-done-flags.ts"
-      - "docs/STEWARD_PROMPTS.md"
-      - "docs/STEWARD_USAGE.md"
-      - "docs/adr/vessel/ADR-019-steward-v0-contract.md"
-    depends_on: []
-    note: "worker 完成时写 ~/.vessel/spawn-done/<task-id>.json (canonical) + 镜像到 inbox (mirror) + PR title scan (fallback)。proposal: docs/proposals/STEWARD_PARALLEL_MECHANISM_EVAL.md §5 R1"
-    refs: ["pr:#53", "proposal:STEWARD_PARALLEL_MECHANISM_EVAL.md"]
-
-  - id: steward-v05-r2-worker-pr-no-auto-merge
-    title: R2 worker open PR + signal, code 不默认 auto-merge (Steward V0.5)
-    priority: P1
-    size: S
-    status: planned
-    parallel_safe_files:
-      - "docs/STEWARD_PROMPTS.md"
-      - "docs/STEWARD_USAGE.md"
-      - "docs/adr/vessel/ADR-019-steward-v0-contract.md"
-    depends_on: ["steward-v05-r1-worker-signal-fileflag"]
-    note: "Steward 收线协议改：worker 开 PR + 写 done flag，主线人工 review 后 merge；docs/research 分支 CI 过+branch protection 通过可 auto-merge。proposal §5 R2"
-    refs: ["pr:#53", "proposal:STEWARD_PARALLEL_MECHANISM_EVAL.md"]
 
   - id: m2-voice-proposal
     title: M2-Voice Capability 设计提案
@@ -185,5 +157,19 @@ items:
     status: done
     completed_at: 2026-05-12T03:30:00Z
     refs: ["pr:#55", "pr:#52", "commit:de249c2"]
-    note: "/survey Deep + hetero + strict 跑 9 工具 × 7 维度，~100 sources，Phase 6 cursor-agent verdict Refine。worktree ~/Desktop/Vessel-coding-agent-survey 待 PR merge 后 pre-remove"
+    note: "/survey Deep + hetero + strict 跑 9 工具 × 7 维度，~100 sources，Phase 6 cursor-agent verdict Refine。worktree ~/Desktop/Vessel-coding-agent-survey 已 pre-remove (eva.json done)"
+
+  - id: steward-v05-r1-worker-signal-fileflag
+    title: R1 worker→master signaling — file flag canonical (Steward V0.5)
+    status: done
+    completed_at: 2026-05-12T04:00:00Z
+    refs: ["pr:#54", "pr:#53", "adr:019", "proposal:STEWARD_PARALLEL_MECHANISM_EVAL.md"]
+    note: "scripts/steward-signal-done.sh (worker writer) + scripts/eva-collect.mjs + pnpm eva:collect (master reader); 新不变量 I12 进 ADR-019; ~/.vessel/spawn-done/<id>.json schema vessel-spawn-done-v1"
+
+  - id: steward-v05-r2-worker-pr-no-auto-merge
+    title: R2 worker open PR + signal, code 不默认 auto-merge (Steward V0.5)
+    status: done
+    completed_at: 2026-05-12T04:00:00Z
+    refs: ["pr:#54", "pr:#53", "adr:019"]
+    note: "纯协议 + 文档：代码改动 worker 开 PR + signal 但不 auto-merge；docs/research 类 worker 标 'ready for auto-merge' 主线确认后 gh pr merge --auto。新不变量 I13 进 ADR-019"
 ```
