@@ -37,6 +37,28 @@ belongs in review).
 - **{{this.failurePattern}}** → {{this.fix}}
 {{/each}}
 
+## CRITICAL: deterministic re-runnable checks
+
+**The upstream snippets shown above may be truncated (4 KB per artifact,
+16 KB total).** Do NOT grep against the Inputs preview text. The
+implement-stage output is durably available on disk as `implement.md`
+in the workspace cwd. For every `contract_grep` or anchor-style check
+that targets the patch body or any file the patch creates:
+
+1. **Use the Read tool first** to load the actual on-disk file:
+   - The patch fence + diff bodies live in `<cwd>/implement.md`
+   - Any prior-stage artifacts live as `<cwd>/<stage>.md` on disk
+2. Construct the `command` field to point at the on-disk path,
+   not at a hand-off label like `"patch.diff"`. Example:
+   `awk '/^## Cross-references$/{f=1; next} /^## /{f=0} f && NF' implement.md | grep -q .`
+3. Only emit `ok: false` after the on-disk re-run still fails. If the
+   preview suggests failure but Read shows the file is fine, the check
+   passes — flag the discrepancy in the human summary instead.
+
+Rationale: hand-off truncation produces false-negative anchor checks
+(seen in Pilot-04). Verify is the G-v gate; a false negative here
+strands integrate with a blocker that resolves to a no-op.
+
 ## Output format (MANDATORY: JSON, then human summary)
 
 ```json
@@ -71,18 +93,24 @@ belongs in review).
   },
   "size_budget": {
     "ok": true | false,
-    "check": "wc -l <file> <= 200",
+    "check": "wc -l implement.md (or the target on-disk path) <= 200",
     "actual": N,
     "limit": N
   },
   "contract_grep": {
     "ok": true | false,
     "checks": [
-      { "name": "patch implements ZOD-Foo", "command": "grep -F 'ZOD-Foo' patch.diff", "ok": true }
+      { "name": "patch implements ZOD-Foo", "command": "grep -F 'ZOD-Foo' implement.md", "ok": true, "read_from_disk": true }
     ]
   }
 }
 ```
+
+Every `contract_grep.checks[]` entry MUST include `read_from_disk: true`
+if its `command` reads a file in cwd, and the file MUST have been Read
+before the verdict was decided. If a check's target file doesn't exist
+on disk (rare; implies a missing stage), set `read_from_disk: false`
+and `ok: false` with reason in the failed entry.
 
 Then a HUMAN SUMMARY (≤ 100 words) AFTER the JSON.
 
@@ -93,6 +121,9 @@ Then a HUMAN SUMMARY (≤ 100 words) AFTER the JSON.
   count, encode it here. Default check: `wc -l <newly added .md files> ≤ 200`.
 - `contract_grep` is REQUIRED: for each contract symbol the patch SHOULD
   reference (ZOD-Foo, ADR-001, etc.), include a grep check.
+- **`contract_grep` checks MUST be re-runnable against on-disk paths.**
+  Read the target file BEFORE emitting the verdict; do not infer from
+  the (possibly-truncated) Inputs preview.
 - Every `failed[].repro` MUST be runnable as-is in the workspace cwd. If
   you can't construct one, the failure stays — DO NOT redact.
 - If a category genuinely doesn't apply (e.g. e2e for a docs-only patch),
