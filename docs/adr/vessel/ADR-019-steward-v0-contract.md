@@ -52,6 +52,49 @@ Claude 新 session 应主动：
 **Lazy**：`pnpm eva:sessions` 不在 boot 时跑，问"下一步/活窗口"再跑。
 **Fallback**：用户粘 `/boot` 或 `看 backlog 推荐下一步` 手动触发。
 
+### eva:sessions JSON contract
+
+Claude 在自动消费（dispatch 推荐 / `看 backlog 推荐下一步` 等）时**应**用
+`pnpm eva:sessions --format json`；ASCII 表只给人眼看。脚本实现：[`scripts/eva-sessions.mjs`](../../../scripts/eva-sessions.mjs)。
+
+形状：
+
+```json
+{
+  "generated": "<ISO timestamp>",
+  "total": <number>,
+  "recentlyActive": <number>,
+  "processesNoResume": <number>,
+  "sessions": [
+    {
+      "pid": "<string>",
+      "etime": "<string, ps elapsed e.g. '05:14:40' or '01-23:45:12'>",
+      "sessionId": "<uuid string | null>",
+      "cwd": "<absolute path | null>",
+      "branch": "<string | null>",
+      "lastSeenMs": <epoch ms | null>,
+      "lastSeenAgo": "<human string e.g. '2m ago' | null>"
+    }
+  ]
+}
+```
+
+字段约束（Steward 消费侧依赖；改这些属契约级修订，需 ADR-020+）：
+
+- `total` = `sessions.length`
+- `recentlyActive` = 5 分钟内 jsonl 有写入的 session 数
+- `processesNoResume` = 没拿到 `--resume <uuid>` 的进程数（通常是 Claude.app / desktop / hook 子进程残留）
+- `sessions` 按"最近活跃优先"排序；`lastSeenMs == null` 的排末尾
+- 缺失字段一律 JSON `null`，**不**写文本占位串（如 `"(unresolved)"`、`"-"`）
+- 空集仍返回完整对象 + `sessions: []`，**不**走"无活进程"快捷退出
+- macOS-only（依赖 `ps -axo`）；其它平台行为未定义
+
+退出码：
+- `0`：成功（含空集）
+- `2`：参数错误（未知 flag / 未知 format 值）
+
+未来加字段对消费方应是非破坏性（默认忽略未知字段）。
+
 ### Invariants (11 条)
 
 - **I1**: BACKLOG.md 是唯一写入点
