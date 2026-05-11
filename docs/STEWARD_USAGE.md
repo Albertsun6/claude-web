@@ -210,6 +210,37 @@ Claude 给推荐时按这套启发式（不是硬规则，会结合 parallel_saf
 4. Claude 写 BACKLOG done 段 + 如果有 worktree，问 ack 后跑 `pnpm eva:hook pre-remove --yes <name>`
 5. 主窗口下次 `/boot` 会看到这条已 done + 下一步候选刷新
 
+### 流程 C+：V0.5 R1 worker self-signaling（推荐）
+
+worker 在 spawn 出来的窗口里完成任务后，**自己跑**：
+
+```bash
+# 代码任务：开 PR 但 NOT auto-merge（R2 不变量）
+git push -u <remote> <branch>
+gh pr create --base dev --title "feat(...): ..." --body "..."
+
+# 然后写 done flag
+./scripts/steward-signal-done.sh <task-id> --pr <PR_URL> --summary "<1 行说明>"
+```
+
+主线 (master Claude) 之后任何时刻粘 `pnpm eva:collect` 或 `看看谁完成了` 时，Claude 会扫 `~/.vessel/spawn-done/` echo pending 项给你：
+
+```
+PENDING  <task-id>
+  branch:    feat/...
+  pr:        https://github.com/.../pull/N
+  summary:   ...
+  completed: 2026-05-12T03:00:00Z (10m ago)
+```
+
+你回 `ok 收线 <id>` → 主线跑：
+- `pnpm eva:collect --clear <task-id>` 删 flag
+- 走原本 `<id> 收线` 协议改 BACKLOG status=done + 关 worktree
+
+**为什么不让 worker 直接合 PR**：保留 review 边界。docs/research/proposal 类如果 CI 已过 + branch protection 满足，可在 signal 备注 "ready for auto-merge" 让主线确认后 `gh pr merge --auto`。
+
+**为什么不让 worker 直接改 BACKLOG.md**：I1 source-of-truth 仍归主线。worker 在它自己 branch 里改也无法把改动反映回 dev branch（物理隔离），所以由主线握状态权才一致。
+
 ### 流程 D：临时想到一件事
 
 ```

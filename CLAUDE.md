@@ -197,6 +197,10 @@ When in doubt: ask the user "要更新手册吗？" rather than assume.
 
 **即时代办 fastpath（v0.4 amendment）**：粘 `即时代办: <title>` 时 Claude **一次 echo 同时提议**：新增 backlog 条目 (`status=in_progress` 跳过 `planned`) + 跑 dispatch 协议（size 分析 + spawn 推荐）。用户 1 个 `ok` 同时承认两件事。等价于 `加待办` + `开始干` 双步合一；不破任何契约（仍走 I1/I5/I7/I8/I9/I10/I11）。
 
+**Worker self-signaling（I12，v0.5 amendment）**：worker session 完成 task 时 **应**跑 `./scripts/steward-signal-done.sh <task-id> [--pr URL] [--summary TEXT]` 写 `~/.vessel/spawn-done/<task-id>.json` (canonical file flag)。主线 (master Claude) 粘 `pnpm eva:collect` 或 `看看谁完成了` 时 Claude 扫该目录 echo pending 完成项，用户 `ok 收线 <id>` 之后 Claude 跑 `pnpm eva:collect --clear <id>` 删 flag + 走原 `<id> 收线` 协议。Worker **不许**直接改 BACKLOG.md / eva.json（I1 source-of-truth 归主线）。
+
+**Worker PR 不默认 auto-merge（I13，v0.5 amendment）**：worker 可 `git push` + `gh pr create`，但**代码改动**（backend / frontend / ios-native / scripts / 配置）默认 **NOT auto-merge**——留主线 + 用户 review。仅 docs / research / proposal / ADR / retrospective 类且 CI + branch protection 满足时，worker 在 `--summary` 备注 "ready for auto-merge"，主线确认后 `gh pr merge --auto`。
+
 ## Docs map
 
 | File | Purpose |
