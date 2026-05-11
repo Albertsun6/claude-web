@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T04:00:00Z
+**最近更新**: 2026-05-12T04:10:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -11,27 +11,6 @@
 
 ```yaml
 items:
-  - id: testflight-encryption-compliance
-    title: TestFlight Build 49 加密合规对话框
-    priority: P1
-    size: S
-    status: in_progress
-    assigned_kind: user-manual
-    parallel_safe_files: []
-    depends_on: []
-    note: "App Store Connect → Seaidea → TestFlight → 编辑加密信息；走 HTTPS/WSS 选'未含加密'或'Apple 提供'"
-    refs: ["pr:#42"]
-
-  - id: testflight-install-verify
-    title: TestFlight Build 49 装到 iPhone 验证
-    priority: P1
-    size: S
-    status: planned
-    assigned_kind: user-manual
-    depends_on: ["testflight-encryption-compliance"]
-    parallel_safe_files: []
-    note: "iPhone TestFlight app → 接受邀请 → 安装；首启动验证 backend 连通"
-
   - id: voice-roundtrip-measure
     title: 真机 voice round-trip ≤ 8 秒实测
     priority: P2
@@ -172,4 +151,18 @@ items:
     completed_at: 2026-05-12T04:00:00Z
     refs: ["pr:#54", "pr:#53", "adr:019"]
     note: "纯协议 + 文档：代码改动 worker 开 PR + signal 但不 auto-merge；docs/research 类 worker 标 'ready for auto-merge' 主线确认后 gh pr merge --auto。新不变量 I13 进 ADR-019"
+
+  - id: testflight-encryption-compliance
+    title: TestFlight Build 49 加密合规对话框
+    status: done
+    completed_at: 2026-05-12T04:10:00Z
+    refs: ["pr:#42"]
+    note: "App Store Connect → Seaidea → TestFlight 加密信息填完（HTTPS/WSS 走默认豁免）"
+
+  - id: testflight-install-verify
+    title: TestFlight Build 49 装到 iPhone 验证
+    status: done
+    completed_at: 2026-05-12T04:10:00Z
+    refs: []
+    note: "iPhone TestFlight app 接受邀请 + 安装 + 首启动 backend 连通验证通过"
 ```
