@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T02:00:00Z
+**最近更新**: 2026-05-12T03:00:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -54,6 +54,34 @@ items:
     note: "跑 IOS_NATIVE_DEVICE_TEST.md §6.6 / §6.7 / §8.1-8.3 + cache 回退"
     refs: ["commit:9b6d091"]
 
+  - id: steward-v05-r1-worker-signal-fileflag
+    title: R1 worker→master signaling — file flag canonical (Steward V0.5)
+    priority: P0
+    size: S
+    status: planned
+    parallel_safe_files:
+      - "scripts/steward-signal-done.sh"
+      - "packages/backend/src/lib/spawn-done-flags.ts"
+      - "docs/STEWARD_PROMPTS.md"
+      - "docs/STEWARD_USAGE.md"
+      - "docs/adr/vessel/ADR-019-steward-v0-contract.md"
+    depends_on: []
+    note: "worker 完成时写 ~/.vessel/spawn-done/<task-id>.json (canonical) + 镜像到 inbox (mirror) + PR title scan (fallback)。proposal: docs/proposals/STEWARD_PARALLEL_MECHANISM_EVAL.md §5 R1"
+    refs: ["pr:#53", "proposal:STEWARD_PARALLEL_MECHANISM_EVAL.md"]
+
+  - id: steward-v05-r2-worker-pr-no-auto-merge
+    title: R2 worker open PR + signal, code 不默认 auto-merge (Steward V0.5)
+    priority: P1
+    size: S
+    status: planned
+    parallel_safe_files:
+      - "docs/STEWARD_PROMPTS.md"
+      - "docs/STEWARD_USAGE.md"
+      - "docs/adr/vessel/ADR-019-steward-v0-contract.md"
+    depends_on: ["steward-v05-r1-worker-signal-fileflag"]
+    note: "Steward 收线协议改：worker 开 PR + 写 done flag，主线人工 review 后 merge；docs/research 分支 CI 过+branch protection 通过可 auto-merge。proposal §5 R2"
+    refs: ["pr:#53", "proposal:STEWARD_PARALLEL_MECHANISM_EVAL.md"]
+
   - id: m2-voice-proposal
     title: M2-Voice Capability 设计提案
     priority: P2
@@ -97,9 +125,31 @@ items:
     priority: P3
     size: M
     status: blocked
-    blocked_reason: "无具体场景；eva:sessions 可见性已能 cover 多数协调需求"
+    blocked_reason: "R1 file flag (steward-v05-r1) 覆盖了 worker→master 完成场景；通用 cross-session push 仍无 specific use case"
     parallel_safe_files: ["packages/backend/src/routes/inbox.ts"]
-    note: "Inbox 加 target=sessionId|worktreeName 字段，撞到时再做"
+    note: "Inbox 加 target=sessionId|worktreeName 字段；现在 R1 Layer 2 mirror 用 inbox 但只走完成信号，通用 push 等具体场景再开"
+
+  - id: steward-v05-r3-trajectory-persist
+    title: R3 worker trajectory 持久化 (Steward V0.5+)
+    priority: P3
+    size: M
+    status: blocked
+    blocked_reason: "观察 2-3 周真实并行 dogfood 之后再决定优先级；OpenHands trajectory 是参考实现"
+    parallel_safe_files:
+      - "packages/backend/src/routes/sessions.ts"
+      - "docs/STEWARD_USAGE.md"
+    note: "worker session jsonl 落 ~/.vessel/trajectories/<task-id>/ 供 retrospective；proposal §5 R3。**前置 gate**: 至少 3 次真实并行 task 之后人工评估"
+    refs: ["pr:#53"]
+
+  - id: steward-v05-r4-sandbox-staging
+    title: R4 sandbox-staging 探索 (Steward V0.5+, 远期)
+    priority: P3
+    size: L
+    status: blocked
+    blocked_reason: "Plandex 的 plan/context branches 是参考；Vessel 当前 worktree 隔离已 cover 80% 场景，sandbox 引入复杂度需 specific use case 驱动"
+    parallel_safe_files: []
+    note: "worker 改动落 sandbox branch，主线决定是否 promote；proposal §5 R4。**前置 gate**: R1+R2 ship 后观察 worktree 隔离是否仍有 leakage"
+    refs: ["pr:#53"]
 ```
 
 ---
