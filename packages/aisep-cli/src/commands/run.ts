@@ -82,8 +82,22 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
   // R11: retrieve from `global-verified` tier only — never inject
   // workspace-pending content (low-trust, not yet human-verified) into a
   // prompt that drives autonomous agent behavior.
+  //
+  // Phase 2.D #13: plan stage gets cross-stage memory — surfaces open
+  // failure modes for every downstream stage so plan §1.5 can flag them
+  // as risks before architecture invests in detailed ADRs. Other stages
+  // get only their own stage's memory (no noise).
+  const allStages = AisepStageSchema.options as AisepStage[];
   const memoryProvider: MemoryProvider = {
     async retrieve(stage) {
+      if (stage === "plan") {
+        const all: unknown[] = [];
+        for (const s of allStages) {
+          const hits = memory.retrieve({ stage: s, tier: "global", limit: 3 });
+          all.push(...hits);
+        }
+        return all;
+      }
       return memory.retrieve({ stage, tier: "global", limit: 5 });
     },
   };

@@ -1,8 +1,11 @@
 // Attempt = a single AI invocation within a stage_run.
 //
 // Round-2 changes (per reviewer-cross + vessel-architect arbitration):
-// - Removed attemptN.max(2): the ping-pong cap (M4) only applies to review
-//   stage and is enforced in aisep-core runtime, not the protocol layer.
+// - Removed attemptN.max(2): the ping-pong cap (M5 — review stage
+//   `revise-required` ≤ 2 rounds, see docs/aisep/02_methodology-v0.1.md
+//   L343) only applies to review stage and is enforced in aisep-core
+//   runtime, not the protocol layer. (Pilot-03 retro #7: prior wording
+//   mis-cited this as M4, which is the contract-freeze red line.)
 // - Split AisepAgentInvocation into provider-neutral envelope:
 //   {provider, model, argv, rawCmd?} instead of bare cmd string.
 //   Removes Anthropic-CLI leakage into the wire protocol.
@@ -86,10 +89,11 @@ export type AisepAgentInvocation = z.infer<typeof AisepAgentInvocationSchema>;
 /**
  * AisepAttempt — one execution attempt of a stage_run.
  *
- * Note: M4 red line (review stage ping-pong ≤ 2) is enforced in
- * `aisep-core` runtime by gate logic scoped to `stage === "review"`,
- * NOT by the schema. Other stages may legitimately retry more times
- * (e.g. flaky integration test rerun).
+ * Note: **M5** red line (review stage `revise-required` ping-pong ≤ 2,
+ * see docs/aisep/02_methodology-v0.1.md L343) is enforced in `aisep-core`
+ * runtime by gate logic scoped to `stage === "review"`, NOT by the
+ * schema. Other stages may legitimately retry more times (e.g. flaky
+ * integration test rerun). M4 is a different red line (contract-freeze).
  */
 export const AisepAttemptSchema = z.object({
   id: OpaqueIdSchema,

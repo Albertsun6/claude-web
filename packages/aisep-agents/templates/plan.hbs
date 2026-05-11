@@ -27,10 +27,13 @@ ADRs.
 (no upstream artifacts; read `intake.md` + `research.md` from cwd)
 {{/if}}
 
-## Memory hits
+## Memory hits (cross-stage — Phase 2.D #13)
+
+Plan stage receives memory hits for ALL downstream stages, not just plan.
+Each hit carries its own `.stage`. Use these to populate §1.5 below.
 
 {{#each memoryHits}}
-- **{{this.failurePattern}}** → {{this.fix}} (shipCount: {{this.shipCount}})
+- **[{{this.stage}}]** {{this.failurePattern}} → {{this.fix}} (shipCount: {{this.shipCount}})
 {{/each}}
 
 ## Output structure (MANDATORY)
@@ -56,6 +59,23 @@ For each Tn:
 - Inputs (artifact refs from upstream)
 - Output (artifact ref this task produces)
 - Acceptance criteria (1 sentence each, verifiable)
+
+## 2.5 Cross-stage memory awareness (MANDATORY — Phase 2.D #13)
+
+List every open memory hit whose `[stage]` appears in any of the downstream
+task owners (architect, contract, coder, verify, review, integrate). Format:
+
+| stage | failurePattern (≤ 80 chars) | does this run's plan address the fix? | risk-ref if not |
+|-------|----------------------------|---------------------------------------|-----------------|
+
+- "address" means: at least one task in §2 explicitly applies the fix's
+  instruction (e.g. the fix says "Read implement.md before grep" → plan §2
+  must show verify task taking `read_from_disk: true`)
+- If "no" → MUST raise a risk in §3 below with `Escalate if...` referencing
+  this memory entry's failurePattern verbatim
+- Empty table = either no cross-stage memory exists (rare; check memory hits
+  section above) OR you intentionally claim every entry is irrelevant for
+  this run — state that explicitly in 1 line after the table
 
 ## 3. Risk register (LCO-style)
 
@@ -95,3 +115,7 @@ blocking; which research counter-evidence to revisit.
   do directly")
 - Every risk MUST have a likelihood + impact + mitigation; no "TBD" allowed
 - Commitment line (GO / NO-GO) is mandatory
+- §2.5 Cross-stage memory awareness table is REQUIRED whenever the Memory
+  hits section above is non-empty. Missing the table when memory hits exist
+  is a NO-GO (per Phase 2.D #13: unfixed memory entries must not become
+  folklore by being silently ignored at plan time)

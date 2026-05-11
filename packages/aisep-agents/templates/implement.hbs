@@ -37,7 +37,24 @@ designs. If contract is ambiguous, output a `question` fence (see below).
 
 ## Output (MANDATORY: ONE of two forms only)
 
-### Form A — Unified-diff patch
+### Form A — Unified-diff patch + manifest header
+
+The output MUST start with a manifest header (1-line YAML-frontmatter style
+block), THEN the diff fence. This lets downstream verify cheaply confirm
+what the patch claims to touch without re-parsing the fence.
+
+````
+```aisep-manifest
+files: <N>
+lines_added: <M>
+lines_removed: <K>
+new_files: ["path/to/new1.ts", "path/to/new2.md"]
+modified_files: ["path/to/changed.ts"]
+runtime_imports_added: ["zod", "yaml"]   # any `import X` / `require(X)` not already in package.json
+```
+````
+
+Then the diff fence:
 
 ````
 ```diff
@@ -83,12 +100,24 @@ a conservative choice and noting it in the diff comment.
 
 - ≤ 400 LOC in the patch (SmartBear code-review threshold from Pilot-02
   research)
-- NO commentary outside the fence
+- NO commentary outside the manifest header + diff fence (and the question
+  fence if applicable)
 - NO partial patches — either complete diff or `question`
 - NO refactoring unrelated to the contract surface
 - Every added line that is a NON-OBVIOUS implementation choice MUST have
   an inline `// ref: ADR-NNN` or `// ref: contract/<name>` comment
   pointing to the upstream artifact that justifies it
+- **Manifest header is REQUIRED** (Phase 2.D #4): the `aisep-manifest`
+  block above the diff fence MUST list all created / modified files
+  + every NEW runtime import / require. Verify uses this manifest to
+  detect missing package.json entries (Phase 2.D #3) and cross-check
+  on-disk artifacts (Phase 2.D #11).
+- **Runtime-dependency safety (Phase 2.D #3)**: every entry in
+  `runtime_imports_added` MUST either already be in `package.json`
+  `dependencies` / `devDependencies` OR be paired with a patched
+  `package.json` line in the same diff. Pilot-03 retro #1: implement
+  added `import { z } from "zod"` without bumping package.json and
+  build failed downstream.
 
 ## Reject conditions (you MUST refuse and emit `question` instead)
 
