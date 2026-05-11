@@ -17,10 +17,24 @@ export const ContentHashSchema = z
 /** Opaque ID — recommended pattern `<type>-<ULID>` but not enforced */
 export const OpaqueIdSchema = z.string().min(1);
 
-/** trace_id namespace: REQ / ADR / ZOD / RISK / G(oal) / D(river) / C(onstraint) / P(rinciple) / S(takeholder) */
+/**
+ * trace_id namespace (Round-2 added FIX + TEST per reviewer-cross M6):
+ * - REQ: requirement (requirements.yaml)
+ * - ADR: architecture decision record (decisions/NNNN-*.md)
+ * - ZOD: zod schema name (contracts-seed.ts / contracts/*.ts)
+ * - RISK: risk register entry (risks.yaml)
+ * - FIX: AlphaEvolve memory record (governance-log/evolution_log.json)
+ * - TEST: test case id (verify_report.json)
+ * - G / D / C / P / S: ArchiMate Motivation Layer (goal / driver / constraint / principle / stakeholder)
+ *
+ * **Padding convention** (not regex-enforced in v0.1 to preserve existing
+ * fixtures; v0.2 may tighten):
+ * - REQ / ADR / ZOD / RISK / FIX / TEST: 4-digit zero-padded (`ADR-0001`)
+ * - G / D / C / P / S: ≥ 1 digit OK (`G-1` acceptable)
+ */
 export const TraceIdSchema = z
   .string()
   .regex(
-    /^(REQ|ADR|ZOD|RISK|G|D|C|P|S)-[A-Za-z0-9_-]+$/,
-    "must be '<NS>-<id>' with NS ∈ {REQ,ADR,ZOD,RISK,G,D,C,P,S}",
+    /^(REQ|ADR|ZOD|RISK|FIX|TEST|G|D|C|P|S)-[A-Za-z0-9_-]+$/,
+    "must be '<NS>-<id>' with NS ∈ {REQ,ADR,ZOD,RISK,FIX,TEST,G,D,C,P,S}",
   );

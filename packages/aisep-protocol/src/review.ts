@@ -54,10 +54,24 @@ export const AisepReviewVerdictKindSchema = z.enum([
 ]);
 export type AisepReviewVerdictKind = z.infer<typeof AisepReviewVerdictKindSchema>;
 
+/**
+ * AisepReviewVerdict — one verdict from one reviewer.
+ *
+ * Round-2 (per reviewer-cross Minor-2): added optional `reviewerId` and
+ * `model` so adding a new reviewer in the future (e.g. a new
+ * cursor-agent model variant, or a third-party reviewer) doesn't
+ * require an enum bump on `AisepReviewerKind`. The enum stays small for
+ * verdict-level branching; the concrete reviewer identity goes in the
+ * optional fields.
+ */
 export const AisepReviewVerdictSchema = z.object({
   id: OpaqueIdSchema,
   stageRunId: OpaqueIdSchema,
   reviewer: AisepReviewerKindSchema,
+  /** Opaque id of the reviewer agent / human (e.g. "agent-architect-claude-opus-4-7"). */
+  reviewerId: OpaqueIdSchema.optional(),
+  /** Concrete model id used (e.g. "claude-opus-4-7", "gpt-5.5-medium"). */
+  model: z.string().optional(),
   verdict: AisepReviewVerdictKindSchema,
   comments: z.array(AisepCommentSchema).default([]),
   suggestedPatches: z.array(AisepPatchSchema).default([]),

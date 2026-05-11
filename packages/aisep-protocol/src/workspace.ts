@@ -55,6 +55,16 @@ export interface AisepExecOptions {
 /**
  * AisepWorkspace — runtime interface implemented by aisep-workspace package.
  * Only this interface is allowed to do fs / process side effects (R6 red line).
+ *
+ * Implementation contract for `exec`:
+ * - If `opts.timeoutMs` is set and the process is killed because the timeout
+ *   elapsed, `result.timedOut` MUST be `true` and `result.exitCode` is the
+ *   signal-exit code (typically 124 or 137).
+ * - For a natural exit (success or failure), `result.timedOut` MUST be `false`,
+ *   regardless of how the exit code happens to look.
+ *
+ * Without this contract, consumers cannot distinguish "command ran to
+ * completion with exitCode=124" from "killed by timeout".
  */
 export interface AisepWorkspace {
   /** Absolute root of the workspace cwd. */

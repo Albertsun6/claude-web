@@ -3,9 +3,11 @@
   "stageRunId": "sr-01HJK5XH0CDEF09B",
   "attemptN": 2,
   "invocation": {
-    "cmd": "claude --print --input-format=stream-json --output-format=stream-json",
+    "provider": "cursor-agent",
+    "model": "gpt-5.5-medium",
+    "argv": ["--mode", "plan", "--print", "--output-format=text"],
     "cwd": "/Users/yongqian/Desktop/Vessel",
-    "model": "claude-opus-4-7",
+    "rawCmd": "cursor-agent --mode plan --print --output-format=text",
     "promptHash": "sha256:abababababababababababababababababababababababababababababababab"
   },
   "reviewState": "fact_checked",

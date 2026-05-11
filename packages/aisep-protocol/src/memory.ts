@@ -6,6 +6,15 @@ import { z } from "zod";
 import { EpochMsSchema, OpaqueIdSchema } from "./common.js";
 import { AisepStageSchema } from "./stage.js";
 
+/**
+ * Wildcard literal for `AisepAppliesTo.domain` / `techStack` arrays.
+ *
+ * Semantics: `["*"]` means "matches any domain / techStack value during
+ * retrieval". The wildcard MUST appear alone in the array (not mixed
+ * with concrete values).
+ */
+export const AISEP_APPLIES_TO_WILDCARD = "*" as const;
+
 export const AisepMemorySourceSchema = z.enum([
   "workspace-pending", // local <workspace>/.aisep/evolution_log.json
   "global-verified",   // ~/.aisep/governance-log/evolution_log.json

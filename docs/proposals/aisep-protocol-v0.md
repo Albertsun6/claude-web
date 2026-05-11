@@ -63,7 +63,7 @@ without addressing.
 | Q3 | **Compatibility** — vessel mainline invariants intact? | YES. R1/R2/R3/R4/R6 all enforced by `.dependency-cruiser.cjs`. Verified empirically: `pnpm test:protocol` (123/123 pass), `pnpm dep-cruiser:check` (138 modules, 0 violations), main vessel worktree has zero modified files. |
 | Q4 | **Irreversible decisions** — listed with rollback plans? | YES, see §4 below. |
 | Q5 | **Permissions** — fs / net / spawn boundary clear? | YES. `AisepWorkspace` interface is the ONLY surface for fs/exec; `aisep-core` MUST NOT import `aisep-workspace` (R6, enforced by dep-cruiser). `aisep-protocol` itself has zero side-effect surface (pure DTOs + interface declaration). |
-| Q6 | **Resource contention** — concurrency / lockfile / SQLite covered? | PARTIAL. v0 protocol is single-writer per stage_run (M1 status state machine). SQLite + file locking will be defined in `aisep-core` Phase 2. No protocol-level concurrency primitives needed. |
+| Q6 | **Resource contention** — concurrency / lockfile / SQLite covered? | **DEFERRED TO STORE LAYER (Phase 2)**. The protocol intentionally has no `lockHolder` / `leaseExpiresAt` / `writerId` fields — single-writer-per-stage_run is a store-layer invariant enforced by SQLite unique indices + advisory file locks in `aisep-core`. **This means Q6 anchor gate is NOT satisfied by aisep-protocol alone**; Phase 2 must deliver the store invariant before architecture stage Phase A of any production workspace can ship. |
 | Q7 | **Rollback** — failure recovery path? | YES. (a) `AisepAttempt.attemptN ≤ 2` enforces ping-pong cap. (b) `AisepArtifact.contentHash` immutability enables LKG snapshot freshness check. (c) `AisepStageRun.status` includes `cancelled` for explicit user-aborted runs. (d) self-host fallback (golden snapshot via git tag + `aisep --bypass` flag) lives outside this protocol package (aisep-cli concern). |
 
 ## 4. Irreversible decisions (require ADR if revised)
@@ -79,7 +79,7 @@ without addressing.
 | 7 | TraceId namespace `^(REQ|ADR|ZOD|RISK|G|D|C|P|S)-` regex | Adding namespace = MINOR; changing existing = MAJOR |
 | 8 | `AisepArtifactKind` 15-value enum | Adding kinds = MINOR; renaming = MAJOR |
 | 9 | `AisepWorkspace` is a TS interface (NOT a wire DTO) | Promoting to wire DTO would mean implementing serialization for `exec()` results, which is complex; keep as runtime interface |
-| 10 | zod 3.x dependency (not zod 4 even when released) | Major zod version bumps may require fixture regeneration |
+| 10 | zod 3.x dependency pinned for v0.1; v0.2 will reevaluate zod 4 for JSON Schema export / metadata registry / improved error format | Major zod version bumps may require fixture regeneration |
 
 ## 5. Cross-end compatibility matrix (v0.1)
 

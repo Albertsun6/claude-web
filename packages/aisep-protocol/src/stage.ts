@@ -1,6 +1,11 @@
 // 10-stage AISEP methodology + DAG-ready StageRun.
 // Spec: docs/aisep/02_methodology-v0.1.md
 // architecture stage internal phases: docs/aisep/03_architecture-stage-spec.md
+//
+// Round-2 change (per reviewer-cross + vessel-architect M1):
+// - AisepStageRunSchema now uses a discriminated union on `phase` so
+//   `sliceIndex`/`sliceTotal` can only appear when phase ==
+//   "architecture-detail-slice", and MUST appear when it does.
 
 import { z } from "zod";
 import { ContentHashSchema, EpochMsSchema, OpaqueIdSchema } from "./common.js";
@@ -22,7 +27,8 @@ export type AisepStage = z.infer<typeof AisepStageSchema>;
 
 /**
  * architecture stage internal sub-phase (Q8 user decision).
- * - none: applies to all non-architecture stages
+ * - none: applies to all non-architecture stages AND to the architecture
+ *   stage row itself (the parent that owns Phase A + B slices)
  * - architecture-brief: Phase A — "direction gate" (≤ 5pp, ≤ 3 ADR, ≤ 2 figures)
  * - architecture-detail-slice: Phase B — per-slice gate (≤ 4pp / slice, repeatable)
  */
@@ -44,30 +50,51 @@ export const AisepStageStatusSchema = z.enum([
 ]);
 export type AisepStageStatus = z.infer<typeof AisepStageStatusSchema>;
 
-/**
- * AisepStageRun — one execution of one stage in one workspace.
- * v0: single predecessor / single successor (linear).
- * v2+: predecessorIds becomes array for fan-in.
- */
-export const AisepStageRunSchema = z.object({
+const StageRunCommonShape = {
   id: OpaqueIdSchema,
   workspaceId: OpaqueIdSchema,
   stage: AisepStageSchema,
-  phase: AisepStagePhaseSchema.default("none"),
   /** v0: single predecessor; v2+: lift to array (separate field). */
   predecessorId: OpaqueIdSchema.optional(),
   successorId: OpaqueIdSchema.optional(),
   status: AisepStageStatusSchema,
   /** sha256 of merged upstream artifact contents (decides freshness). */
   inputHash: ContentHashSchema.optional(),
-  /**
-   * Phase B slice index (1-based) — populated only when phase = "architecture-detail-slice".
-   * Multiple slice runs share the same parent architecture stage_run.
-   */
-  sliceIndex: z.number().int().min(1).optional(),
-  /** Total slices planned (set when first slice starts; used for "all slices done" check). */
-  sliceTotal: z.number().int().min(1).optional(),
   startedAt: EpochMsSchema.optional(),
   endedAt: EpochMsSchema.optional(),
-});
+};
+
+const AisepStageRunNoneSchema = z.object({
+  ...StageRunCommonShape,
+  phase: z.literal("none"),
+}).strict();
+
+const AisepStageRunBriefSchema = z.object({
+  ...StageRunCommonShape,
+  phase: z.literal("architecture-brief"),
+}).strict();
+
+const AisepStageRunSliceSchema = z.object({
+  ...StageRunCommonShape,
+  phase: z.literal("architecture-detail-slice"),
+  /** Phase B slice index (1-based). Required when phase = architecture-detail-slice. */
+  sliceIndex: z.number().int().min(1),
+  /** Total slices planned for the parent architecture stage_run. */
+  sliceTotal: z.number().int().min(1),
+}).strict();
+
+/**
+ * AisepStageRun — one execution of one stage in one workspace.
+ *
+ * Discriminated by `phase`: only `architecture-detail-slice` carries
+ * slice fields; everything else cannot (`.strict()` rejects extras).
+ *
+ * v0: single predecessor / single successor (linear). v2+ adds fan-in
+ * by lifting predecessorId to a separate predecessors[] field.
+ */
+export const AisepStageRunSchema = z.discriminatedUnion("phase", [
+  AisepStageRunNoneSchema,
+  AisepStageRunBriefSchema,
+  AisepStageRunSliceSchema,
+]);
 export type AisepStageRun = z.infer<typeof AisepStageRunSchema>;
