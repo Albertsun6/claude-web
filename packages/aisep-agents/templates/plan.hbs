@@ -1,0 +1,97 @@
+{{systemPrompt}}
+
+# Stage: plan (LCO-style commitment)
+
+## Goal
+
+Turn intake + research into an executable task DAG with explicit risk
+register. This is the **LCO anchor** — at the end of this stage we commit
+to "we are going to build this" before architecture invests in detailed
+ADRs.
+
+## Inputs
+
+{{#if upstreamArtifactsWithContent.length}}
+{{#each upstreamArtifactsWithContent}}
+### Upstream `{{this.ref.kind}}` @ `{{this.ref.key}}`
+
+```
+{{this.contentPreview}}
+{{#if this.truncated}}
+[... {{this.truncatedBytes}} bytes truncated]
+{{/if}}
+```
+
+{{/each}}
+{{else}}
+(no upstream artifacts; read `intake.md` + `research.md` from cwd)
+{{/if}}
+
+## Memory hits
+
+{{#each memoryHits}}
+- **{{this.failurePattern}}** → {{this.fix}} (shipCount: {{this.shipCount}})
+{{/each}}
+
+## Output structure (MANDATORY)
+
+```markdown
+# Plan — <title>
+
+## 1. Task DAG (mermaid)
+
+\`\`\`mermaid
+graph TD
+    T1[task 1: ...] --> T3[task 3: ...]
+    T2[task 2: ...] --> T3
+    T3 --> T4
+\`\`\`
+
+Every node ID (T1, T2, ...) is referenced in §2 with concrete description.
+
+## 2. Task descriptions
+
+For each Tn:
+- Owner (agent profile: planner | architect | coder | reviewer | tester)
+- Inputs (artifact refs from upstream)
+- Output (artifact ref this task produces)
+- Acceptance criteria (1 sentence each, verifiable)
+
+## 3. Risk register (LCO-style)
+
+| ID | Risk | Likelihood | Impact | Mitigation | Escalate if... |
+|----|------|-----------|--------|------------|----------------|
+
+Each risk gets an ID (R1, R2, ...) referenced by downstream stages.
+
+## 4. Decisions deferred to architecture
+
+Things you intentionally did NOT decide in plan because architecture should
+have the full context. Be explicit so architecture can't claim you punted
+silently.
+
+- D1: <decision> — defer to architecture because <reason>
+
+## 5. LCO anchor commitment
+
+Mark the explicit go/no-go statement:
+- ✅ **GO**: the task DAG is sufficient to deliver the success criteria from
+  intake, given the risks above.
+- ❌ **NO-GO**: <reason> — escalate to user before architecture stage.
+
+If you can't honestly commit to GO, output NO-GO with a specific reason.
+Architecture will not run if plan ends NO-GO.
+
+## 6. Design-stage handoff (one paragraph)
+
+What architecture must investigate first; which intake unknowns are
+blocking; which research counter-evidence to revisit.
+```
+
+## Hard limits
+
+- ≤ 1500 words (counted)
+- DAG must have ≥ 2 nodes (or it's not a DAG — flag as "too small for AISEP,
+  do directly")
+- Every risk MUST have a likelihood + impact + mitigation; no "TBD" allowed
+- Commitment line (GO / NO-GO) is mandatory
