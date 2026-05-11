@@ -19,6 +19,8 @@ interface RunArgs {
   real: boolean;
   model?: string;
   stage?: AisepStage;
+  /** Comma-separated subset of stages, e.g. "intake,research,plan,architecture,contract". */
+  stages?: AisepStage[];
 }
 
 export async function runCommand(rawArgs: string[]): Promise<number> {
@@ -54,7 +56,9 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
     : new MockStageExecutor();
   const runner = new AisepRunner({ store, workspace: ws, executor });
 
-  const stages: AisepStage[] = args.stage
+  const stages: AisepStage[] = args.stages
+    ? args.stages
+    : args.stage
     ? [args.stage]
     : (AisepStageSchema.options as AisepStage[]);
 
@@ -97,6 +101,22 @@ function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
         return undefined;
       }
       args.stage = parsed.data;
+    } else if (arg === "--stages") {
+      const next = rawArgs[++i];
+      if (!next) {
+        console.error(`[aisep run] --stages requires a comma-separated list`);
+        return undefined;
+      }
+      const parsedStages: AisepStage[] = [];
+      for (const s of next.split(",").map((x) => x.trim()).filter(Boolean)) {
+        const parsed = AisepStageSchema.safeParse(s);
+        if (!parsed.success) {
+          console.error(`[aisep run] Invalid stage in --stages: ${s}`);
+          return undefined;
+        }
+        parsedStages.push(parsed.data);
+      }
+      args.stages = parsedStages;
     } else {
       console.error(`[aisep run] Unknown arg: ${arg}`);
       return undefined;

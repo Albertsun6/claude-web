@@ -11,6 +11,9 @@ importers:
       dependency-cruiser:
         specifier: ^17.4.0
         version: 17.4.0
+      tsx:
+        specifier: ^4.19.0
+        version: 4.21.0
 
   packages/aisep-agents:
     dependencies:
