@@ -12,11 +12,84 @@ importers:
         specifier: ^17.4.0
         version: 17.4.0
 
+  packages/aisep-cli:
+    dependencies:
+      '@claude-web/aisep-core':
+        specifier: workspace:*
+        version: link:../aisep-core
+      '@claude-web/aisep-memory':
+        specifier: workspace:*
+        version: link:../aisep-memory
+      '@claude-web/aisep-protocol':
+        specifier: workspace:*
+        version: link:../aisep-protocol
+      '@claude-web/aisep-workspace':
+        specifier: workspace:*
+        version: link:../aisep-workspace
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.17)(terser@5.46.2)
+
+  packages/aisep-core:
+    dependencies:
+      '@claude-web/aisep-protocol':
+        specifier: workspace:*
+        version: link:../aisep-protocol
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.17)(terser@5.46.2)
+
+  packages/aisep-memory:
+    dependencies:
+      '@claude-web/aisep-protocol':
+        specifier: workspace:*
+        version: link:../aisep-protocol
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.17)(terser@5.46.2)
+
   packages/aisep-protocol:
     dependencies:
       zod:
         specifier: ^3.23.8
         version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.17)(terser@5.46.2)
+
+  packages/aisep-workspace:
+    dependencies:
+      '@claude-web/aisep-protocol':
+        specifier: workspace:*
+        version: link:../aisep-protocol
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
