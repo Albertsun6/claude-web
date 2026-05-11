@@ -8,7 +8,12 @@ import { resolve } from "node:path";
 
 import { ClaudeExecutor, PromptCompiler } from "@claude-web/aisep-agents";
 import { AisepRunner, AisepStore, ids, type StageExecutor } from "@claude-web/aisep-core";
-import { AisepStageSchema, type AisepStage } from "@claude-web/aisep-protocol";
+import {
+  AisepStagePhaseSchema,
+  AisepStageSchema,
+  type AisepStage,
+  type AisepStagePhase,
+} from "@claude-web/aisep-protocol";
 import { NodeWorkspace } from "@claude-web/aisep-workspace";
 
 import { MockStageExecutor } from "../mock-executor.js";
@@ -21,6 +26,20 @@ interface RunArgs {
   stage?: AisepStage;
   /** Comma-separated subset of stages, e.g. "intake,research,plan,architecture,contract". */
   stages?: AisepStage[];
+  /** Explicit phase override; if omitted, architecture defaults to "architecture-brief". */
+  phase?: AisepStagePhase;
+}
+
+/**
+ * Default phase for a stage when user does not pass --phase.
+ *
+ * Architecture defaults to Phase A "architecture-brief" so the 7-question
+ * anchor gate + 5-page hard limit prompts trigger automatically (Pilot-01
+ * Issue #5).
+ */
+function defaultPhaseFor(stage: AisepStage): AisepStagePhase {
+  if (stage === "architecture") return "architecture-brief";
+  return "none";
 }
 
 export async function runCommand(rawArgs: string[]): Promise<number> {
@@ -67,9 +86,10 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
 
   let lastRunId: string | undefined;
   for (const stage of stages) {
-    const result = await runner.runStage({ stage, predecessorId: lastRunId });
+    const phase = args.phase ?? defaultPhaseFor(stage);
+    const result = await runner.runStage({ stage, phase, predecessorId: lastRunId });
     console.log(
-      `[aisep run] ${stage.padEnd(11)} → ${result.status}${
+      `[aisep run] ${stage.padEnd(11)} (${phase.padEnd(28)}) → ${result.status}${
         result.status === "failed" ? " (stopping chain)" : ""
       }`,
     );
@@ -93,6 +113,14 @@ function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
       args.real = true;
     } else if (arg === "--model") {
       args.model = rawArgs[++i];
+    } else if (arg === "--phase") {
+      const next = rawArgs[++i];
+      const parsed = AisepStagePhaseSchema.safeParse(next);
+      if (!parsed.success) {
+        console.error(`[aisep run] Invalid phase: ${next ?? "<missing>"} (must be none | architecture-brief | architecture-detail-slice)`);
+        return undefined;
+      }
+      args.phase = parsed.data;
     } else if (arg === "--stage" || arg === "-s") {
       const next = rawArgs[++i];
       const parsed = AisepStageSchema.safeParse(next);

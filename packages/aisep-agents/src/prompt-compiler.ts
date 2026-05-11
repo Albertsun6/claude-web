@@ -1,8 +1,13 @@
 // PromptCompiler — renders per-stage Handlebars templates with the active
 // agent profile's system prompt + context bundle.
 //
-// Templates live in packages/aisep-agents/templates/<profile>.hbs.
-// Templates are read on construction (lazy) and cached.
+// Template lookup order (v0.2, Phase 2.C-2):
+//   1. `templates/<stage>.hbs`  — stage-specific template (preferred)
+//   2. `templates/<profile>.hbs` — profile-level fallback
+//
+// Stage-specific templates exist for: intake / research / plan / retrospect
+// (carved out from planner.hbs) + architect / coder / reviewer / tester
+// (per-profile, used by their respective stage groups).
 
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -24,34 +29,80 @@ import { stageToProfile, SYSTEM_PROMPTS } from "./stage-prompts.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_ROOT = join(here, "..", "templates");
 
-/** Cached compiled Handlebars templates per profile. */
 type CompiledTemplate = (data: Record<string, unknown>) => string;
 
-const templateCache = new Map<AisepAgentProfile, CompiledTemplate>();
+/** Cache keyed by `<stage>:<profile>` (lookup order baked in). */
+const templateCache = new Map<string, CompiledTemplate>();
 
-/** Register a custom helper (used by reviewer.hbs `{{#if (eq this.kind "x")}}`). */
 Handlebars.registerHelper("eq", (a: unknown, b: unknown) => a === b);
 
-async function loadTemplate(profile: AisepAgentProfile): Promise<CompiledTemplate> {
-  const cached = templateCache.get(profile);
+async function tryLoad(filename: string): Promise<CompiledTemplate | undefined> {
+  try {
+    const source = await readFile(join(TEMPLATE_ROOT, filename), "utf-8");
+    return Handlebars.compile(source, { noEscape: true });
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return undefined;
+    throw err;
+  }
+}
+
+async function loadTemplate(
+  stage: AisepStage,
+  profile: AisepAgentProfile,
+): Promise<CompiledTemplate> {
+  const cacheKey = `${stage}:${profile}`;
+  const cached = templateCache.get(cacheKey);
   if (cached) return cached;
-  const source = await readFile(join(TEMPLATE_ROOT, `${profile}.hbs`), "utf-8");
-  const compiled = Handlebars.compile(source, { noEscape: true });
-  templateCache.set(profile, compiled);
-  return compiled;
+
+  // Try stage-specific first, then profile-level fallback.
+  const stageTemplate = await tryLoad(`${stage}.hbs`);
+  if (stageTemplate) {
+    templateCache.set(cacheKey, stageTemplate);
+    return stageTemplate;
+  }
+
+  const profileTemplate = await tryLoad(`${profile}.hbs`);
+  if (profileTemplate) {
+    templateCache.set(cacheKey, profileTemplate);
+    return profileTemplate;
+  }
+
+  throw new Error(
+    `No template found for stage=${stage} or profile=${profile}. ` +
+      `Expected one of templates/${stage}.hbs or templates/${profile}.hbs`,
+  );
+}
+
+/** One upstream artifact with its content already read + truncated. */
+export interface UpstreamArtifactWithContent {
+  ref: AisepArtifactRef;
+  contentPreview: string;
+  truncated: boolean;
+  truncatedBytes: number;
 }
 
 export interface CompilerRenderArgs {
   stage: AisepStage;
   phase: AisepStagePhase;
-  /** Refs of upstream stage artifacts (for the template to enumerate). */
+  /**
+   * Refs of upstream stage artifacts (for the template to enumerate when
+   * inline content is not provided / claude is expected to Read them).
+   */
   upstreamArtifacts: AisepArtifactRef[];
+  /**
+   * v0.2 Phase 2.C-3: full upstream artifacts with content inlined for
+   * each. If provided, templates render content directly in the prompt
+   * (no reliance on claude's Read tool). If absent, only refs are listed.
+   *
+   * The caller (claude-executor) is responsible for reading from disk +
+   * applying per-artifact and total budget caps.
+   */
+  upstreamArtifactsWithContent?: UpstreamArtifactWithContent[];
   /** Memory hits to inject as past-failure warnings. */
   memoryHits: AisepMemoryRecord[];
-  /** Optional Phase B slice fields. */
   sliceIndex?: number;
   sliceTotal?: number;
-  /** Optional stage-specific goal override. */
   stageGoal?: string;
 }
 
@@ -67,7 +118,7 @@ export interface CompilerRenderResult {
 export class PromptCompiler {
   async render(args: CompilerRenderArgs): Promise<CompilerRenderResult> {
     const profile = stageToProfile(args.stage, args.phase);
-    const template = await loadTemplate(profile);
+    const template = await loadTemplate(args.stage, profile);
 
     const data = {
       systemPrompt: SYSTEM_PROMPTS[profile],
@@ -76,6 +127,7 @@ export class PromptCompiler {
       isPhaseA: args.phase === "architecture-brief",
       isPhaseB: args.phase === "architecture-detail-slice",
       upstreamArtifacts: args.upstreamArtifacts,
+      upstreamArtifactsWithContent: args.upstreamArtifactsWithContent ?? [],
       memoryHits: args.memoryHits,
       sliceIndex: args.sliceIndex,
       sliceTotal: args.sliceTotal,

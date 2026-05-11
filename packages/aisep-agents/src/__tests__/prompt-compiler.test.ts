@@ -141,4 +141,98 @@ describe("PromptCompiler", () => {
     });
     expect(a.promptHash).not.toBe(b.promptHash);
   });
+
+  // Phase 2.C-2: stage-specific templates preferred over profile fallback.
+  it("loads intake.hbs (stage-specific) instead of planner.hbs (profile fallback)", async () => {
+    const compiler = new PromptCompiler();
+    const { promptText } = await compiler.render({
+      stage: "intake",
+      phase: "none",
+      upstreamArtifacts: [],
+      memoryHits: [],
+    });
+    // intake.hbs has structural markers that planner.hbs does NOT:
+    expect(promptText).toContain("Statement of Architecture Work");
+    expect(promptText).toContain("MANDATORY 10 sections");
+    expect(promptText).toContain("## 9. Unknowns / open questions");
+  });
+
+  it("loads research.hbs (stage-specific) with mandatory ≥ 2 candidate approaches", async () => {
+    const compiler = new PromptCompiler();
+    const { promptText } = await compiler.render({
+      stage: "research",
+      phase: "none",
+      upstreamArtifacts: [],
+      memoryHits: [],
+    });
+    expect(promptText).toContain("≥ 2 candidate approaches");
+    expect(promptText).toContain("Counter-evidence");
+    expect(promptText).toContain("Adoption-fitness ranking");
+  });
+
+  it("loads plan.hbs with LCO commit + GO/NO-GO gate", async () => {
+    const compiler = new PromptCompiler();
+    const { promptText } = await compiler.render({
+      stage: "plan",
+      phase: "none",
+      upstreamArtifacts: [],
+      memoryHits: [],
+    });
+    expect(promptText).toContain("LCO anchor commitment");
+    expect(promptText).toContain("**GO**");
+    expect(promptText).toContain("Risk register");
+  });
+
+  it("loads retrospect.hbs requiring ≥ 3 non-obvious findings", async () => {
+    const compiler = new PromptCompiler();
+    const { promptText } = await compiler.render({
+      stage: "retrospect",
+      phase: "none",
+      upstreamArtifacts: [],
+      memoryHits: [],
+    });
+    expect(promptText).toContain("Non-obvious findings");
+    expect(promptText).toContain("≥ 3");
+    expect(promptText).toContain("Memory candidates");
+  });
+
+  // Phase 2.C-3: inline upstream content support
+  it("inlines upstream artifact content via upstreamArtifactsWithContent", async () => {
+    const compiler = new PromptCompiler();
+    const { promptText } = await compiler.render({
+      stage: "research",
+      phase: "none",
+      upstreamArtifacts: [{ kind: "intake", key: "intake.md" }],
+      upstreamArtifactsWithContent: [
+        {
+          ref: { kind: "intake", key: "intake.md" },
+          contentPreview: "PROBLEM: replaceMessages causes N React renders.",
+          truncated: false,
+          truncatedBytes: 0,
+        },
+      ],
+      memoryHits: [],
+    });
+    expect(promptText).toContain("PROBLEM: replaceMessages causes N React renders.");
+    expect(promptText).toContain("`intake.md`");
+  });
+
+  it("renders truncation marker when artifact content exceeds budget", async () => {
+    const compiler = new PromptCompiler();
+    const { promptText } = await compiler.render({
+      stage: "research",
+      phase: "none",
+      upstreamArtifacts: [{ kind: "intake", key: "intake.md" }],
+      upstreamArtifactsWithContent: [
+        {
+          ref: { kind: "intake", key: "intake.md" },
+          contentPreview: "small preview",
+          truncated: true,
+          truncatedBytes: 8000,
+        },
+      ],
+      memoryHits: [],
+    });
+    expect(promptText).toContain("8000 bytes truncated");
+  });
 });
