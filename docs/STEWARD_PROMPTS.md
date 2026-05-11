@@ -6,7 +6,7 @@
 
 ---
 
-## 9 个短语
+## 10 个短语
 
 | # | 操作 | 粘这个 |
 |---|---|---|
@@ -19,6 +19,7 @@
 | 7 | **恢复一项** | `<task-id> unblock` |
 | 8 | **放弃一项** | `<task-id> drop 因为 <reason>` |
 | 9 | **看活窗口** | `现在哪些窗口在干啥` |
+| 10 | **即时代办**（加 + 立刻做） | `即时代办: <title>; [P<0-3>]; [<S/M/L>]; [note]` |
 
 ---
 
@@ -208,6 +209,62 @@ cross-session-messaging drop 因为 永远用不上
 ```
 
 **Claude 会**：跑 `pnpm eva:sessions` → 输出每个活 Claude session 的 PID / 分支 / cwd / 最近活动时间 + 哪个 BACKLOG 项 assigned 在那 cwd（如果有的话）。
+
+---
+
+## 10 — 即时代办（加 + 立刻做）
+
+```
+即时代办: <title>; [P<0-3>]; [<S/M/L>]; [note]
+```
+
+例：
+
+```
+即时代办: 修 iOS launch 时崩溃
+```
+
+或带字段：
+
+```
+即时代办: 改 ADR-019 review trail 链接; P2; S; 链接错位
+```
+
+**默认**：`priority=P1`（不是 P0——P0 留给真阻塞）+ `size` Claude 推（讲不准时问你）
+
+**Claude 会**：一次 echo 同时确认两件事——加进 BACKLOG + 进 dispatch 协议（v0.3 I11）：
+
+```
+即时代办 提议:
+  id: <slug-from-title>
+  title: <你给的>
+  priority: P1 (默认；可改 P0/P2/P3)
+  size: S (Claude 推；可改 M/L)
+  status: in_progress  ← 跳过 planned 直接进
+  assigned_kind 候选: main
+
+并 dispatch 分析:
+  • size 维度 → ...
+  • parallel_safe_files 跟主窗口最近改的文件 <猜测>
+  • 主窗口状态 <idle/busy>
+  • eva:sessions：N 个活窗口
+
+建议：STAY (或 SPAWN / USER-MANUAL)
+理由：<1-2 句>
+
+你的选择：ok | ok spawn | 用户做 | 改 P / 改 size / drop
+```
+
+你 `ok` 一次 = 同时承认两件事：写 BACKLOG（commit, I9 守门）+ 按推荐方式开始。
+
+**对比 `加待办`**：
+
+| 短语 | 行为 | 适用场景 |
+|---|---|---|
+| `加待办: ...` | 加进 backlog (`status=planned`) 等以后做 | 想到一件事先记着，**不**急做 |
+| `即时代办: ...` | 加进 backlog (`status=in_progress`) + 立刻进 dispatch 协议 | 想到一件事**马上做** |
+
+**关键不变量**：仍然不破 I1（BACKLOG 是单一写入点）+ I5（用户 ack 后 Claude 才写）+ I8 mid-tier（write 需 ack）+ I11（dispatch 需用户拍板）—— 这条 prompt 只是把 `加待办` + `开始干` **两步合一**，不引入新决策权。
 
 ---
 

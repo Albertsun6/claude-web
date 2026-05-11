@@ -141,7 +141,7 @@ parallel_safe_files: ["docs/proposals/"]
 
 ---
 
-## 5 种典型工作流
+## 6 种典型工作流
 
 ### 流程 A：早上开工 + Dispatch 决策
 
@@ -239,6 +239,29 @@ m2-voice-impl blocked 因为 等 ADR-020 评审
 ```
 m2-voice-impl unblock
 ```
+
+### 流程 F：紧急即时代办（加 + 立刻做）
+
+需求不在 backlog、又要立刻做？1 步合并：
+
+```
+即时代办: 修 iOS launch 时崩溃
+```
+
+Claude 会一次 echo 完整提议：
+- 自动 slugify id（如 `fix-ios-launch-crash`）
+- 默认 `P1` + size 推断（讲不准会问你）
+- `status` 跳过 `planned` 直接进 `in_progress`
+- 同时跑 dispatch 协议（v0.3 I11）—— size 分析 + spawn 推荐 + 理由
+
+你 `ok` 一次 = 两件事同时承认：写 BACKLOG（commit, I9 守门）+ 按 STAY/SPAWN/USER-MANUAL 推荐方式开始。
+
+**何时用**：你想到一件**马上要做**的事，且需要走完整流程（记账 + dispatch 决策 + 审计 trail），跟 `加待办` 然后 `开始干` 两步等价，**1 个 ack 取代 2 个**。
+
+**何时不用**：
+- 真正 trivial 的 5 秒修复（typo / log 调整）→ 直接口头告诉 Claude，不进 backlog
+- 想到一件事，但暂时不做 → 用 `加待办`
+- 已经在 backlog 的项要开始 → 用 `开始干 <id>`
 
 ---
 
@@ -384,13 +407,14 @@ A: 走 `harness-review-workflow` contract mode → 评审收敛 → 新 ADR (ADR
 要开始一项       →  开始干 <id>
 完成一项         →  <id> 收线
 临时想到一件事    →  加待办: <title>; P<n>; <S/M/L>
+立刻要做一件事    →  即时代办: <title>          ← 加 + 立刻 dispatch
 其它              →  STEWARD_PROMPTS.md 速查
 ```
 
-5 个能记下就够日常用。
+6 个能记下就够日常用。
 
 ---
 
-**版本**：v0.2 (Phase 0)
-**契约 ADR**：[ADR-019](adr/vessel/ADR-019-steward-v0-contract.md)
+**版本**：v0.4 (Phase 0)
+**契约 ADR**：[ADR-019](adr/vessel/ADR-019-steward-v0-contract.md) (amended 2026-05-12)
 **反馈**：粘 `加待办: 改 steward usage manual / <你的反馈>; P2; S` 即可
