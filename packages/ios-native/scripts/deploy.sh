@@ -77,6 +77,7 @@ echo "[1/3] xcodebuild for device"
 xcodebuild -project Vessel.xcodeproj -scheme "$SCHEME" -configuration "$CONFIG" \
   -destination "id=$DEVICE_ID" \
   -allowProvisioningUpdates \
+  -allowProvisioningDeviceRegistration \
   -derivedDataPath "$BUILD_DIR" \
   build > /tmp/_xcodebuild_native.log 2>&1 || {
     echo "xcodebuild failed:"; tail -40 /tmp/_xcodebuild_native.log; exit 1;
