@@ -227,3 +227,20 @@ cd /Users/yongqian/Desktop/claude-web/packages/ios-native
 | 录音转写空 | 麦权限被拒 / 录音 < 250ms | 设置→Claude Voice→麦克风开 |
 | TTS 不响 | 物理静音键？AirPods 路由错了？ | 试 iPhone 内放 / 再试 AirPods |
 | 重启 backend 后不重连 | WS 重连只在 onClose 触发，可能没 detect | 切飞行模式再开 |
+
+---
+
+## 里程碑验收映射
+
+### M2-iOS-γ · "Mac 离线 graceful failure"
+
+跑下面 4 条即算这个里程碑子项通过。**全部 ✅ 即闭环**，**任何一条 ❌** 需要追究是 iOS UI / WS 重连 / Cache 回退 哪一层失效。
+
+| 条目 | 路径 | 期望行为 |
+|---|---|---|
+| §6.6 — 冷启动 + 后端断线 | 启动 Seaidea → `launchctl unload …backend.plist` → iOS 显示断线状态 → 重启 backend → 自动重连 + harness config refetch | 不卡死，不丢 cache，不需要重装 |
+| §6.7 — backend tsx watch 重启 | 改 fallback-config.json → tsx watch 重启 → iOS WS 重连 → SettingsView 显示更新后 config（ETag 变） | 双向可逆 |
+| §8.1-8.3 — 错误恢复 | `unload` 后端 → 发 prompt 看到"未连接后端，发送失败" → busy 不卡 → 重启 → 圆点几秒变绿 → 重发成功 | UI 状态清晰，无静默 hang |
+| **新**：cache 回退 | 上述断线期间打开 app（冷启动）→ 应显示**最近一次缓存**的 conversations（不是空列表）+ 顶部红/黄圈标识离线 | 数据可见，可读但不可写新 turn |
+
+实现引用：[`WebSocketClient.swift`](../packages/ios-native/Sources/ClaudeWeb/Networking/WebSocketClient.swift)（指数退避重连）+ [`ProjectRegistry.swift`](../packages/ios-native/Sources/ClaudeWeb/ProjectRegistry.swift)（`syncState = .offline` + cached snapshot）+ [`Cache.swift`](../packages/ios-native/Sources/ClaudeWeb/Cache.swift)（Application Support 持久化）。

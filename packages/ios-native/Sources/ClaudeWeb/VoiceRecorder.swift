@@ -35,10 +35,15 @@ final class VoiceRecorder {
     private let backendURL: () -> URL
     private let authToken: () -> String
     private var fileURL: URL?
+    private weak var telemetry: Telemetry?
 
     init(backendURL: @escaping () -> URL, authToken: @escaping () -> String = { "" }) {
         self.backendURL = backendURL
         self.authToken = authToken
+    }
+
+    func bindTelemetry(_ tel: Telemetry) {
+        self.telemetry = tel
     }
 
     /// Configure the audio session for record + playback. Idempotent — safe to
@@ -102,6 +107,7 @@ final class VoiceRecorder {
     func stopAndTranscribe() async -> String? {
         guard let r = recorder, state == .recording else { return nil }
         r.stop()
+        telemetry?.log("voice.mic.released")
         recorder = nil
         guard let url = fileURL else { state = .idle; return nil }
         defer { try? FileManager.default.removeItem(at: url) }

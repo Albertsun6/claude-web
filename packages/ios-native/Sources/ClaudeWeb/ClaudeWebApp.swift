@@ -136,6 +136,7 @@ struct ClaudeWebApp: App {
         registry.bind(client: client)
         client.bindTelemetry(telemetry)
         tts.bindTelemetry(telemetry)
+        recorder.bindTelemetry(telemetry)
         notes.bindTelemetry(telemetry)
         harnessStore.bindTelemetry(telemetry)
 

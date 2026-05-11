@@ -5,7 +5,7 @@ description: 把 Seaidea iOS app 单次 install/redeploy 到设备（真机或 s
 
 # iOS Install Skill
 
-把 Seaidea (`com.albertsun6.claudeweb-native`) 单次 install + launch 到 iOS 真机或 sim。
+把 Seaidea (`com.albertsun6.vessel`；M2-iOS-γ rename 后，旧 `com.albertsun6.claudeweb-native` 已废弃) 单次 install + launch 到 iOS 真机或 sim。
 
 承担"已经写完代码，只想 install/redeploy 一次"场景。完整 e2e 流程走 `ios-e2e-test`；端到端 feature 实现走 `feature-fullstack`。本 skill 是**子流程**，可被前两者 inline 调用。
 
