@@ -10,7 +10,8 @@
     "test:cli": "pnpm --filter @claude-web/backend test:cli",
     "test:protocol": "pnpm --filter @claude-web/shared test",
     "eva:status": "node scripts/eva-status.mjs",
-    "eva:hook": "node scripts/eva-hook.mjs"
+    "eva:hook": "node scripts/eva-hook.mjs",
+    "eva:sessions": "node scripts/eva-sessions.mjs"
   },
   "packageManager": "pnpm@9.0.0"
 }
