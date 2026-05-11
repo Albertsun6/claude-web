@@ -7,7 +7,14 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { ClaudeExecutor, PromptCompiler } from "@claude-web/aisep-agents";
-import { AisepRunner, AisepStore, ids, type StageExecutor } from "@claude-web/aisep-core";
+import {
+  AisepRunner,
+  AisepStore,
+  ids,
+  type MemoryProvider,
+  type StageExecutor,
+} from "@claude-web/aisep-core";
+import { AisepMemoryStore } from "@claude-web/aisep-memory";
 import {
   AisepStagePhaseSchema,
   AisepStageSchema,
@@ -70,10 +77,26 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
   }
 
   const store = new AisepStore(cwd, workspaceId);
+  const memory = new AisepMemoryStore(cwd);
+
+  // R11: retrieve from `global-verified` tier only — never inject
+  // workspace-pending content (low-trust, not yet human-verified) into a
+  // prompt that drives autonomous agent behavior.
+  const memoryProvider: MemoryProvider = {
+    async retrieve(stage) {
+      return memory.retrieve({ stage, tier: "global", limit: 5 });
+    },
+  };
+
   const executor: StageExecutor = args.real
     ? new ClaudeExecutor(new PromptCompiler(), { model: args.model })
     : new MockStageExecutor();
-  const runner = new AisepRunner({ store, workspace: ws, executor });
+  const runner = new AisepRunner({
+    store,
+    workspace: ws,
+    executor,
+    memoryProvider,
+  });
 
   const stages: AisepStage[] = args.stages
     ? args.stages
