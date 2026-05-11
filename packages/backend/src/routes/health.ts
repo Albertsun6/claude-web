@@ -219,14 +219,14 @@ async function checkProjectsStore(): Promise<HealthItem> {
 
 function checkAuth(): HealthItem {
   if (isAuthEnabled()) {
-    return { id: "auth", label: "Token 鉴权", status: "ok", detail: "CLAUDE_WEB_TOKEN 已配置" };
+    return { id: "auth", label: "Token 鉴权", status: "ok", detail: "VESSEL_TOKEN 已配置" };
   }
   return {
     id: "auth",
     label: "Token 鉴权",
     status: "warn",
     detail: "未配置",
-    hint: "本机 / Tailscale 内网无所谓；公开暴露务必设 CLAUDE_WEB_TOKEN。",
+    hint: "本机 / Tailscale 内网无所谓；公开暴露务必设 VESSEL_TOKEN。",
   };
 }
 
@@ -237,7 +237,7 @@ function checkAllowedRoots(): HealthItem {
       label: "路径白名单",
       status: "warn",
       detail: "未配置（任何路径都可访问）",
-      hint: "公开暴露时请设 CLAUDE_WEB_ALLOWED_ROOTS。",
+      hint: "公开暴露时请设 VESSEL_ALLOWED_ROOTS。",
     };
   }
   const roots = getAllowedRoots();

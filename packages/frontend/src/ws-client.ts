@@ -1,4 +1,4 @@
-import type { ClientMessage, ImageAttachment, ServerMessage } from "@claude-web/shared";
+import type { ClientMessage, ImageAttachment, ServerMessage } from "@vessel/shared";
 import { useStore } from "./store";
 import { withAuthQuery } from "./auth";
 

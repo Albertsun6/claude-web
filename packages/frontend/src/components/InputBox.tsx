@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ImageAttachment } from "@claude-web/shared";
+import type { ImageAttachment } from "@vessel/shared";
 import { useStore, useActiveSession } from "../store";
 import { sendPrompt, interrupt } from "../ws-client";
 import { fetchTree } from "../api/fs";

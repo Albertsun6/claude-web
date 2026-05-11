@@ -51,7 +51,22 @@ export type ClientMessage =
       sessionId: string;
       fromByteOffset?: number;
     }
-  | { type: "session_unsubscribe"; cwd: string; sessionId: string };
+  | { type: "session_unsubscribe"; cwd: string; sessionId: string }
+  // ── M1A-β Vessel kernel WS family ─────────────────────────────────────
+  // namespace-isolated from Eva's `user_prompt` — Vessel orchestrator runs in
+  // its own routing table. `vesselSessionId` is the memory.db sessions.id;
+  // `conversationId` is the UI tab identity; both 1:1 in M1A-β.
+  // (M1A-slicing review C-MAJOR-2: do NOT reuse `resumeSessionId` — that's
+  // Claude CLI continuation, semantically different.)
+  | {
+      type: "vessel_intent";
+      runId: string;
+      text: string;
+      vesselSessionId?: string;        // memory.db sessions.id; auto-create if absent
+      conversationId?: string;         // UI tab identity (M1A-γ uses; β allows for forward compat)
+      skill?: "echo" | "coding";
+    }
+  | { type: "vessel_cancel"; runId: string };
 
 export type ServerMessage =
   | { type: "sdk_message"; runId: string; message: unknown }
@@ -109,4 +124,38 @@ export type ServerMessage =
         | "stage_done"
         | "stage_failed";
       payload?: unknown;
-    };
+    }
+  // ── M1A-β Vessel kernel server messages ───────────────────────────────
+  | {
+      // Trace event (already redacted by FileTraceWriter / trace-redactor before
+      // hitting WS — same safe form clients see via GET /api/vessel/traces/:id).
+      type: "vessel_trace";
+      runId: string;
+      vesselSessionId: string;
+      event: unknown;                  // TraceEvent (kept opaque in shared to avoid backend type leak)
+    }
+  | {
+      // Stream-json line from Coding driver (intermediate progress; M1A-β shapes opaque).
+      type: "vessel_progress";
+      runId: string;
+      vesselSessionId: string;
+      message: unknown;
+    }
+  | {
+      type: "vessel_completed";
+      runId: string;
+      vesselSessionId: string;
+      result: unknown;                 // AgentResult
+    }
+  | {
+      type: "vessel_error";
+      runId: string;
+      vesselSessionId?: string;
+      error: { type: string; message: string };
+    }
+  // ── M1C-A Vessel Workflow Engine server messages ────────────────────
+  | { type: "vessel_workflow_paused"; workflowId: string; step: number; message: string; options: string[] }
+  | { type: "vessel_workflow_step"; workflowId: string; step: number; totalSteps: number; stepKind: string }
+  | { type: "vessel_workflow_completed"; workflowId: string }
+  | { type: "vessel_workflow_failed"; workflowId: string; error: string }
+  | { type: "vessel_workflow_cancelled"; workflowId: string };

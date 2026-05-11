@@ -1,6 +1,6 @@
 import chokidar, { type FSWatcher } from "chokidar";
 import path from "node:path";
-import type { ServerMessage } from "@claude-web/shared";
+import type { ServerMessage } from "@vessel/shared";
 
 type Send = (msg: ServerMessage) => void;
 type ChangeKind = "add" | "change" | "unlink" | "addDir" | "unlinkDir";

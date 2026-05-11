@@ -6,13 +6,14 @@
 // (Loop 6 起 initialize() 显式调用；Loop 6 前在 constructor 里隐式)。
 // awaiting_review 不动。
 //
-// 跑法：pnpm --filter @claude-web/backend test:scheduler-cleanup
+// 跑法：pnpm --filter @vessel/backend test:scheduler-cleanup
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openHarnessDb } from "./harness-store.js";
 import { EvaScheduler } from "./scheduler.js";
+import { closeConfigWatcher } from "./harness-config.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) {
@@ -183,5 +184,9 @@ try {
 
   console.log("\nscheduler orphan cleanup OK ✅");
 } finally {
+  // M2 Loop 7a: defensive close (no-op if watcher never started by this test).
+  // Real fix is harness-config.ts no longer starts watcher at module load;
+  // this close is insurance for future code paths that might import index.ts.
+  await closeConfigWatcher();
   rmSync(tmp, { recursive: true, force: true });
 }

@@ -1,5 +1,5 @@
 // Auth + path-allowlist E2E. Spawns a second backend on :3031 with
-// CLAUDE_WEB_TOKEN + CLAUDE_WEB_ALLOWED_ROOTS set, runs probes, kills it.
+// VESSEL_TOKEN + VESSEL_ALLOWED_ROOTS set, runs probes, kills it.
 
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -36,8 +36,8 @@ async function waitFor(url: string, timeoutMs = 8000): Promise<boolean> {
     env: {
       ...process.env,
       PORT: String(PORT),
-      CLAUDE_WEB_TOKEN: TOKEN,
-      CLAUDE_WEB_ALLOWED_ROOTS: ALLOWED,
+      VESSEL_TOKEN: TOKEN,
+      VESSEL_ALLOWED_ROOTS: ALLOWED,
       BACKEND_HOST: "127.0.0.1",
     },
     stdio: ["ignore", "pipe", "pipe"],

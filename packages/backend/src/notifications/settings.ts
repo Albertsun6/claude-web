@@ -1,6 +1,6 @@
 // Notification settings loader.
 // Reads from two sources, in priority order:
-//   1. ~/.claude-web/notify.json   (file, hot-reloadable in future)
+//   1. ~/.vessel/notify.json   (file, hot-reloadable in future)
 //   2. environment variables       (initial bootstrap)
 // File takes precedence so users can update without restarting.
 
@@ -50,7 +50,7 @@ function loadFromEnv(): NotificationSettings {
   if (sendKey) {
     result.serverchan = {
       sendKey,
-      publicUrl: process.env.CLAUDE_WEB_PUBLIC_URL?.trim() || undefined,
+      publicUrl: process.env.VESSEL_PUBLIC_URL?.trim() || undefined,
     };
   }
   const tgToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
@@ -59,7 +59,7 @@ function loadFromEnv(): NotificationSettings {
     result.telegram = {
       botToken: tgToken,
       chatId: tgChat,
-      publicUrl: process.env.CLAUDE_WEB_PUBLIC_URL?.trim() || undefined,
+      publicUrl: process.env.VESSEL_PUBLIC_URL?.trim() || undefined,
     };
   }
   return result;

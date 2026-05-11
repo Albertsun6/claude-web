@@ -1,4 +1,4 @@
-// Quick verification of the TTS markdown stripper. Run: pnpm --filter @claude-web/backend exec tsx src/test-strip-speech.ts
+// Quick verification of the TTS markdown stripper. Run: pnpm --filter @vessel/backend exec tsx src/test-strip-speech.ts
 // Imports from the frontend hook (the function is pure, no React).
 import { stripForSpeech } from "../../frontend/src/hooks/useVoice";
 

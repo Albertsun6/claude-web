@@ -1,5 +1,5 @@
 // Inbox store: append-only JSONL of "碎想" captured from iOS / Web.
-// Path: ~/.claude-web/inbox.jsonl
+// Path: ~/.vessel/inbox.jsonl
 // Reads buffered into a small in-memory cache for /list endpoint.
 //
 // Concurrency: all mutations go through `withLock` (promise-queue) so two

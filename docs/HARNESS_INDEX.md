@@ -28,6 +28,7 @@
 | [HARNESS_ROADMAP.md](HARNESS_ROADMAP.md) | plan v4 主文档：Context、22 条设计原则（v0.2 加 #21 元工作冻结 / #22 输出侧仪式预算）、里程碑（M-1 → M4，M4 终点）、Open Questions、§18 评审 skill 草案、评审辩论流水 | 待办路线图，单一文件 |
 | [HARNESS_LANDSCAPE.md](HARNESS_LANDSCAPE.md) | 竞品全景图：hapi / Paseo / Multica / OpenHands 等横向对比 + 战略含义（L1/L2 不卷、L3+L7 集中投入）+ 代码搬运规则（个人自用情形）| 维护中 |
 | [STORE_MAP.md](STORE_MAP.md) | **持久化点 source-of-truth 速查表**（v0.2 2026-05-04 Meta-Freeze P0-2a）— 8 backend store + 读侧引用 + 新增 store 的 ADR-lite 模板 + 元工作冻结 env var 约定 | v0.1 |
+| [proposals/EVA_MULTI_PROJECT_USAGE.md](proposals/EVA_MULTI_PROJECT_USAGE.md) | **多项目使用相变 proposal**（v0.3 final 2026-05-05）— Eva 从 dogfood 单 Subject 走到多 Subject 工程项目落地的短期调整：4 BLOCKER + 4 P1 + 1 P2，含 spawn env 白名单 / prod-guard / domain_profile / projects.json↔harness_project 同步 / 跨端 enum fallback / 三层备份 / per-project rate limit 等。phase 1+2+3 评审收敛 + 用户拍板 U1-A/U2-C/U3-defer。**对应风险 R8.1-R8.15 + IDEAS H19-H26 + ROADMAP §0 #23 + DATA_MODEL §1.1/§1.6/§2.5**。 | v0.3 final |
 
 ### 子主题（从 ROADMAP 拆分出的独立详档）
 
@@ -96,6 +97,7 @@
 | **M2 Loop 4 — e2e reproducible pipeline test** | [retrospectives/M2-Loop4-e2e-pipeline-test.md](retrospectives/M2-Loop4-e2e-pipeline-test.md) | ✅ **ship**（2026-05-06，scheduler 注入 runSessionFn + 27 项 e2e assertion + reproducibility check + audit isolation 修真 prod 污染；cross-review 1B+3M+2m 全应用；M2 #1 推到 ~52-56%）|
 | **M2 Loop 5 — failure-path e2e pipeline test** | [retrospectives/M2-Loop5-failure-paths-e2e.md](retrospectives/M2-Loop5-failure-paths-e2e.md) | ✅ **ship**（2026-05-06，3 scenarios 覆盖 Phase B+C catch + bonus Phase A 跨 Loop 集成 + Loop 3 skip 集成；cross-review 4.68/5 0 major；4 canonical reasons 全 e2e 验证；M2 #1 推到 ~60-63%）|
 | **M2 Loop 6 — explicit boot ordering refactor** | [retrospectives/M2-Loop6-explicit-boot-ordering.md](retrospectives/M2-Loop6-explicit-boot-ordering.md) | ✅ **ship**（2026-05-06，pure constructor + explicit initialize() + 4 项 charter test + 10 call sites 全更新；cross-review **4.9/5 0 major**（史上最高）；MD8 完成，M2 #1 8 项 MUST-do 中 4 项 ✅）|
+| **M2 Loop 7 — CI gate for backend tests + 7a chokidar leak hot-fix** | [retrospectives/M2-Loop7-ci-e2e-gate.md](retrospectives/M2-Loop7-ci-e2e-gate.md) | ✅ **ship**（2026-05-06，CI 接 5 个 backend test step + Phase 8 chokidar charter mechanical lock；plan-level cross-review 0B+3M+2m 全应用；CI 30s 全绿；之前 6 小时 hang 由 module-level chokidar.watch() leak 导致）|
 | M2 真 agent + dogfood | retrospectives/M2.md | — |
 | M3 质量与可观测 | retrospectives/M3.md | — |
 | M4 方法论沉淀 | retrospectives/M4.md | — |

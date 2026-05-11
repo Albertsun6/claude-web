@@ -83,7 +83,7 @@ export const EvaWorktreeEntrySchema = z.object({
   path: z.string().min(1),
   /** 服务端口（v1 仅用于本机 dev backend）。可选 — main worktree 可能没单独 backend。 */
   port: z.number().int().min(1024).max(65535).optional(),
-  /** 数据目录（CLAUDE_WEB_DATA_DIR）。可选 — main worktree 用默认 ~/.claude-web。 */
+  /** 数据目录（VESSEL_DATA_DIR）。可选 — main worktree 用默认 ~/.vessel。 */
   dataDir: z.string().optional(),
   /** 该 worktree 占用 / 修改的文件路径列表（cross M3 修：加格式约束）。
    * 允许 `path` 或 `path#symbol`。v1 仅作为人审 + retrospective evidence；

@@ -1,8 +1,14 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { writeFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ImageAttachment, ModelId, PermissionMode } from "@claude-web/shared";
+import type { ImageAttachment, ModelId, PermissionMode } from "@vessel/shared";
 import { verifyAllowedPath } from "./auth.js";
+import { getMcpConfigPath } from "./mcp/cli-config.js";
+import { loadSoulOrNull, SoulParseError } from "./soul/parser.js";
+import { renderSoulPrompt } from "./soul/injector.js";
+import { searchMemory } from "./memory/memory-store.js";
 
 export interface RunSessionParams {
   prompt: string;
@@ -21,6 +27,13 @@ export interface RunSessionParams {
   signal?: AbortSignal;
   /** Scheduler task identifier for WS broadcast routing (e.g. "<issueId>/<stageId>"). */
   taskId?: string;
+  /**
+   * v0A.1 M0.5 (Vessel CodingDriver): when true, spawn child in its own process group
+   * so the adapter can `process.kill(-pgid, ...)` to take down the whole subtree
+   * (claude CLI + any tool subprocesses). Eva web/iOS path keeps default false.
+   * @see ADR-016 path C
+   */
+  detached?: boolean;
 }
 
 const CLI_BIN = process.env.CLAUDE_CLI ?? "claude";
@@ -51,7 +64,68 @@ interface SpawnResult {
   stderr: string;
 }
 
-function buildArgs(p: RunSessionParams, resume?: string): string[] {
+/**
+ * M1C-B integration: retrieve top-K memory records relevant to the user's
+ * prompt and format as a markdown system-prompt block to append to soul prompt.
+ *
+ * Failure modes — all fail-soft, returns '':
+ *   - VESSEL_MEMORY_AUGMENT=0 → skip retrieval entirely
+ *   - embedder model not loaded yet (cold start) → skip
+ *   - search throws (sqlite-vec error / DB lock) → warn + skip
+ *   - empty result set → return ''
+ *
+ * Top-K default 3 — small enough to keep prompt cache stable, big enough
+ * to bring useful context. Tunable via VESSEL_MEMORY_TOPK.
+ *
+ * Distance threshold: cosine distance > 1.5 (very loose match) is filtered
+ * out so we don't pollute the prompt with unrelated records.
+ */
+export async function getMemoryContextOrEmpty(prompt: string): Promise<string> {
+  if (process.env.VESSEL_MEMORY_AUGMENT === '0') return '';
+  if (!prompt || prompt.trim().length < 3) return ''; // too short to be useful
+
+  const k = (() => {
+    const env = process.env.VESSEL_MEMORY_TOPK;
+    if (!env) return 3;
+    const n = parseInt(env, 10);
+    return Number.isFinite(n) && n > 0 && n <= 20 ? n : 3;
+  })();
+  const distMax = 1.5;
+
+  try {
+    const hits = await searchMemory(prompt, k);
+    const relevant = hits.filter(h => h.distance <= distMax);
+    if (relevant.length === 0) return '';
+
+    const lines: string[] = [
+      '# Relevant memories from previous sessions',
+      '',
+      'These records were retrieved by similarity to the current request. Use only',
+      'when material to the answer; do not narrate retrieval.',
+      '',
+    ];
+    for (const h of relevant) {
+      // Trim each record to keep prompt size bounded; full record id available
+      // via `vessel-core memory list` if needed.
+      const snippet = h.content.replace(/\s+/g, ' ').slice(0, 240);
+      lines.push(`- (${h.kind}) ${snippet}`);
+    }
+    return lines.join('\n');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[cli-runner] skipping memory augmentation: ${msg}`);
+    return '';
+  }
+}
+
+interface BuiltArgs {
+  args: string[];
+  /** Temp files created by buildArgs (currently: --append-system-prompt-file).
+   *  Caller MUST cleanupAppendSystemPromptFile each one after spawn exits. */
+  tempFiles: string[];
+}
+
+function buildArgs(p: RunSessionParams, resume?: string, memoryContext: string = ''): BuiltArgs {
   const args = [
     "--print",
     "--input-format", "stream-json",
@@ -68,31 +142,120 @@ function buildArgs(p: RunSessionParams, resume?: string): string[] {
   if (p.permissionToken && p.backendBase && p.permissionMode !== "bypassPermissions") {
     args.push("--settings", buildSettings(p.permissionToken, p.backendBase, p.authToken));
   }
-  return args;
+  // M1B+: when VESSEL_MCP_SERVERS is set, mirror it to a temp .mcp.json and
+  // pass --mcp-config so Claude CLI children can call MCP tools. Stdio MCP is
+  // 1:1 with its spawning process — CLI must launch its own copies (not share
+  // McpServerManager's vessel-core-side instances).
+  const mcpConfigPath = getMcpConfigPath();
+  if (mcpConfigPath) args.push("--mcp-config", mcpConfigPath);
+  // M2-Soul + M1C-B integration: render persona + relevant memory into a
+  // single --append-system-prompt-file block. Soul comes first (defines who
+  // Claude is), memory comes second (gives context for the current request).
+  // Both are independent fail-soft — soul missing or memory empty just omits
+  // that segment; CLI still spawns with default system prompt.
+  //
+  // M2-Soul closeout deferred MINOR (#7 from punch list): use the file form
+  // (--append-system-prompt-file) instead of inline string — same-host other
+  // processes can `ps aux` and read inline command-line args containing soul
+  // persona + retrieved memory snippets. The file form keeps the content out
+  // of process command-line; mode 0o600 limits read access to owner.
+  const promptParts: string[] = [];
+  try {
+    const soul = loadSoulOrNull();
+    if (soul) promptParts.push(renderSoulPrompt(soul));
+  } catch (err) {
+    if (err instanceof SoulParseError) {
+      console.warn(`[cli-runner] skipping soul injection: ${err.message}`);
+    } else { throw err; }
+  }
+  if (memoryContext) promptParts.push(memoryContext);
+  const tempFiles: string[] = [];
+  if (promptParts.length > 0) {
+    const promptFile = writeAppendSystemPromptFile(promptParts.join('\n\n'));
+    args.push("--append-system-prompt-file", promptFile);
+    tempFiles.push(promptFile);
+  }
+  return { args, tempFiles };
+}
+
+/**
+ * Write `content` to a temp file (mode 0o600) and return the path. Caller is
+ * responsible for cleaning up via cleanupAppendSystemPromptFile() after the
+ * spawned CLI exits.
+ *
+ * Per-spawn unique filename (PID + timestamp) so concurrent spawns don't
+ * collide. Uses os.tmpdir() — typically /var/folders/.../T on macOS, also
+ * mode 0o600 owner-readable only.
+ */
+function writeAppendSystemPromptFile(content: string): string {
+  const fname = `vessel-append-system-prompt-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`;
+  const filePath = path.join(tmpdir(), fname);
+  writeFileSync(filePath, content, { mode: 0o600 });
+  return filePath;
+}
+
+/** Best-effort temp file cleanup. Safe to call even if file already gone. */
+function cleanupAppendSystemPromptFile(filePath: string | undefined): void {
+  if (!filePath) return;
+  try { unlinkSync(filePath); } catch { /* ignore — OS will clean tmpdir */ }
 }
 
 async function runOnce(p: RunSessionParams, resume: string | undefined): Promise<SpawnResult> {
-  const args = buildArgs(p, resume);
+  // M1C-B integration: retrieve relevant memory once per spawn (not per buildArgs
+  // call — buildArgs is invoked again on stale-session retry, but the same memory
+  // context applies). Fails to '' on any error so spawn proceeds with soul-only.
+  const memoryContext = await getMemoryContextOrEmpty(p.prompt);
+  const { args, tempFiles } = buildArgs(p, resume, memoryContext);
 
   const child: ChildProcessWithoutNullStreams = spawn(CLI_BIN, args, {
     cwd: p.cwd,
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env,
+    detached: p.detached === true,
+  });
+
+  // M2-Soul deferred MINOR fix: clean up the --append-system-prompt-file
+  // temp file once the spawned CLI has read it. Claude CLI loads the file
+  // synchronously at startup, so we can unlink shortly after spawn — but
+  // wait for `spawn` event to be safe.
+  child.once('spawn', () => {
+    for (const f of tempFiles) cleanupAppendSystemPromptFile(f);
+  });
+  // Defensive: if spawn ever fails to fire (rare), still cleanup on exit.
+  child.once('exit', () => {
+    for (const f of tempFiles) cleanupAppendSystemPromptFile(f);
   });
 
   let killTimer: NodeJS.Timeout | undefined;
   const onAbort = () => {
     if (child.killed || child.exitCode !== null) return;
-    try { child.kill("SIGTERM"); } catch { /* ignore */ }
+    try {
+      // v0A.1 M0.5: detached mode → child.pid is its own pgid → negative pid kills group
+      if (p.detached === true && typeof child.pid === "number") {
+        process.kill(-child.pid, "SIGTERM");
+      } else {
+        child.kill("SIGTERM");
+      }
+    } catch { /* ignore */ }
     // Escalate to SIGKILL if it doesn't exit promptly. Fixes hangs where
     // the CLI is blocked in a hook fetch and won't ack SIGTERM.
     killTimer = setTimeout(() => {
       if (child.exitCode === null && !child.killed) {
-        try { child.kill("SIGKILL"); } catch { /* ignore */ }
+        try {
+          if (p.detached === true && typeof child.pid === "number") {
+            process.kill(-child.pid, "SIGKILL");
+          } else {
+            child.kill("SIGKILL");
+          }
+        } catch { /* ignore */ }
       }
     }, KILL_GRACE_MS);
   };
   p.signal?.addEventListener("abort", onAbort);
+  // Handle the case where the signal was already aborted before spawn finished
+  // wiring the listener (M0.5 risk-officer R-M0.5-2). Without this, an early
+  // cancel would never propagate to the child.
+  if (p.signal?.aborted) onAbort();
 
   // Build content: plain string when no images (cheap), array when images present.
   const content: string | any[] =

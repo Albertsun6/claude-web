@@ -1,0 +1,12 @@
+{
+  "type": "vessel_completed",
+  "runId": "run-vessel-abc123",
+  "vesselSessionId": "sess-2026-05-11",
+  "result": {
+    "status": "success",
+    "artifact": {
+      "kind": "echo",
+      "text": "echoed: 明天下午3点提醒我吃药"
+    }
+  }
+}

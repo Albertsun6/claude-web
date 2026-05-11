@@ -1,5 +1,5 @@
 // Persistent registry of "projects" (named cwd entries). One JSON file at
-// ~/.claude-web/projects.json. Read-modify-write goes through a promise queue
+// ~/.vessel/projects.json. Read-modify-write goes through a promise queue
 // so concurrent POSTs can't lose each other's edits. Atomic rename on disk.
 // A .bak copy is kept so a corrupt file doesn't lose the registry.
 

@@ -79,6 +79,29 @@
       "status": "done",
       "since": "2026-05-05T17:00:00Z",
       "note": "PR #14 → dev. Stage 4-5：retrospective 写出 + 看板代码删除 + 临时资源清理"
+    },
+    {
+      "name": "jarvis-vision",
+      "branch": "docs/eva-as-jarvis-vision",
+      "path": "~/Desktop/claude-web-jarvis",
+      "owns": [
+        "docs/proposals/EVA_MULTI_PROJECT_USAGE.md",
+        "docs/proposals/EVA_AS_PERSONAL_JARVIS.md",
+        "docs/reviews/eva-multi-project-usage-arbitration-2026-05-05.md",
+        "docs/reviews/eva-multi-project-usage-arch-2026-05-05-2342.md",
+        "docs/reviews/eva-multi-project-usage-cross-2026-05-05-2342.md",
+        "docs/reviews/eva-multi-project-usage-react-arch-2026-05-05-2348.md",
+        "docs/reviews/eva-multi-project-usage-react-cross-2026-05-05-2348.md",
+        "docs/reviews/eva-as-personal-jarvis-arbitration-2026-05-06.md",
+        "docs/reviews/eva-as-personal-jarvis-arch-2026-05-06-0042.md",
+        "docs/reviews/eva-as-personal-jarvis-cross-2026-05-06-0042.md",
+        "docs/reviews/eva-as-personal-jarvis-react-arch-2026-05-06-0050.md",
+        "docs/reviews/eva-as-personal-jarvis-react-cross-2026-05-06-0050.md",
+        "docs/reviews/eva-as-personal-jarvis-round2-cross-2026-05-06-0100.md"
+      ],
+      "status": "done",
+      "since": "2026-05-05T23:35:00Z",
+      "note": "doc-only worktree. PR #36 → dev（eva.json wildcard→显式路径）后收尾：status=done，本地 ~/Desktop/claude-web-jarvis 已 git worktree remove。提案与 reviews 已合入 dev。"
     }
   ]
 }

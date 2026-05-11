@@ -15,7 +15,7 @@
 //   - 这是 emergent integration coverage，不是 charter 违规（charter 排除"添加 Phase A 注入接缝"
 //     而不是排除"通过其他 Loop 自然触发 Phase A"）
 //
-// 跑法：pnpm --filter @claude-web/backend test:e2e-failures
+// 跑法：pnpm --filter @vessel/backend test:e2e-failures
 
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,11 +25,12 @@ import type { RunSessionParams } from "./cli-runner.js";
 
 // === DATA_DIR isolation BEFORE any dynamic import (cross B1 from Loop 4 LEARNINGS.md #6)
 const dataDirRoot = mkdtempSync(join(tmpdir(), "loop5-datadir-"));
-process.env.CLAUDE_WEB_DATA_DIR = dataDirRoot;
+process.env.VESSEL_DATA_DIR = dataDirRoot;
 
 const { openHarnessDb } = await import("./harness-store.js");
 const { EvaScheduler } = await import("./scheduler.js");
 const { skipFailedStage } = await import("./harness-queries.js");
+const { closeConfigWatcher } = await import("./harness-config.js");
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) {
@@ -362,5 +363,7 @@ try {
 
   console.log("\nLoop 5 failure-path e2e OK ✅");
 } finally {
+  // M2 Loop 7a: defensive close (no-op if watcher never started)
+  await closeConfigWatcher();
   rmSync(dataDirRoot, { recursive: true, force: true });
 }

@@ -1,5 +1,5 @@
 // Work registry: per-conversation worktree history.
-// Path: ~/.claude-web/work.jsonl
+// Path: ~/.vessel/work.jsonl
 //
 // Pattern mirrors inbox-store.ts (post-Stage-Pre lock-aware) + projects-store.ts:
 // promise-queue write lock + atomic temp+rename for full rewrites.

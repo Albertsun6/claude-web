@@ -9,3 +9,23 @@ dev-dist
 .claude/settings.local.json
 BuildInfo.swift
 packages/ios-native/Sources/ClaudeWeb/BuildInfo.swift
+
+# Vessel — Instance-private state (per ADR-005 INSTANCE 隔离 + fork-friendly)
+# Real soul.md / memory.db / workspace / traces 永不进 git；fork 后用户自填
+instance/
+
+# ml-workers/ 顶层目录（ADR-012：Python ML worker 实现 — 当前为空，未来 M2-Voice 加）
+# 留目录但不 track 内容；如果将来加内容到 ml-workers/，移除这条 ignore
+ml-workers/
+
+# 历史误操作产物 — packages/backend/packages/backend/instance/ 是早期 spawn
+# 路径配置错落到的嵌套位置，含历史 trace 数据但不该 track
+packages/backend/packages/
+
+# vessel.xmind 是个人脑图工作文件，二进制 zip
+vessel.xmind
+
+# Apple Xcode 派生（ClaudeWeb.xcodeproj 仍 track，xcodegen 重生成的 build 产物排除）
+packages/ios-native/build_sim/
+packages/ios-native/.xcode.env
+DerivedData/
