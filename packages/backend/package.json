@@ -22,6 +22,7 @@
     "test:scheduler-failed-reasons": "tsx src/test-scheduler-failed-reasons.ts",
     "test:e2e-pipeline": "tsx src/test-e2e-pipeline.ts",
     "test:e2e-failures": "tsx src/test-e2e-pipeline-failures.ts",
+    "test:update-check": "tsx src/test-update-check.ts",
     "test:e2e-all": "pnpm test:e2e-pipeline && pnpm test:e2e-failures",
     "test:harness-ci": "pnpm test:harness-schema && pnpm test:scheduler-cleanup && pnpm test:scheduler-failed-reasons && pnpm test:e2e-pipeline && pnpm test:e2e-failures",
     "test:inbox-concurrent": "tsx src/test-inbox-concurrent.ts",
