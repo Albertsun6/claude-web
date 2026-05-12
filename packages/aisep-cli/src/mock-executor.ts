@@ -33,6 +33,13 @@ const STAGE_OUTPUT_KIND: Record<AisepStage, AisepArtifactKind> = {
 export interface MockExecutorOptions {
   /** If true, the executor returns ok=false to simulate a failed stage. */
   failOnStages?: AisepStage[];
+  /**
+   * v0.3 (v1 fan-out Stage 3 prep): fail ONLY when the executor receives
+   * a `subStageName` matching one of these. Used to simulate
+   * partial-failure boundary cases (1 of N children fails, others
+   * succeed). Independent of `failOnStages`.
+   */
+  failOnSubStages?: string[];
 }
 
 export class MockStageExecutor implements StageExecutor {
@@ -52,7 +59,11 @@ export class MockStageExecutor implements StageExecutor {
       2,
     );
 
-    const ok = !(this.opts.failOnStages ?? []).includes(args.stage);
+    const failByStage = (this.opts.failOnStages ?? []).includes(args.stage);
+    const failBySubStage =
+      args.subStageName !== undefined &&
+      (this.opts.failOnSubStages ?? []).includes(args.subStageName);
+    const ok = !failByStage && !failBySubStage;
     const promptHash = hashString(`mock:${args.stage}:${args.phase}`);
 
     const producedArtifact = {
