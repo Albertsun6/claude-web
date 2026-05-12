@@ -99,14 +99,55 @@ export class AisepStore {
 
   // ---------- stage_run ----------
 
+  /**
+   * Create a new stage_run row (status="pending").
+   *
+   * v0.3 (v1 fan-out Stage 2): `input.id` is optional — caller may pre-mint
+   * a stage_run id (typically when fan-out needs to wire parent ↔ child
+   * references atomically before the rows hit the store). When omitted,
+   * the store mints a fresh id via `ids.stageRun`.
+   *
+   * Note: stage_run rows are cast to AisepStageRun (no in-process zod
+   * parse), so `superRefine` fan-out invariants are enforced only at
+   * wire boundaries (fixture round-trip / state.json round-trip via
+   * future `validateStateOnLoad` opt-in). Callers responsible for
+   * passing consistent fan-out fields.
+   */
   createStageRun(
-    input: Omit<AisepStageRun, "id" | "status">,
+    input: Omit<AisepStageRun, "id" | "status"> & { id?: string },
   ): AisepStageRun {
-    const id = ids.stageRun(this.opts.clock);
-    const run = { ...input, id, status: "pending" as AisepStageStatus } as AisepStageRun;
+    const { id: providedId, ...rest } = input;
+    const id = providedId ?? ids.stageRun(this.opts.clock);
+    // v0.3: store does NOT zod-parse on insert (perf + cyclic insert
+    // patterns for fan-out parent/child). Manually default the optional
+    // fan-out fields so the in-memory record always has consistent
+    // shape (otherwise consumers reading `run.fanOutRole` get undefined
+    // on v0.2-style createStageRun call sites).
+    const restWithDefaults = rest as Omit<AisepStageRun, "id" | "status"> & {
+      fanOutRole?: AisepStageRun["fanOutRole"];
+      subStages?: AisepStageRun["subStages"];
+    };
+    const run = {
+      ...rest,
+      id,
+      status: "pending" as AisepStageStatus,
+      fanOutRole: restWithDefaults.fanOutRole ?? "normal",
+      subStages: restWithDefaults.subStages ?? [],
+    } as AisepStageRun;
     this.state.stageRuns.push(run);
     this.flush();
     return run;
+  }
+
+  /**
+   * v0.3 (v1 fan-out Stage 2): list children of a fan-out parent
+   * stage_run. Used by scheduler.nextReady() callers + runner aggregation.
+   * Returns runs with `fanOutRole === "child"` and `parentStageRunId === parentId`.
+   */
+  listChildStageRuns(parentId: string): AisepStageRun[] {
+    return this.state.stageRuns.filter(
+      (r) => r.fanOutRole === "child" && r.parentStageRunId === parentId,
+    );
   }
 
   updateStageRunStatus(

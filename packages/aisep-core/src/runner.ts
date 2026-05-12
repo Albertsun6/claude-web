@@ -3,6 +3,11 @@
 // R6 boundary: runner has NO fs / spawn / network. All side effects flow
 // through AisepWorkspace (injected) and StageExecutor (injected by
 // aisep-agents). This makes runner unit-testable with mock executors.
+//
+// v0.3 (v1 fan-out Stage 2.runner): adds `runFanOutParent()` to dispatch
+// N child stage_runs from a single parent (fanOutRole tree). v1 Stage 2
+// dispatches children serially; Stage 2.cli will add concurrency via
+// scheduler.nextReady + Promise.all batching.
 
 import type {
   AisepArtifact,
@@ -13,6 +18,7 @@ import type {
   AisepWorkspace,
 } from "@claude-web/aisep-protocol";
 
+import { ids } from "./ids.js";
 import type { AisepStore } from "./store.js";
 
 /**
@@ -87,7 +93,7 @@ export class AisepRunner {
     sliceIndex?: number;
     sliceTotal?: number;
   }): Promise<AisepStageRun> {
-    const { store, workspace, executor } = this.opts;
+    const { store, workspace } = this.opts;
     const phase: AisepStagePhase = args.phase ?? "none";
 
     // 1. Create row (status=pending).
@@ -107,33 +113,170 @@ export class AisepRunner {
           }
         : { ...baseFields, phase };
 
-    let run = store.createStageRun(createPayload as Omit<AisepStageRun, "id" | "status">);
+    const run = store.createStageRun(createPayload as Omit<AisepStageRun, "id" | "status">);
+    return this.executeStageRunBody(run.id, args.stage, phase);
+  }
 
-    // 2. Transition to running.
-    run = store.updateStageRunStatus(run.id, "running");
+  /**
+   * v0.3 (v1 fan-out Stage 2.runner): dispatch a fan-out parent stage_run
+   * with N child stage_runs (one per declared sub-implement).
+   *
+   * v1 Scope: only `stage === "implement"` is fan-out-able per superRefine
+   * invariant.
+   *
+   * Stage 2.runner: dispatches children **serially** to keep this layer
+   * simple. Stage 2.cli will add concurrency via
+   * `scheduler.nextReady(parentId, runs, cap)` + Promise.all batching of
+   * the ready batch.
+   *
+   * Aggregation: after all children terminal, emits a `patch_set` artifact
+   * on the parent containing the AisepPatchSetManifest (child stage_run
+   * ids + sub-stage names + patch file paths + hashes + byte counts).
+   * Parent settles as `succeeded` iff every child succeeded.
+   *
+   * IDs: pre-mints child ids so parent.subStages and child.parentStageRunId
+   * can be wired atomically at create-time (zero invariant-violating
+   * intermediate state).
+   */
+  async runFanOutParent(args: {
+    stage: AisepStage;
+    predecessorId?: string;
+    /** Declared sub-implements; v1 limits stage to "implement". */
+    children: Array<{ name: string }>;
+  }): Promise<{ parent: AisepStageRun; children: AisepStageRun[] }> {
+    const { store, workspace, executor } = this.opts;
 
-    // 3. Gather upstream artifacts.
+    if (args.stage !== "implement") {
+      throw new Error(
+        `runFanOutParent: v1 limits fan-out to stage="implement"; got stage="${args.stage}"`,
+      );
+    }
+    if (args.children.length < 2) {
+      throw new Error(
+        `runFanOutParent: a fan-out requires >= 2 children; got ${args.children.length}`,
+      );
+    }
+
+    // 1. Pre-mint child stage_run ids so we can wire parent.subStages
+    //    atomically with the parent's creation.
+    const childIds = args.children.map(() => ids.stageRun(this.opts.clock));
+
+    // 2. Create parent with subStages populated (fanOutRole='parent' invariant).
+    const parent = store.createStageRun({
+      workspaceId: workspace.meta.id,
+      stage: args.stage,
+      phase: "none",
+      fanOutRole: "parent",
+      subStages: childIds,
+      ...(args.predecessorId ? { predecessorId: args.predecessorId } : {}),
+    } as Omit<AisepStageRun, "id" | "status">);
+
+    // 3. Create children rows pointing at parent (fanOutRole='child' invariant).
+    const childRuns: AisepStageRun[] = [];
+    for (let i = 0; i < args.children.length; i += 1) {
+      const child = store.createStageRun({
+        id: childIds[i],
+        workspaceId: workspace.meta.id,
+        stage: args.stage,
+        phase: "none",
+        fanOutRole: "child",
+        parentStageRunId: parent.id,
+      } as Omit<AisepStageRun, "id" | "status"> & { id?: string });
+      childRuns.push(child);
+    }
+
+    // 4. Transition parent to running BEFORE dispatching children.
+    store.updateStageRunStatus(parent.id, "running");
+
+    // 5. Dispatch each child serially via executeStageRunBody (Stage 2.runner
+    //    keeps it simple; concurrent dispatch via scheduler is Stage 2.cli).
+    const finishedChildren: AisepStageRun[] = [];
+    for (const child of childRuns) {
+      const finished = await this.executeStageRunBody(child.id, args.stage, "none");
+      finishedChildren.push(finished);
+    }
+
+    // 6. Aggregate patch_set manifest on parent.
+    //    Note: v1 Stage 2.runner uses synthetic manifest (subStageName =
+    //    "child-<index>"); Stage 2.cli will flow real subStageName from
+    //    plan-stage parallel: declarations + use it for patch file naming.
+    const childPatches = finishedChildren.map((c, idx) => {
+      const childArtifacts = store.listArtifactsByStageRun(c.id);
+      const firstPatch = childArtifacts.find((a) => a.ref.kind === "patch");
+      return {
+        subStageId: c.id,
+        subStageName: args.children[idx]!.name,
+        patchFile: firstPatch?.ref.key ?? `patch/<missing-${idx}>`,
+        contentHash:
+          firstPatch?.contentHash ??
+          "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        byteCount: firstPatch?.sizeBytes ?? 0,
+      };
+    });
+
+    const manifestContent = JSON.stringify({ patches: childPatches });
+    store.appendArtifact({
+      workspaceId: workspace.meta.id,
+      stageRunId: parent.id,
+      ref: { kind: "patch_set", key: `patch_set/${args.stage}.json` },
+      storage: "inline",
+      contentUri: `sqlite://artifact_blob/parent-${parent.id}`,
+      contentInline: manifestContent,
+      contentHash: `sha256:${"0".repeat(64)}`, // Stage 2.runner: placeholder; Stage 2.cli wires real hash
+      sizeBytes: Buffer.byteLength(manifestContent, "utf-8"),
+    } as Omit<AisepArtifact, "id" | "producedAt">);
+
+    // 7. Settle parent: succeeded iff every child succeeded.
+    const allSucceeded = finishedChildren.every((c) => c.status === "succeeded");
+    const finalParent = store.updateStageRunStatus(
+      parent.id,
+      allSucceeded ? "succeeded" : "failed",
+    );
+
+    return { parent: finalParent, children: finishedChildren };
+  }
+
+  /**
+   * Private helper: drive a stage_run (already created in `pending`) through
+   * running → succeeded/failed by invoking the executor + persisting
+   * artifacts + attempt.
+   *
+   * Extracted in v0.3 (v1 fan-out Stage 2.runner) so `runStage` (single
+   * stage) and `runFanOutParent` (per-child loop) share the same per-row
+   * execution code path.
+   */
+  private async executeStageRunBody(
+    stageRunId: string,
+    stage: AisepStage,
+    phase: AisepStagePhase,
+  ): Promise<AisepStageRun> {
+    const { store, workspace, executor } = this.opts;
+
+    // Transition to running.
+    let run = store.updateStageRunStatus(stageRunId, "running");
+
+    // Gather upstream artifacts from predecessor (single-predecessor v0
+    // model; fan-out children inherit from their parent's predecessor
+    // by lookup in Stage 2.cli — Stage 2.runner skips this since mock
+    // executors don't need real upstream).
     const upstreamArtifacts: AisepArtifact[] = run.predecessorId
       ? store.listArtifactsByStageRun(run.predecessorId)
       : [];
 
-    // 3b. Retrieve memoryHits via injected provider (AlphaEvolve loop).
-    //     If no provider was injected, defaults to empty (R11 compatible).
+    // Retrieve memoryHits via injected provider (AlphaEvolve loop).
     const memoryHits = this.opts.memoryProvider
-      ? await this.opts.memoryProvider.retrieve(args.stage, phase)
+      ? await this.opts.memoryProvider.retrieve(stage, phase)
       : [];
 
-    // 4. Execute.
     try {
       const result = await executor.execute({
-        stage: args.stage,
+        stage,
         phase,
         workspace,
         upstreamArtifacts,
         memoryHits,
       });
 
-      // 5. Persist artifacts produced.
       for (const a of result.producedArtifacts) {
         store.appendArtifact({
           ...a,
@@ -142,7 +285,6 @@ export class AisepRunner {
         });
       }
 
-      // 6. Persist attempt.
       const latestN = store.latestAttemptN(run.id);
       store.appendAttempt({
         stageRunId: run.id,
@@ -150,11 +292,9 @@ export class AisepRunner {
         ...result.attempt,
       });
 
-      // 7. Finalize stage_run.
       run = store.updateStageRunStatus(run.id, result.ok ? "succeeded" : "failed");
       return run;
     } catch (err) {
-      // Executor threw — record as failed attempt.
       const latestN = store.latestAttemptN(run.id);
       store.appendAttempt({
         stageRunId: run.id,
