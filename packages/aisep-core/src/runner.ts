@@ -19,6 +19,7 @@ import type {
 } from "@claude-web/aisep-protocol";
 
 import { ids } from "./ids.js";
+import { nextReady, type SchedulerInputStageRun } from "./scheduler.js";
 import type { AisepStore } from "./store.js";
 
 /**
@@ -143,6 +144,12 @@ export class AisepRunner {
     predecessorId?: string;
     /** Declared sub-implements; v1 limits stage to "implement". */
     children: Array<{ name: string }>;
+    /**
+     * Max concurrent children dispatched at a time (v1 plan-roadmap cap
+     * = 4; user-tunable via CLI `--concurrency`). When omitted, defaults
+     * to 1 (serial dispatch, preserves Stage 2.runner behavior).
+     */
+    concurrencyCap?: number;
   }): Promise<{ parent: AisepStageRun; children: AisepStageRun[] }> {
     const { store, workspace, executor } = this.opts;
 
@@ -188,13 +195,63 @@ export class AisepRunner {
     // 4. Transition parent to running BEFORE dispatching children.
     store.updateStageRunStatus(parent.id, "running");
 
-    // 5. Dispatch each child serially via executeStageRunBody (Stage 2.runner
-    //    keeps it simple; concurrent dispatch via scheduler is Stage 2.cli).
-    const finishedChildren: AisepStageRun[] = [];
-    for (const child of childRuns) {
-      const finished = await this.executeStageRunBody(child.id, args.stage, "none");
-      finishedChildren.push(finished);
+    // 5. Dispatch children via scheduler-driven batched parallelism
+    //    (v0.3 Stage 2.cli-A — wire scheduler.nextReady + Promise.all).
+    //
+    //    When concurrencyCap is undefined OR 1, the loop degenerates to
+    //    serial dispatch (== Stage 2.runner baseline behavior). When
+    //    concurrencyCap >= 2, scheduler picks up to N pending children
+    //    each iteration and runs them concurrently via Promise.all.
+    const cap = Math.max(1, args.concurrencyCap ?? 1);
+    const finishedById = new Map<string, AisepStageRun>();
+    // Local mutable mirror of child status for the scheduler (we don't
+    // want a store re-read on every iteration — pure function semantics
+    // expect a snapshot per call).
+    const schedulerInput: SchedulerInputStageRun[] = childRuns.map((c) => ({
+      id: c.id,
+      status: c.status,
+      fanOutRole: "child" as const,
+      parentStageRunId: parent.id,
+    }));
+
+    // Loop until all children are terminal.
+    // Each iteration: ask scheduler for ready batch → dispatch via
+    // Promise.all → update local mirror with finished statuses.
+    // Bounded by total child count (no infinite loop possible).
+    for (let iteration = 0; iteration < childRuns.length; iteration += 1) {
+      const decision = nextReady(parent.id, schedulerInput, cap);
+      if (decision.allChildrenTerminal) break;
+      if (decision.readyToDispatch.length === 0) {
+        // No new dispatches AND not all terminal — shouldn't happen in
+        // the serial-await topology below; defensive break.
+        break;
+      }
+
+      // Mark scheduled children as running in our mirror (executor will
+      // also mark them via store.updateStageRunStatus inside
+      // executeStageRunBody).
+      for (const id of decision.readyToDispatch) {
+        const slot = schedulerInput.find((s) => s.id === id);
+        if (slot) slot.status = "running";
+      }
+
+      // Dispatch the batch concurrently. Each Promise resolves with the
+      // final AisepStageRun (status=succeeded|failed).
+      const finished = await Promise.all(
+        decision.readyToDispatch.map((id) =>
+          this.executeStageRunBody(id, args.stage, "none"),
+        ),
+      );
+      for (const f of finished) {
+        finishedById.set(f.id, f);
+        const slot = schedulerInput.find((s) => s.id === f.id);
+        if (slot) slot.status = f.status;
+      }
     }
+
+    const finishedChildren = childRuns.map((c) =>
+      finishedById.get(c.id) ?? c,
+    );
 
     // 6. Aggregate patch_set manifest on parent.
     //    Note: v1 Stage 2.runner uses synthetic manifest (subStageName =

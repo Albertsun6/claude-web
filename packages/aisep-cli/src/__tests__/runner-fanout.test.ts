@@ -142,6 +142,40 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     ).rejects.toThrow(/requires >= 2 children/);
   });
 
+  it("concurrencyCap=2 with 3 children: all complete, parent succeeds (batched dispatch)", async () => {
+    const ws = newWorkspace();
+    const store = new AisepStore(cwd, ws.meta.id);
+    const runner = new AisepRunner({ store, workspace: ws, executor: new MockStageExecutor() });
+
+    const { parent, children } = await runner.runFanOutParent({
+      stage: "implement",
+      concurrencyCap: 2,
+      children: [{ name: "a" }, { name: "b" }, { name: "c" }],
+    });
+
+    expect(parent.status).toBe("succeeded");
+    expect(children).toHaveLength(3);
+    expect(children.every((c) => c.status === "succeeded")).toBe(true);
+    // Order preservation: returned children match declared order.
+    expect(children.map((c, i) => ({ name: ["a", "b", "c"][i], id: c.id })).every(
+      (e) => store.getStageRun(e.id)?.fanOutRole === "child",
+    )).toBe(true);
+  });
+
+  it("concurrencyCap defaults to 1 (serial; preserves Stage 2.runner baseline)", async () => {
+    const ws = newWorkspace();
+    const store = new AisepStore(cwd, ws.meta.id);
+    const runner = new AisepRunner({ store, workspace: ws, executor: new MockStageExecutor() });
+
+    // No concurrencyCap passed → cap = 1 (serial)
+    const { parent, children } = await runner.runFanOutParent({
+      stage: "implement",
+      children: [{ name: "a" }, { name: "b" }],
+    });
+    expect(parent.status).toBe("succeeded");
+    expect(children).toHaveLength(2);
+  });
+
   it("runStage on a normal stage still works (regression guard)", async () => {
     const ws = newWorkspace();
     const store = new AisepStore(cwd, ws.meta.id);

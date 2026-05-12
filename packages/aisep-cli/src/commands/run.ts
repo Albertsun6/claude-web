@@ -35,6 +35,18 @@ interface RunArgs {
   stages?: AisepStage[];
   /** Explicit phase override; if omitted, architecture defaults to "architecture-brief". */
   phase?: AisepStagePhase;
+  /**
+   * v0.3 (v1 fan-out Stage 2.cli-A): enable fan-out at the implement stage.
+   * When `parallel` is true AND `children` is non-empty, the implement
+   * stage is dispatched via runner.runFanOutParent() instead of the
+   * normal single-stage runStage(). Stage 2.cli-B will derive `children`
+   * from plan stage's `parallel:` block; Stage 2.cli-A requires manual
+   * `--children name1,name2,...` (≥ 2 names).
+   */
+  parallel?: boolean;
+  parallelChildren?: string[];
+  /** v0.3: concurrency cap for fan-out (default 4 per plan roadmap; user-tunable). */
+  concurrency?: number;
 }
 
 /**
@@ -124,6 +136,41 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
   let lastRunId: string | undefined;
   for (const stage of stages) {
     const phase = args.phase ?? defaultPhaseFor(stage);
+
+    // v0.3 (v1 fan-out Stage 2.cli-A): fan out implement when --parallel
+    // is on AND children specified. Other stages stay on the normal
+    // single-stage path.
+    if (
+      stage === "implement" &&
+      args.parallel === true &&
+      args.parallelChildren &&
+      args.parallelChildren.length >= 2
+    ) {
+      const cap = args.concurrency ?? 4;
+      console.log(
+        `[aisep run] implement   (none                        ) → fan-out (parallel=${args.parallelChildren.join(",")}, concurrency=${cap})`,
+      );
+      const { parent, children } = await runner.runFanOutParent({
+        stage: "implement",
+        predecessorId: lastRunId,
+        concurrencyCap: cap,
+        children: args.parallelChildren.map((name) => ({ name })),
+      });
+      for (const c of children) {
+        console.log(
+          `[aisep run]   ↳ child ${c.id.slice(0, 12)}… → ${c.status}`,
+        );
+      }
+      console.log(
+        `[aisep run] implement   (parent settle               ) → ${parent.status}${
+          parent.status === "failed" ? " (stopping chain)" : ""
+        }`,
+      );
+      if (parent.status === "failed") return 3;
+      lastRunId = parent.id;
+      continue;
+    }
+
     const result = await runner.runStage({ stage, phase, predecessorId: lastRunId });
     console.log(
       `[aisep run] ${stage.padEnd(11)} (${phase.padEnd(28)}) → ${result.status}${
@@ -182,10 +229,45 @@ function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
         parsedStages.push(parsed.data);
       }
       args.stages = parsedStages;
+    } else if (arg === "--parallel") {
+      args.parallel = true;
+    } else if (arg === "--children") {
+      const next = rawArgs[++i];
+      if (!next) {
+        console.error(`[aisep run] --children requires a comma-separated list of sub-stage names`);
+        return undefined;
+      }
+      const names = next.split(",").map((x) => x.trim()).filter(Boolean);
+      if (names.length < 2) {
+        console.error(`[aisep run] --children requires at least 2 names (fan-out doesn't apply to 1 child)`);
+        return undefined;
+      }
+      const SUB_NAME_RE = /^[A-Za-z0-9_.:-]+$/;
+      for (const n of names) {
+        if (!SUB_NAME_RE.test(n)) {
+          console.error(`[aisep run] --children: name "${n}" must match /^[A-Za-z0-9_.:-]+$/ (shell-safe per RISK-Q4-c)`);
+          return undefined;
+        }
+      }
+      args.parallelChildren = names;
+    } else if (arg === "--concurrency") {
+      const next = rawArgs[++i];
+      const n = Number(next);
+      if (!Number.isInteger(n) || n < 1 || n > 4) {
+        console.error(`[aisep run] --concurrency must be an integer in [1, 4] (plan-roadmap hard ceiling); got "${next}"`);
+        return undefined;
+      }
+      args.concurrency = n;
     } else {
       console.error(`[aisep run] Unknown arg: ${arg}`);
       return undefined;
     }
+  }
+
+  // Cross-flag validation: --parallel requires --children
+  if (args.parallel && (!args.parallelChildren || args.parallelChildren.length < 2)) {
+    console.error(`[aisep run] --parallel requires --children name1,name2[,...] (>= 2)`);
+    return undefined;
   }
   return args;
 }
