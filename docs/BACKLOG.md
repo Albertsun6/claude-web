@@ -15,7 +15,7 @@ items:
     title: Vessel-Backend .pkg 自动构建 — push tag 触发 GitHub Actions → 自动 release
     priority: P1
     size: M
-    status: planned
+    status: in_progress
     assigned_kind: main
     parallel_safe_files:
       - ".github/workflows/release-pkg.yml"
