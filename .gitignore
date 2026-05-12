@@ -1,6 +1,10 @@
 node_modules
 dist
 .env
+
+# Vessel macOS .pkg build artifacts (scripts/build-pkg.sh)
+build/
+installer/cache/
 .DS_Store
 *.log
 .vite

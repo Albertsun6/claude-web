@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Vessel backend LaunchAgent. Rendered by installer/postinstall:
+    @USER_HOME@  → the installing user's home directory (e.g. /Users/yongqian)
+
+  Runs the bundled Node + tsx via /usr/local/vessel/bin/vessel-backend. Survives
+  reboot (RunAtLoad) and crashes (KeepAlive). Does NOT survive system sleep —
+  KeepAlive only fires while the Mac is awake. For always-on use, set
+  `sudo pmset -a sleep 0`.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.vessel.backend</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/vessel/bin/vessel-backend</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>@USER_HOME@</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>@USER_HOME@</string>
+    <key>PATH</key>
+    <string>@USER_HOME@/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>PORT</key>
+    <string>3030</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>@USER_HOME@/Library/Logs/vessel-backend.stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>@USER_HOME@/Library/Logs/vessel-backend.stderr.log</string>
+</dict>
+</plist>

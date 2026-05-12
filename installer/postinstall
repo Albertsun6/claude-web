@@ -1,0 +1,118 @@
+#!/bin/bash
+# Vessel .pkg postinstall — runs as root after files are copied to
+# /usr/local/vessel/. Responsible for:
+#   1. Render the plist template with the installing user's $HOME
+#   2. Drop the rendered plist into ~/Library/LaunchAgents (user-domain)
+#   3. Detect missing external CLI deps and write a desktop hint
+#   4. Bootstrap the LaunchAgent (the backend should be running when we exit)
+#   5. Health probe :3030 (best-effort; failure is logged but non-fatal)
+
+set -u
+
+VESSEL_PREFIX="/usr/local/vessel"
+PLIST_LABEL="com.vessel.backend"
+PLIST_TEMPLATE="${VESSEL_PREFIX}/share/${PLIST_LABEL}.plist.template"
+
+# ---------- 1. Identify installing user ----------
+USER_NAME="${USER:-}"
+if [ -z "${USER_NAME}" ] || [ "${USER_NAME}" = "root" ]; then
+  USER_NAME="$(stat -f %Su /dev/console 2>/dev/null || echo "")"
+fi
+if [ -z "${USER_NAME}" ] || [ "${USER_NAME}" = "root" ]; then
+  echo "[vessel postinstall] FATAL: could not detect console user — aborting LaunchAgent setup."
+  echo "[vessel postinstall] Files are installed; run 'sudo /usr/local/vessel/uninstall.sh' and retry from a user session."
+  exit 0  # don't fail the .pkg — files are still useful
+fi
+
+USER_HOME="$(eval echo "~${USER_NAME}")"
+UID_NUM="$(id -u "${USER_NAME}")"
+
+if [ ! -d "${USER_HOME}" ]; then
+  echo "[vessel postinstall] FATAL: home dir ${USER_HOME} does not exist for ${USER_NAME}"
+  exit 0
+fi
+
+echo "[vessel postinstall] installing for user=${USER_NAME} uid=${UID_NUM} home=${USER_HOME}"
+
+# ---------- 2. Render plist ----------
+mkdir -p "${USER_HOME}/Library/LaunchAgents"
+mkdir -p "${USER_HOME}/Library/Logs"
+
+PLIST_DST="${USER_HOME}/Library/LaunchAgents/${PLIST_LABEL}.plist"
+sed "s|@USER_HOME@|${USER_HOME}|g" "${PLIST_TEMPLATE}" > "${PLIST_DST}"
+chown "${USER_NAME}:staff" "${PLIST_DST}"
+chmod 644 "${PLIST_DST}"
+chown -R "${USER_NAME}:staff" "${USER_HOME}/Library/LaunchAgents" 2>/dev/null || true
+
+# ---------- 3. Detect missing external dependencies ----------
+# Run `command -v` AS THE USER so we see their PATH (Homebrew, ~/.local/bin),
+# not root's stripped PATH.
+check_user_cmd() {
+  sudo -u "${USER_NAME}" -i bash -lc "command -v \"$1\" >/dev/null 2>&1"
+}
+
+MISSING=()
+check_user_cmd claude       || MISSING+=("claude        # Anthropic Claude Code CLI — https://claude.com/claude-code")
+check_user_cmd ffmpeg       || MISSING+=("ffmpeg        # brew install ffmpeg")
+check_user_cmd whisper-cli  || MISSING+=("whisper-cli   # brew install whisper-cpp")
+check_user_cmd edge-tts     || MISSING+=("edge-tts      # pipx install edge-tts  (or pip3 install edge-tts)")
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+  HINT_FILE="${USER_HOME}/Desktop/Vessel-需要补装的依赖.txt"
+  {
+    echo "Vessel 后端已装好 (${VESSEL_PREFIX}/)，并已通过 launchd 启动。"
+    echo ""
+    echo "但下列外部工具尚未安装。Vessel 的部分功能会在调用到时报错，"
+    echo "建议尽快补装："
+    echo ""
+    for item in "${MISSING[@]}"; do
+      echo "  • ${item}"
+    done
+    echo ""
+    echo "Whisper 模型 (语音转文字) 默认放在 ~/.whisper-models/，文件较大 (~1GB)，"
+    echo "推荐："
+    echo "  mkdir -p ~/.whisper-models && cd ~/.whisper-models && \\"
+    echo "    curl -LO https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin"
+    echo ""
+    echo "装好工具后，重启后端让它重新发现 PATH:"
+    echo "  launchctl kickstart -k gui/${UID_NUM}/${PLIST_LABEL}"
+    echo ""
+    echo "日志:"
+    echo "  tail -F ~/Library/Logs/vessel-backend.stderr.log"
+  } > "${HINT_FILE}"
+  chown "${USER_NAME}:staff" "${HINT_FILE}"
+  echo "[vessel postinstall] wrote dep hint to ${HINT_FILE}"
+fi
+
+# ---------- 4. Bootstrap LaunchAgent ----------
+# Belt + suspenders: bootout again in case preinstall didn't catch it (e.g.,
+# first install where this script's gui domain wasn't reachable from
+# preinstall's exec context).
+sudo -u "${USER_NAME}" launchctl bootout "gui/${UID_NUM}/${PLIST_LABEL}" 2>/dev/null || true
+
+if ! sudo -u "${USER_NAME}" launchctl bootstrap "gui/${UID_NUM}" "${PLIST_DST}"; then
+  echo "[vessel postinstall] launchctl bootstrap failed."
+  echo "[vessel postinstall] Try manually after logging in:"
+  echo "[vessel postinstall]   launchctl bootstrap gui/${UID_NUM} ${PLIST_DST}"
+  exit 0
+fi
+
+# ---------- 5. Health probe ----------
+PORT=3030
+HEALTHY=0
+for i in 1 2 3 4 5 6 7 8; do
+  if curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+    HEALTHY=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "${HEALTHY}" = "1" ]; then
+  echo "[vessel postinstall] backend healthy on :${PORT} ✓"
+else
+  echo "[vessel postinstall] backend not yet healthy on :${PORT} after 8s."
+  echo "[vessel postinstall] Check: tail ${USER_HOME}/Library/Logs/vessel-backend.stderr.log"
+fi
+
+exit 0
