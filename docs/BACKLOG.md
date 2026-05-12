@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T05:30:00Z
+**最近更新**: 2026-05-12T06:00:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -11,22 +11,6 @@
 
 ```yaml
 items:
-  - id: installer-auto-update
-    title: Vessel-Backend .pkg 自动更新机制 — backend GitHub-API polling + frontend banner (方案 B)
-    priority: P2
-    size: M
-    status: in_progress
-    assigned_kind: main
-    parallel_safe_files:
-      - "packages/backend/src/routes/update-check.ts"
-      - "packages/backend/src/lib/update-check.ts"
-      - "packages/backend/src/lib/version-info.ts"
-      - "packages/frontend/src/api/update-check.ts"
-      - "packages/frontend/src/components/UpdateBanner.tsx"
-    depends_on: ["installer-auto-build-ci"]
-    note: "选 B (轮询 + banner，未签名也能跑)。/api/version/latest 6h cache，frontend 启动一次性 fetch，hasUpdate=true 时显示蓝色 banner + 下载链接 + dismiss-per-tag。Sparkle (方案 A) 需 EdDSA 签名留作后续 backlog；一键 DL (方案 C) 等用户反馈"
-    refs: ["release:v0.8.2"]
-
   - id: voice-roundtrip-measure
     title: 真机 voice round-trip ≤ 8 秒实测
     priority: P2
@@ -195,4 +179,11 @@ items:
     completed_at: 2026-05-12T05:30:00Z
     refs: ["pr:#59", "pr:#60", "release:v0.8.2", "commit:b90677f"]
     note: "release.yml 加 build-pkg job (macos-15 arm64 runner) → bash scripts/build-pkg.sh → gh release upload --clobber。验证：v0.8.2-rc1 测试 + v0.8.2 正式 release，2m55s/2m50s wall。CI pkg 10425 文件，比本地 20965 干净 (无 ._ AppleDouble 资源叉)。Intel x64 / code signing 留作后续 backlog"
+
+  - id: installer-auto-update
+    title: Vessel-Backend .pkg 自动更新机制 — backend GitHub-API polling + frontend banner (方案 B)
+    status: done
+    completed_at: 2026-05-12T06:00:00Z
+    refs: ["pr:#61", "commit:bbcebff"]
+    note: "选 B：后端 /api/version/latest 6h-cached GitHub Releases API；frontend UpdateBanner.tsx 启动时 fetch，hasUpdate=true 显示蓝色 banner + 下载链接 + per-tag dismiss。方案 A (Sparkle) / C (一键 DL) / iOS native UpdateBanner 留单独 backlog"
 ```
