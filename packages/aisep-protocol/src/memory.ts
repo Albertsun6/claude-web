@@ -30,7 +30,11 @@ export type AisepMemoryVerifiedBy = z.infer<typeof AisepMemoryVerifiedBySchema>;
  */
 export const AisepAppliesToSchema = z.object({
   domain: z.array(z.string()).default(["*"]),
-  stage: z.array(AisepStageSchema),
+  // v0.2: tightened to .min(1) — empty `stage` array would match every
+  // stage at retrieve time (silent global-pollution risk; R11 reinforcement).
+  // Pre-flight migration script `packages/aisep-memory/scripts/migrate-v0.2-min1.mjs`
+  // confirmed 10/10 existing global records non-empty before this tightening.
+  stage: z.array(AisepStageSchema).min(1),
   techStack: z.array(z.string()).default(["*"]),
 });
 export type AisepAppliesTo = z.infer<typeof AisepAppliesToSchema>;

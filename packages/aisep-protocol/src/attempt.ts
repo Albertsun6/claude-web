@@ -89,11 +89,22 @@ export type AisepAgentInvocation = z.infer<typeof AisepAgentInvocationSchema>;
 /**
  * AisepAttempt — one execution attempt of a stage_run.
  *
- * Note: **M5** red line (review stage `revise-required` ping-pong ≤ 2,
- * see docs/aisep/02_methodology-v0.1.md L343) is enforced in `aisep-core`
- * runtime by gate logic scoped to `stage === "review"`, NOT by the
- * schema. Other stages may legitimately retry more times (e.g. flaky
- * integration test rerun). M4 is a different red line (contract-freeze).
+ * Note: **M5** red line (review stage `revise_required` ∪
+ * `request_reverify` ping-pong ≤ 2 within same `stageRunId`,
+ * docs/aisep/02_methodology-v0.1.md L343) is designed for `aisep-core`
+ * runtime enforcement keyed on `stage === "review"`, NOT schema.
+ *
+ * **v0.2 carve-out**: aisep-core enforcement code is NOT yet implemented
+ * — runner currently lacks the cross-attempt verdict counter. M5
+ * enforcement is gated on a future Phase 2.E baseline (see
+ * `docs/proposals/aisep-protocol-v0.2-review-reverify-and-applies-to.md`
+ * §6b carve-out + arbitration log §"Implementation plan"). v0.2 ships
+ * the schema (4-value verdict + discriminated union); v0.3 / v3 cycle
+ * will ship the enforcement. M4 is a different red line
+ * (contract-freeze).
+ *
+ * Other stages may legitimately retry more times (e.g. flaky integration
+ * test rerun).
  */
 export const AisepAttemptSchema = z.object({
   id: OpaqueIdSchema,

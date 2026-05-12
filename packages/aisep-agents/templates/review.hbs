@@ -5,9 +5,10 @@
 ## Goal
 
 Produce a structured `review-verdict.json` for the implement-stage patch.
-Verdict ∈ { `pass`, `pass_with_comments`, `revise_required` }. Every
-comment MUST bind to `{ target, trace_id, severity, suggested_action }`
-— no vague feedback allowed (Pilot-02 F-3 finding).
+Verdict ∈ { `pass`, `pass_with_comments`, `revise_required`,
+`request_reverify` } *(v0.2: added 4th value)*. Every comment MUST bind
+to `{ target, trace_id, severity, suggested_action }` — no vague feedback
+allowed (Pilot-02 F-3 finding).
 
 ## Logic-only focus (Anthropic Code Review 2026-03 + Pilot-02 F-4)
 
@@ -52,15 +53,30 @@ comment MUST bind to `{ target, trace_id, severity, suggested_action }`
 
 - `pass`: zero critical + zero major; ≤ 5 minor; merge as-is
 - `pass_with_comments`: ≤ 1 critical OR ≤ 5 major; author can address in
-  ≤ 1 follow-up round (M4 ping-pong cap)
+  ≤ 1 follow-up round (M5 ping-pong cap)
 - `revise_required`: ≥ 2 critical OR > 5 major OR fundamental design flaw
   — implement must produce a new patch (or escalate)
+- **`request_reverify` (v0.2)**: reviewer suspects a verify check is a
+  FALSE POSITIVE caused by hand-off truncation / stage I/O bug — NOT a
+  content gap. Use ONLY when you can name a specific failing
+  `contract_grep` check whose failure is implausible given the patch
+  body. REQUIRES `requestReverify: { checkId, reason }` payload
+  (discriminated union — schema rejects emit without payload). The
+  maintainer will run `aisep verify --recheck --check-name <checkId>`
+  to flip the gate before re-issuing review.
+  - DO NOT use `request_reverify` as a soft escape hatch — it counts
+    toward the M5 ping-pong cap same as `revise_required`
+    (docs/aisep/02_methodology-v0.1.md L343, v0.2 widened).
+  - `checkId` must match `/^[A-Za-z0-9_.:-]+$/` (zod-enforced;
+    constrained to shell-safe chars per RISK-Q4-c)
+  - `reason` ≤ 500 chars (zod-enforced; longer audit text goes in a
+    `comment`, not the reason field)
 
 ## Output (MANDATORY: JSON, then human summary)
 
 ```json
 {
-  "verdict": "pass" | "pass_with_comments" | "revise_required",
+  "verdict": "pass" | "pass_with_comments" | "revise_required" | "request_reverify",
   "reviewer_kind": "vessel-architect" | "vessel-pragmatist" | "reviewer-cross",
   "comments": [
     {
@@ -73,9 +89,17 @@ comment MUST bind to `{ target, trace_id, severity, suggested_action }`
   ],
   "suggested_patches": [
     { "target": { "kind": "...", "key": "..." }, "diff": "<unified diff>" }
-  ]
+  ],
+  "requestReverify": {
+    "checkId": "<contract_grep.checks[].name (exact, regex /^[A-Za-z0-9_.:-]+$/)>",
+    "reason": "<≤ 500 chars — why this check is suspected false-positive>"
+  }
 }
 ```
+
+**Note**: `requestReverify` field is REQUIRED when `verdict ===
+"request_reverify"`, FORBIDDEN otherwise. zod discriminated union
+rejects mismatch at parse.
 
 Then HUMAN SUMMARY (≤ 100 words): why this verdict, top 3 comments
 ranked by severity.

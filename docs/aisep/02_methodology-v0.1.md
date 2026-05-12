@@ -135,7 +135,7 @@ contract stage 的本质：把 architecture stage 的"草案"变成"frozen final
 | AI 主导 | ✓ 2 reviewer agent（其中 1 个 cursor-agent 异构）；用户 final ack |
 | 硬上限 | review 单轮 ≤ 60 分钟（参考 SmartBear/Cisco）；ping-pong 上限 2 轮 |
 
-**review 输出固定三类**：`pass` / `pass-with-comments` / `revise-required`。
+**review 输出固定四类**（aisep-protocol v0.2 起）：`pass` / `pass_with_comments` / `revise_required` / `request_reverify`。underscore form per schema（更新自 v0.1 dash form drift）。`request_reverify` 触发 + 强制 schema payload (`{checkId, reason}`) 见 [docs/proposals/aisep-protocol-v0.2-review-reverify-and-applies-to.md](../proposals/aisep-protocol-v0.2-review-reverify-and-applies-to.md)。
 
 **logic-only review focus**（Anthropic Code Review 2026-03 实践）——reviewer 不看 style / grammar / 文档完整性，只看"会不会塞错"。
 
@@ -143,7 +143,7 @@ contract stage 的本质：把 architecture stage 的"草案"变成"frozen final
 
 | 项 | 内容 |
 |----|------|
-| 输入 | `review-verdict.json` 为 `pass` 或 `pass-with-comments` + `patch.diff` |
+| 输入 | `review-verdict.json` 为 `pass` 或 `pass_with_comments` + `patch.diff` |
 | 输出 | `integration-log.json`（merge commit + tag + deploy + rollback note） |
 | Gate | CI green + migration safe + rollback noted（IOC-lite） |
 | AI 主导 | ✓（git operations）；**用户最终签发**（destructive action） |
@@ -340,7 +340,7 @@ retrospect stage 用户 ack 后 → promote 到 `~/.aisep/governance-log/evoluti
 | M2 | artifact 一旦写入，content_hash 不可变（不可重写已有 artifact） | SQLite UPDATE 触发 raise |
 | M3 | architecture stage Phase A 未通过 → Phase B 不允许启动 | aisep-core 强制 |
 | M4 | contract stage 冻结后 → implement stage 不允许改 contract 文件 | dependency-cruiser + git pre-commit hook |
-| M5 | review stage `revise-required` 累计 2 次 → 必须 cut scope（不允许第 3 轮 ping-pong） | aisep-core 强制 |
+| M5 | review stage `revise_required` ∪ `request_reverify` 累计 2 次（同 `stageRunId`）→ 必须 cut scope（不允许第 3 轮 ping-pong） | aisep-core 强制（v0.2 standby — actual enforcement deferred to Phase 2.E baseline + v3 cycle，见 [proposal §6b carve-out](../proposals/aisep-protocol-v0.2-review-reverify-and-applies-to.md)） |
 | M6 | retrospect stage 未跑 → 不允许启动新 workspace 同 stage（强制学习闭环） | CLI 检查 |
 
 ## 10. 参考依据

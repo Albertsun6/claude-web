@@ -46,25 +46,33 @@ export const AisepPatchSchema = z.object({
 });
 export type AisepPatch = z.infer<typeof AisepPatchSchema>;
 
-/** Three-way verdict (no "needs-discussion" fence-sitting). */
+/** Four-way verdict (v0.2: added request_reverify per Phase 2.D #10).
+ * `request_reverify` is the reviewer's structured signal "I suspect a
+ * verify check is a false positive — re-run check X before re-issuing
+ * review". Requires non-empty `{checkId, reason}` payload (enforced
+ * at parse boundary via z.discriminatedUnion below). */
 export const AisepReviewVerdictKindSchema = z.enum([
   "pass",
   "pass_with_comments",
   "revise_required",
+  "request_reverify",
 ]);
 export type AisepReviewVerdictKind = z.infer<typeof AisepReviewVerdictKindSchema>;
 
 /**
  * AisepReviewVerdict — one verdict from one reviewer.
  *
- * Round-2 (per reviewer-cross Minor-2): added optional `reviewerId` and
- * `model` so adding a new reviewer in the future (e.g. a new
- * cursor-agent model variant, or a third-party reviewer) doesn't
- * require an enum bump on `AisepReviewerKind`. The enum stays small for
- * verdict-level branching; the concrete reviewer identity goes in the
- * optional fields.
+ * v0.2 (per Phase 2.D #10 cross-review B.F2 + A.F2): migrated from a
+ * flat object + optional discriminator field to a true
+ * `z.discriminatedUnion`. TS narrows `requestReverify` to required when
+ * `verdict === "request_reverify"`, forbidden on the other three
+ * verdicts. Fails closed at parse boundary — no superRefine indirection.
+ *
+ * Round-2 history (per reviewer-cross Minor-2): added optional `reviewerId`
+ * and `model` so adding a new reviewer (e.g. cursor-agent model variant)
+ * doesn't require an enum bump on `AisepReviewerKind`.
  */
-export const AisepReviewVerdictSchema = z.object({
+const ReviewVerdictBaseFields = {
   id: OpaqueIdSchema,
   stageRunId: OpaqueIdSchema,
   reviewer: AisepReviewerKindSchema,
@@ -72,9 +80,32 @@ export const AisepReviewVerdictSchema = z.object({
   reviewerId: OpaqueIdSchema.optional(),
   /** Concrete model id used (e.g. "claude-opus-4-7", "gpt-5.5-medium"). */
   model: z.string().optional(),
-  verdict: AisepReviewVerdictKindSchema,
   comments: z.array(AisepCommentSchema).default([]),
   suggestedPatches: z.array(AisepPatchSchema).default([]),
   reviewedAt: EpochMsSchema,
+};
+
+const AisepNonReverifyVerdictSchema = z.object({
+  ...ReviewVerdictBaseFields,
+  verdict: z.enum(["pass", "pass_with_comments", "revise_required"]),
 });
+
+const AisepRequestReverifyVerdictSchema = z.object({
+  ...ReviewVerdictBaseFields,
+  verdict: z.literal("request_reverify"),
+  /** REQUIRED payload for request_reverify. v0.2 §Change 2 / B.F4:
+   * checkId regex constrained to shell-safe chars to prevent
+   * injection via `aisep verify --recheck --check-name <checkId>`.
+   * reason capped at 500 chars (B's OQ2 — RISK-Q4-c prompt-injection
+   * mitigation). */
+  requestReverify: z.object({
+    checkId: z.string().regex(/^[A-Za-z0-9_.:-]+$/),
+    reason: z.string().min(1).max(500),
+  }),
+});
+
+export const AisepReviewVerdictSchema = z.discriminatedUnion("verdict", [
+  AisepNonReverifyVerdictSchema,
+  AisepRequestReverifyVerdictSchema,
+]);
 export type AisepReviewVerdict = z.infer<typeof AisepReviewVerdictSchema>;
