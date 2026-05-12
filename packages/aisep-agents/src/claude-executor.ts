@@ -130,6 +130,9 @@ export class ClaudeExecutor implements StageExecutor {
       cwd: args.workspace.cwd,
       promptText,
       timeoutMs: this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      // v0.3 Stage 3.1: propagate sibling-failure cancel via AbortSignal
+      // (passed by runner.runFanOutParent). Non-fan-out paths omit it.
+      ...(args.signal !== undefined ? { signal: args.signal } : {}),
     });
 
     const endedAt = Date.now();
@@ -233,6 +236,8 @@ function spawnClaude(opts: {
   cwd: string;
   promptText: string;
   timeoutMs: number;
+  /** v0.3 Stage 3.1: cancel via SIGTERM → 5s → SIGKILL on abort. */
+  signal?: AbortSignal;
 }): Promise<SpawnResult> {
   return new Promise((resolve) => {
     const startedAt = Date.now();
@@ -254,15 +259,27 @@ function spawnClaude(opts: {
       stderr += chunk.toString("utf-8");
     });
 
-    const timeoutHandle = setTimeout(() => {
-      timedOut = true;
+    const initiateKill = (markTimedOut: boolean) => {
+      if (markTimedOut) timedOut = true;
       child.kill("SIGTERM");
       killGraceHandle = setTimeout(() => child.kill("SIGKILL"), KILL_GRACE_MS);
-    }, opts.timeoutMs);
+    };
+
+    const timeoutHandle = setTimeout(() => initiateKill(true), opts.timeoutMs);
+
+    // v0.3 Stage 3.1: AbortSignal-driven cancel for sibling-failure
+    // propagation (per arbitration A.F7). timedOut stays false on
+    // abort-kill (timedOut is reserved for timeoutMs-driven kills).
+    const onAbort = () => initiateKill(false);
+    if (opts.signal) {
+      if (opts.signal.aborted) initiateKill(false);
+      else opts.signal.addEventListener("abort", onAbort, { once: true });
+    }
 
     const finalize = (exitCode: number) => {
       clearTimeout(timeoutHandle);
       if (killGraceHandle) clearTimeout(killGraceHandle);
+      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
       resolve({
         exitCode,
         stdout,
