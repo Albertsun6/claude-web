@@ -3,8 +3,8 @@
 // v0 stub: uses MockStageExecutor when --dry, otherwise refuses to run
 // because aisep-agents (real executor) is not yet wired in.
 
-import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, readFileSync, existsSync } from "node:fs";
+import { resolve, join } from "node:path";
 
 import { ClaudeExecutor, PromptCompiler } from "@claude-web/aisep-agents";
 import {
@@ -24,6 +24,7 @@ import {
 import { NodeWorkspace } from "@claude-web/aisep-workspace";
 
 import { MockStageExecutor } from "../mock-executor.js";
+import { parsePlanParallel } from "../parse-plan-parallel.js";
 
 interface RunArgs {
   workspace: string;
@@ -137,24 +138,52 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
   for (const stage of stages) {
     const phase = args.phase ?? defaultPhaseFor(stage);
 
+    // v0.3 (v1 fan-out Stage 2.cli-C): auto-detect parallel: block in
+    // plan.md as a fallback when --parallel / --children weren't passed
+    // manually. Manual flags always win (explicit > auto).
+    let effectiveParallel = args.parallel === true;
+    let effectiveChildren = args.parallelChildren;
+    if (stage === "implement" && !effectiveParallel) {
+      const planPath = join(cwd, "plan.md");
+      if (existsSync(planPath)) {
+        const planMd = readFileSync(planPath, "utf-8");
+        let autoEntries;
+        try {
+          autoEntries = parsePlanParallel(planMd);
+        } catch (e) {
+          console.error(
+            `[aisep run] plan.md has a malformed 'parallel:' block; refusing to dispatch: ${(e as Error).message}`,
+          );
+          return 4;
+        }
+        if (autoEntries) {
+          effectiveParallel = true;
+          effectiveChildren = autoEntries.map((e) => e.name);
+          console.log(
+            `[aisep run] auto-detected fan-out from plan.md: parallel=${effectiveChildren.join(",")}`,
+          );
+        }
+      }
+    }
+
     // v0.3 (v1 fan-out Stage 2.cli-A): fan out implement when --parallel
     // is on AND children specified. Other stages stay on the normal
     // single-stage path.
     if (
       stage === "implement" &&
-      args.parallel === true &&
-      args.parallelChildren &&
-      args.parallelChildren.length >= 2
+      effectiveParallel &&
+      effectiveChildren &&
+      effectiveChildren.length >= 2
     ) {
       const cap = args.concurrency ?? 4;
       console.log(
-        `[aisep run] implement   (none                        ) → fan-out (parallel=${args.parallelChildren.join(",")}, concurrency=${cap})`,
+        `[aisep run] implement   (none                        ) → fan-out (parallel=${effectiveChildren.join(",")}, concurrency=${cap})`,
       );
       const { parent, children } = await runner.runFanOutParent({
         stage: "implement",
         predecessorId: lastRunId,
         concurrencyCap: cap,
-        children: args.parallelChildren.map((name) => ({ name })),
+        children: effectiveChildren.map((name) => ({ name })),
       });
       for (const c of children) {
         console.log(
