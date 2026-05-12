@@ -13,6 +13,7 @@ import { SessionList } from "./components/SessionList";
 import { AuthGate } from "./components/AuthGate";
 import { UsageMeter } from "./components/UsageMeter";
 import { ClaudeMdBanner } from "./components/ClaudeMdBanner";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { StatusBar } from "./components/StatusBar";
 import { FilePreviewPane } from "./components/FilePreviewPane";
 import { Resizer } from "./components/Resizer";
@@ -333,6 +334,7 @@ function AppInner() {
         ) : (
           <>
             <ProjectTabs />
+            <UpdateBanner />
             <ClaudeMdBanner />
             <MessageStream />
             <InputBox onVoiceTranscript={handleVoiceTranscript} />
