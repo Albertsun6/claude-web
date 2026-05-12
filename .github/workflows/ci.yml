@@ -50,6 +50,9 @@ jobs:
       - name: Backend e2e failure-path test (Loop 5)
         run: pnpm --filter @claude-web/backend test:e2e-failures
 
+      - name: Backend update-check unit tests
+        run: pnpm --filter @claude-web/backend test:update-check
+
       - name: Protocol sync check
         run: |
           BASE=$(git rev-parse HEAD~1 2>/dev/null || echo "")

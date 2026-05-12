@@ -10,6 +10,7 @@ struct ContentView: View {
     @Environment(TTSPlayer.self) private var tts
     @Environment(VoiceSession.self) private var voice
     @Environment(ProjectRegistry.self) private var registry
+    @Environment(VersionAPI.self) private var versionAPI
     @State private var draft: String = ""
     @State private var showSettings = false
     @State private var showDrawer = false
@@ -250,6 +251,7 @@ struct ContentView: View {
                     .padding(.vertical, 4)
                     .background(.bar)
                 }
+                UpdateBannerView(api: versionAPI)
                 if let err = voice.displayError {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
