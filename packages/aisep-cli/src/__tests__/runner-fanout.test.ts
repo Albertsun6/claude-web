@@ -116,6 +116,43 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     expect(children.every((c) => c.status === "failed")).toBe(true);
   });
 
+  it("Pilot-09 9b boundary mock: 1 of 3 children fails → parent fails + sibling succeeds preserved", async () => {
+    const ws = newWorkspace();
+    const store = new AisepStore(cwd, ws.meta.id);
+    // Only the "frontend" sub-implement fails; backend + tests succeed.
+    const runner = new AisepRunner({
+      store,
+      workspace: ws,
+      executor: new MockStageExecutor({ failOnSubStages: ["frontend"] }),
+    });
+
+    const { parent, children } = await runner.runFanOutParent({
+      stage: "implement",
+      concurrencyCap: 3,
+      children: [{ name: "backend" }, { name: "frontend" }, { name: "tests" }],
+    });
+
+    // Parent fails because not all children succeeded.
+    expect(parent.status).toBe("failed");
+
+    // Children individual status: 1 failed, 2 succeeded.
+    const byName = new Map(children.map((c, i) => [["backend", "frontend", "tests"][i]!, c]));
+    expect(byName.get("backend")!.status).toBe("succeeded");
+    expect(byName.get("frontend")!.status).toBe("failed");
+    expect(byName.get("tests")!.status).toBe("succeeded");
+
+    // Succeeded children's artifacts are preserved (no rollback in v1).
+    const backendArts = store.listArtifactsByStageRun(byName.get("backend")!.id);
+    expect(backendArts.filter((a) => a.ref.kind === "patch")).toHaveLength(1);
+    const testsArts = store.listArtifactsByStageRun(byName.get("tests")!.id);
+    expect(testsArts.filter((a) => a.ref.kind === "patch")).toHaveLength(1);
+
+    // Parent still emits a patch_set manifest (even when partial; downstream
+    // verify/review can see which children succeeded and decide what to do).
+    const parentArts = store.listArtifactsByStageRun(parent.id);
+    expect(parentArts.filter((a) => a.ref.kind === "patch_set")).toHaveLength(1);
+  });
+
   it("rejects fan-out on non-implement stage (v1 scope limit)", async () => {
     const ws = newWorkspace();
     const store = new AisepStore(cwd, ws.meta.id);
