@@ -43,6 +43,16 @@ module.exports = {
       from: { path: "^packages/aisep-core/src" },
       to: { path: "^packages/aisep-workspace/" },
     },
+    {
+      name: "aisep-pure-fns-no-side-effects",
+      severity: "error",
+      comment:
+        "R6 reinforcement: pure-function modules (m5-cap, scheduler) MUST NOT import node:fs / node:child_process / node:net / node:process. Side effects flow through injected workspace / store APIs only. Adding new pure modules: append the basename here.",
+      from: { path: "^packages/aisep-core/src/(m5-cap|scheduler)\\.ts$" },
+      to: {
+        path: "^node:(fs|child_process|net|process|os|http|https|crypto|cluster|dgram|dns|readline|repl|tls|tty|v8|vm|worker_threads|inspector)",
+      },
+    },
   ],
   options: {
     doNotFollow: {

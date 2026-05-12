@@ -32,6 +32,12 @@ export const AisepArtifactKindSchema = z.enum([
   "contract_frozen",     // zod + tRPC frozen
   // implement / verify / review / integrate / retrospect
   "patch",
+  /**
+   * v0.3 (v1 fan-out Stage 1): aggregate manifest of N child patches
+   * produced by a `fanOutRole: "parent"` implement stage_run. Inline
+   * storage (manifest is small). Content shape = AisepPatchSetManifestSchema.
+   */
+  "patch_set",
   "verify_report",
   "review_verdict",
   "integration_log",
@@ -115,3 +121,35 @@ export const AisepArtifactSchema = z.discriminatedUnion("storage", [
   AisepArtifactInlineSchema,
 ]);
 export type AisepArtifact = z.infer<typeof AisepArtifactSchema>;
+
+/**
+ * v0.3 (v1 fan-out Stage 1): the content body of a `patch_set` artifact.
+ *
+ * The patch_set artifact itself wraps this manifest as JSON in
+ * `contentInline` (inline storage; manifests are small). The N child
+ * patches themselves are separate `patch` artifacts referenced by id.
+ *
+ * Constraints (v1):
+ * - `patches.length >= 2` — a 1-patch parent isn't a fan-out (use `patch` directly)
+ * - `subStageName` regex matches the shell-safe constraint used by
+ *   `AisepReviewVerdict.requestReverify.checkId`. This lets a reviewer's
+ *   `request_reverify.checkId` point INTO a specific child patch via the
+ *   subStageName prefix (per v3 cycle proposal §"Composition with v1 fan-out").
+ */
+export const AisepPatchSetManifestSchema = z
+  .object({
+    patches: z
+      .array(
+        z.object({
+          subStageId: OpaqueIdSchema,
+          subStageName: z.string().regex(/^[A-Za-z0-9_.:-]+$/),
+          /** Path within workspace to the child patch file. */
+          patchFile: z.string().min(1),
+          contentHash: ContentHashSchema,
+          byteCount: z.number().int().nonnegative(),
+        }),
+      )
+      .min(2),
+  })
+  .strict();
+export type AisepPatchSetManifest = z.infer<typeof AisepPatchSetManifestSchema>;
