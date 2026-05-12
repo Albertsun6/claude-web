@@ -99,10 +99,18 @@ export class ClaudeExecutor implements StageExecutor {
       upstreamArtifacts: args.upstreamArtifacts.map((a) => a.ref),
       upstreamArtifactsWithContent,
       memoryHits: args.memoryHits as never[],   // protocol type, opaque to core
+      // v0.3 (v1 fan-out Stage 2.cli-B): flow subStageName to template
+      // for fan-out children. Templates that reference {{subStageName}}
+      // / {{isFanOutChild}} render appropriately.
+      ...(args.subStageName !== undefined ? { subStageName: args.subStageName } : {}),
     });
 
     // Persist rendered prompt for forensic replay (per .aisep/ convention).
-    const taskPath = `.aisep/tmp/task-${args.stage}-${Date.now()}.md`;
+    // v0.3 (v1 fan-out Stage 2.cli-B): include subStageName in the temp
+    // file name so concurrent fan-out children don't race on the same
+    // file (timestamps alone aren't enough at ms resolution).
+    const subNameTag = args.subStageName ? `-${args.subStageName}` : "";
+    const taskPath = `.aisep/tmp/task-${args.stage}${subNameTag}-${Date.now()}.md`;
     await args.workspace.writeFile(taskPath, promptText);
 
     const bin = this.opts.claudeBin ?? process.env.CLAUDE_CLI ?? "claude";
@@ -158,7 +166,7 @@ export class ClaudeExecutor implements StageExecutor {
     // diff fences from coder output → write to workspace/patch/).
     const stdoutTrimmed = spawnResult.stdout.trim();
     const artifactKind = STAGE_TO_ARTIFACT_KIND[args.stage];
-    const artifactKey = artifactKey_(args.stage, args.phase);
+    const artifactKey = artifactKey_(args.stage, args.phase, args.subStageName);
 
     // Persist to workspace as a file too (so downstream stages can read it).
     await args.workspace.writeFile(artifactKey, stdoutTrimmed);
@@ -194,11 +202,17 @@ export class ClaudeExecutor implements StageExecutor {
       ok: true,
     };
 
-    function artifactKey_(stage: AisepStage, phase: string): string {
+    function artifactKey_(stage: AisepStage, phase: string, subName?: string): string {
       if (stage === "architecture") {
         if (phase === "architecture-brief") return "architecture/brief.md";
         if (phase === "architecture-detail-slice") return "architecture/detail-slice.md";
         return "architecture/index.md";
+      }
+      // v0.3 (v1 fan-out Stage 2.cli-B): fan-out child writes to
+      // `<stage>-<subName>.md` so siblings don't clobber each other +
+      // the parent's patch_set manifest can reference each child by name.
+      if (subName !== undefined) {
+        return `${stage}-${subName}.md`;
       }
       // profile not used directly in path, but kept here in case future stages
       // need profile-aware naming
