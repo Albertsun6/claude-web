@@ -20,3 +20,41 @@ jobs:
         run: gh release create "${{ github.ref_name }}" --generate-notes --verify-tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-pkg:
+    # Build the macOS .pkg installer on an arm64 GHA runner and attach it to
+    # the release stub created by the `release` job. Public-repo macOS minutes
+    # are free, so this runs on every v* tag push.
+    needs: release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build .pkg
+        # Downloads Node 24.12.0 darwin-arm64, rebuilds better-sqlite3 against
+        # bundled Node ABI, trims devDeps, pkgbuild → dist/Vessel-Backend-v*.pkg
+        run: bash scripts/build-pkg.sh
+
+      - name: Upload .pkg to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PKG_PATH=$(ls dist/Vessel-Backend-v*-arm64.pkg | head -1)
+          if [ -z "$PKG_PATH" ] || [ ! -f "$PKG_PATH" ]; then
+            echo "::error::No .pkg produced under dist/"
+            exit 1
+          fi
+          echo "Uploading: $PKG_PATH ($(du -h "$PKG_PATH" | awk '{print $1}'))"
+          gh release upload "${{ github.ref_name }}" "$PKG_PATH" --clobber

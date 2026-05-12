@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T04:30:00Z
+**最近更新**: 2026-05-12T05:00:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -11,6 +11,35 @@
 
 ```yaml
 items:
+  - id: installer-auto-build-ci
+    title: Vessel-Backend .pkg 自动构建 — push tag 触发 GitHub Actions → 自动 release
+    priority: P1
+    size: M
+    status: in_progress
+    assigned_kind: main
+    parallel_safe_files:
+      - ".github/workflows/release-pkg.yml"
+      - "scripts/build-pkg.sh"
+      - "docs/RELEASE_FLOW.md"
+    depends_on: []
+    note: "Trigger: push tag v*.*.* → macos-15 (arm64) runner → checkout → pnpm install → bash scripts/build-pkg.sh → gh release upload。开 GitHub Actions 后端构建 minutes (macos runner ~10x billing) 注意 quota；如 quota 紧可移到 self-hosted Mac mini。Intel 二份 build 是另一条 backlog (cross-arch)。"
+    refs: ["release:v0.8.1", "proposal:installer §F"]
+
+  - id: installer-auto-update
+    title: Vessel-Backend .pkg 自动更新机制 — Sparkle 或自研 GitHub-API polling
+    priority: P2
+    size: L
+    status: planned
+    assigned_kind: main
+    parallel_safe_files:
+      - "packages/backend/src/routes/update-check.ts"
+      - "packages/backend/src/lib/version-check.ts"
+      - "packages/frontend/src/components/UpdateBanner.tsx"
+      - "installer/com.vessel.backend.plist.template"
+    depends_on: ["installer-auto-build-ci"]
+    note: "选型：(A) Sparkle XML appcast feed — 标准 macOS auto-update，需 EdDSA 签名；(B) 后端轮询 GitHub Releases API — 简单但只能 notify，不能自动 install；(C) 混合：banner notify + 一键 download + 用户手动 sudo installer。当前未签名 → 走 (B) 或 (C)。前置：先做 auto-build 让 release 节奏可控；后续可加 code signing 升级到 Sparkle。"
+    refs: ["release:v0.8.1"]
+
   - id: voice-roundtrip-measure
     title: 真机 voice round-trip ≤ 8 秒实测
     priority: P2
