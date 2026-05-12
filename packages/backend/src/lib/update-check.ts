@@ -42,12 +42,12 @@ function pickArm64Asset(assets: Array<{ name: string; browser_download_url: stri
   return { name: m.name, downloadUrl: m.browser_download_url, sizeBytes: m.size };
 }
 
-function parsePkgVersion(assetName: string): string | null {
+export function parsePkgVersion(assetName: string): string | null {
   const m = assetName.match(/Vessel-Backend-v([\d.]+)-arm64\.pkg$/);
   return m ? m[1] : null;
 }
 
-function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
   const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
   const len = Math.max(pa.length, pb.length);

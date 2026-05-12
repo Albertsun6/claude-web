@@ -1,100 +1,113 @@
-## [0.2.0] - 2026-04-29
-### Changes
-#### Features
-- directory picker for cwd inputs (browse instead of type)
-- create new directory from picker
-- voice transcript cleanup via claude haiku before send
-- route TTS through edge-tts backend (Xiaoxiao); add stop + replay buttons
-- multi-project tabs with parallel runs; fix mic button shift
-- separate Open project (one-shot) from Create project (form)
-- backend serves frontend dist at / for single-port deploy
-- launchd autostart + caffeinate + offline banner for reliability
-- history sessions list with click-to-resume + transcript replay
-- improvements per docs/IMPROVEMENTS.md
-- hands-off token-saving automation
-- parity with claude-code UX (todos, diff, status bar, @file)
-- file preview — image / pdf / video / audio / markdown / code
-- file preview pops into center; resizable + persisted panels
-- cleaner stream + subscription bucket + image attachments
-- spoken-style summary mode for assistant TTS
-- 对话模式 + tap-to-toggle mic + voiceprint/wake idea entries
-- dynamic slash commands from CLI's system:init advertisement
-- mobile voice Tier 1 + Tier 2 (PWA convo, hands-free UX)
-- voice commands 暂停 / 继续 / 清除 in conversation mode
-- voice: add audio input/output device selection
-- layout: collapsible sidebars on desktop
-- fs: real-time file tree + viewer sync via chokidar + WS
-- voice: four-layer accuracy boost — DSP, ffmpeg filters, whisper prompt, vocab cleanup
-- picker: default open-directory dialog to ~/Desktop
-- ios: wrap as Capacitor iOS app for native audio session
-- ios-native: M1 — SwiftUI shell + WebSocket text chat
-- ios-native: M1.5 + M2 — permission handling + PTT recording
-- ios-native: M3 — TTS playback (foreground)
-- ios-native: M4 — voice session, lock screen, MPRemoteCommandCenter
-- ios-native: A — silent keepalive opt-in + model selector
-- ios-native: add Bypass permission mode to settings
-- ios-native: silent keepalive now runs independently of voice mode
-- backend: add /api/projects + /api/telemetry routes
-- ios: per-project conversations architecture (F1c2 + F1c3)
-- ios: drawer UX + tool cards + markdown + Seaidea rename
-- ios: app data reset action + small fixes
-- ios: 抽屉加历史 session 浏览入口（groupedByCwd 合并 registry.projects）
-- ios: drawer UX redesign — collapsible folders + per-folder new conversation + jump-to-latest
-- permission: add "auto-allow this turn" checkbox for better UX
-- ios: sync permission auto-allow feature from web
-- ios: tool result collapsible display with content + isError
-- ios: image attachment via PhotosPicker (multimodal input)
-- ios: @file autocomplete — type @ in input to browse and insert file paths
-- ios: session watcher, title helper, drawer polish, and misc improvements
-- ios: prompt queue — auto-chain turns without waiting
+# Changelog
 
-#### Bug Fixes
-- auto-retry without --resume when session id is stale
-- stack voice controls above mic to avoid overflow on narrow sidebar
-- self-destroying SW + static manifest to unblock iOS PWA black screen
-- serve SPA at / and unknown paths; only return 404 for missing assets
-- re-read index.html on mtime change so frontend rebuilds are picked up live
-- convo mode auto-starts mic, shows live transcript in input, auto-submits
-- strip markdown / code / table tokens before TTS so 朗读 stops saying 星号星号
-- voice: conversation mode accuracy — PCM ring buffer + pre-roll + EWMA
-- voice: default to manual review — split cleanup from auto-send
-- layout: main column shrunk instead of growing on sidebar collapse at tablet width
-- layout: main column collapsed to ~150px when sidebar hidden — real root cause
-- voice: iOS PWA TTS playback — unlock + reuse single audio element
-- auth+ios: probe failure now falls through, not falsely blocking with token modal
-- ios-native: M4.5 — address all 8 review findings
-- ios-native: silent keep-alive loop so Now Playing reliably shows
-- ios-native: apply round-2 review findings (3 fixes)
-- ios-native: apply round-3 review (5 fixes incl. critical bind ordering)
-- ios-native: symmetrical silent-loop guard in enter()
+Significant changes per release. Per-PR detail in each [release page](https://github.com/Albertsun6/claude-web/releases).
 
-#### Other
-- : ignore tsbuildinfo
-- : route all API + WS through Vite reverse proxy (single-origin)
-- : vite allowedHosts true for tunnel/tailscale hostnames
-- : gzip + immutable cache + lazy-load Files/Git panels + vendor split
-- : token-saving improvements
-- : explore mobile voice interaction options (4 tiers)
-- : enterprise internal-tool path B (≤50 users) breakdown
-- : add USER_MANUAL.md + update-manual skill for auto-maintenance
-- : sanitize personal info before publishing
-- ideas: add multi-device sync + cursor CLI review MCP
-- ios: one-shot CLI deploy script
-- ios: split sim/device builds — sim uses http://localhost to avoid Tailscale loopback
-- : iOS native M1-M4 review report for AI cross-check
-- : real-device test checklist for iOS native v1
-- ios-native: app icon placeholder + round 2 review doc
-- : round 3 review for keepalive decoupling + Bypass mode
-- : mark Section 2 (lock screen Now Playing) as platform-constrained skip
-- : D + C + E — iOS native chapter, Mac mini migration plan, Capacitor deprecation
-- ideas: iOS app v2 candidate features (web parity + net-new)
-- : F1 implementation plan for iOS native v2 (A1+A2+A6+A7)
-- : F1 v2/v3 plans + USER_MANUAL + CLAUDE updates
-- ios: split ContentView into Views/ subdirectory
-- ios: extract conversation models from BackendClient
-- ios: split BackendClient into WebSocketClient + ConversationStore + RunRouter facade
+Versioning: `v<MAJOR>.<MINOR>.<PATCH>[-Mx]`. `Mx` suffix marks milestone tags.
+
+## v0.8.3 — 2026-05-12
+
+**Auto-update banner triggers for v0.8.2 users**
+
+- Backend `0.1.0 → 0.1.1` so v0.8.2 installs (pkg 0.1.0) see the banner on next backend restart
+
+## v0.8.2 — 2026-05-12
+
+**Auto-build CI + auto-update banner**
+
+- `.github/workflows/release.yml` adds `build-pkg` macos-15 job — push tag `v*` auto-builds & uploads `.pkg` ([#59](https://github.com/Albertsun6/claude-web/pull/59))
+- Backend `/api/version/latest` (6h-cached GitHub Releases API) ([#61](https://github.com/Albertsun6/claude-web/pull/61))
+- Frontend `UpdateBanner` shows when newer `.pkg` available — links to release page
+- Backend bumped 0.0.1 → 0.1.0 (first releasable backend semver)
+
+## v0.8.1 — 2026-05-12
+
+**macOS `.pkg` installer (first releasable build)**
+
+- `scripts/build-pkg.sh` complete pipeline: pnpm install + frontend build + pnpm deploy + bundled Node 24 + native rebuild + pkgbuild
+- `installer/` pre/postinstall + plist template + uninstall.sh
+- ~190MB `.pkg`; bundles better-sqlite3 native binding aligned to bundled Node ABI ([#57](https://github.com/Albertsun6/claude-web/pull/57))
+- `cli-runner` temp-file cleanup race fix — `pnpm test:cli` was stably failing on dev HEAD ([#56](https://github.com/Albertsun6/claude-web/pull/56))
+- Steward V0.4 / V0.5 contract — 即时代办 fastpath, worker self-signal I12, no-auto-merge I13 ([#51](https://github.com/Albertsun6/claude-web/pull/51) / [#53](https://github.com/Albertsun6/claude-web/pull/53) / [#54](https://github.com/Albertsun6/claude-web/pull/54))
+- Two major surveys: parallel mechanism + AI coding agent execution control ([#53](https://github.com/Albertsun6/claude-web/pull/53) / [#55](https://github.com/Albertsun6/claude-web/pull/55))
+
+## v0.8.0 — 2026-05-11
+
+**Steward V0 contract — first cut**
+
+- `docs/BACKLOG.md` (YAML in markdown) as single source of truth for tasks
+- 10 user-facing prompts: `/boot`, `开始干 <id>`, `<id> 收线`, `加待办`, `即时代办`, etc.
+- 11 invariants (I1-I11) in ADR-019
+- `pnpm eva:sessions` derived view — zero-write, parses `ps` + `~/.claude/projects/*.jsonl` mtime
+- `eva.json` worktree registry (port + dataDir + owns fields)
+
+## v0.7.2 — 2026-05-11
+
+**iOS GALAXY TELECOM team signing + Build 52 install**
+
+- `DEVELOPMENT_TEAM` switched to `23PRXWBRNH` (GALAXY TELECOM)
+- `xcodebuild -allowProvisioningDeviceRegistration` for iPhone register
+
+## v0.7.1-M2gamma — 2026-05-11
+
+**iOS M2-γ prep**
+
+- iOS rename complete + voice telemetry + offline map + TestFlight playbook
+
+## v0.7.0-M2 — 2026-05-11
+
+**M2 milestone — Intent Classifier v1**
+
+- Rules-first depth × domain classifier
+- memory.db schema v4 → v5
+- `orchestrator.runIntent` integrates `classify()`
+
+## v0.6.0 — 2026-05-05
+
+**Layered-spiral delivery + Vessel foundation**
+
+- Layered Spiral Delivery principle codified in CLAUDE.md §0.5
+- Vessel kernel migration (PR #39) + eva:sessions (PR #40) + intent-v1 (PR #41)
+
+## v0.5.0 — 2026-05-05
+
+**M1 milestone — Context Manager skeleton + harness audit-trail**
+
+- ContextManager + stage-aware prompts
+- Cross-review scaffolding (vessel-architect / pragmatist / risk-officer + cursor-agent cross-reviewer)
+
+## v0.4.x — 2026-05-04 → 2026-05-05
+
+**Pre-Vessel: claude-web → Eva → Vessel migration**
+
+- Notification framework, heartbeat, Inbox, emergency intervention, Telegram (M0.5)
+- iOS native (Seaidea) per-project state + cache + project registry (F1 v3)
+- Voice mode UX polish
 
 ---
 
-# Changelog
+## v0.2.0 — 2026-04-29 (pre-rename history)
 
+Highlight reel only; full list in git log + GitHub release page.
+
+**Features** (selected)
+- Multi-project tabs with parallel runs
+- Voice mode: edge-tts backend (Xiaoxiao), STT cleanup via Claude Haiku, conversation mode
+- Single-port deploy: backend serves frontend `dist` at `/`
+- launchd autostart + caffeinate + offline banner
+- History sessions list with click-to-resume + transcript replay
+- File preview (image / pdf / video / audio / markdown / code) + resizable layout
+- iOS Capacitor wrapper (later deprecated, see v0.4.x for native rewrite)
+- iOS native (Seaidea) M1–M4: SwiftUI shell, WebSocket text chat, permission, PTT, TTS, voice session, lock screen
+- Real-time file tree + viewer sync via chokidar + WS
+- Multimodal: PhotosPicker image attach, `@file` autocomplete
+- Voice: four-layer accuracy boost (DSP, ffmpeg, whisper prompt, vocab cleanup)
+- `/api/projects` + `/api/telemetry` routes
+
+**Fixes** (selected)
+- Auto-retry without `--resume` on stale session id
+- Self-destroying SW + static manifest (iOS PWA black-screen fix)
+- voice: conversation mode accuracy — PCM ring buffer + pre-roll + EWMA
+- voice: iOS PWA TTS playback — unlock + reuse single audio element
+- ios-native: 8 review findings (M4.5) + 3+5 round-2/round-3 fixes
+
+Older releases: see git log + [releases page](https://github.com/Albertsun6/claude-web/releases).
