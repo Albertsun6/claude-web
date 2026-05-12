@@ -7,6 +7,7 @@
 //   aisep --help
 
 import { memoryCommand } from "./commands/memory.js";
+import { reportCommand } from "./commands/report.js";
 import { runCommand } from "./commands/run.js";
 import { verifyCommand } from "./commands/verify.js";
 
@@ -48,6 +49,13 @@ Commands:
       artifacts; update verify.md in place. Avoids full stage re-issue
       when only a single deterministic check needs flipping (Phase 2.D #12).
 
+  aisep report [--workspace <path>] [--out <file>] [--open]
+      Generate single-file HTML report from AISEP run state. Includes
+      stage timeline (Mermaid Gantt), fan-out tree (Mermaid flowchart),
+      stage_run table, trace matrix (REQ→ADR→ZOD→RISK→PATCH), and
+      contract_grep drill-down. Self-contained for client demo + audit
+      evidence (Option E, v0.3+).
+
   aisep --help / -h
       Show this message.
 `;
@@ -68,6 +76,8 @@ async function main(): Promise<number> {
       return memoryCommand(argv.slice(1));
     case "verify":
       return verifyCommand(argv.slice(1));
+    case "report":
+      return reportCommand(argv.slice(1));
     default:
       console.error(`[aisep] Unknown command: ${command}\n`);
       console.error(HELP);
