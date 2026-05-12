@@ -83,6 +83,45 @@ interface SpawnResult {
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const KILL_GRACE_MS = 5_000;
 
+// F6 (2026-05-13): Anthropic backend has an undocumented per-account burst
+// limiter that throttles ~3-4 concurrent `claude --print` sessions started
+// in quick succession (anthropics/claude-code#53922). When tripped, the
+// CLI exits non-zero with stderr containing patterns below. AISEP detects
+// these and retries with 30s / 60s / 120s backoff (max 3 retries, total
+// max wait 3.5 min) before giving up.
+//
+// Patterns are matched against stderr (case-insensitive). Add new patterns
+// here as Anthropic's wording evolves.
+const BURST_LIMIT_PATTERNS: readonly RegExp[] = [
+  /Server is temporarily limiting requests/i,
+  /\bRate limited\b/i,
+  /\b429\b/,
+];
+
+const BURST_RETRY_DELAYS_MS: readonly number[] = [30_000, 60_000, 120_000];
+
+export function isBurstLimitError(stderr: string): boolean {
+  return BURST_LIMIT_PATTERNS.some((re) => re.test(stderr));
+}
+
+function sleepAbortable(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error("aborted during burst-limit backoff"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new Error("aborted during burst-limit backoff"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export class ClaudeExecutor implements StageExecutor {
   constructor(
     private readonly compiler: PromptCompiler,
@@ -129,16 +168,48 @@ export class ClaudeExecutor implements StageExecutor {
     ];
     const startedAt = Date.now();
 
-    const spawnResult = await spawnClaude({
-      bin,
-      argv,
-      cwd: args.workspace.cwd,
-      promptText,
-      timeoutMs: this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      // v0.3 Stage 3.1: propagate sibling-failure cancel via AbortSignal
-      // (passed by runner.runFanOutParent). Non-fan-out paths omit it.
-      ...(args.signal !== undefined ? { signal: args.signal } : {}),
-    });
+    // F6 (2026-05-13): wrap spawnClaude in burst-limit retry loop.
+    // Anthropic backend throttles ~3-4 concurrent sessions
+    // (anthropics/claude-code#53922). Retry transparently on detected
+    // burst-limit errors; surface real failures (non-burst stderr or
+    // timeouts) immediately.
+    let spawnResult: SpawnResult;
+    let burstRetries = 0;
+    while (true) {
+      spawnResult = await spawnClaude({
+        bin,
+        argv,
+        cwd: args.workspace.cwd,
+        promptText,
+        timeoutMs: this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        // v0.3 Stage 3.1: propagate sibling-failure cancel via AbortSignal
+        // (passed by runner.runFanOutParent). Non-fan-out paths omit it.
+        ...(args.signal !== undefined ? { signal: args.signal } : {}),
+      });
+      // Success or hard timeout → don't retry. Timeouts are a different
+      // failure mode and should be visible to the runner / user.
+      if (spawnResult.exitCode === 0 || spawnResult.timedOut) break;
+      // Non-burst failure → surface immediately (compile error / model
+      // refusal / etc.).
+      if (!isBurstLimitError(spawnResult.stderr)) break;
+      // Out of retries → give up.
+      if (burstRetries >= BURST_RETRY_DELAYS_MS.length) break;
+      const delayMs = BURST_RETRY_DELAYS_MS[burstRetries]!;
+      console.warn(
+        `[aisep claude-executor] burst limit detected on stage="${args.stage}"` +
+          (args.subStageName ? ` subStage="${args.subStageName}"` : "") +
+          `; retry ${burstRetries + 1}/${BURST_RETRY_DELAYS_MS.length} after ${delayMs}ms backoff`,
+      );
+      try {
+        await sleepAbortable(delayMs, args.signal);
+      } catch {
+        // Aborted mid-backoff (parent fan-out abort) — stop retrying;
+        // the last spawnResult stays as our final result, runner sees it
+        // as "failed" and routes accordingly.
+        break;
+      }
+      burstRetries += 1;
+    }
 
     const endedAt = Date.now();
     const ok = spawnResult.exitCode === 0 && !spawnResult.timedOut;
@@ -161,7 +232,9 @@ export class ClaudeExecutor implements StageExecutor {
           exitCode: spawnResult.exitCode,
           error: spawnResult.timedOut
             ? `claude --print timed out after ${this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms`
-            : spawnResult.stderr.slice(0, 500),
+            : (burstRetries > 0
+                ? `[burst-limited, ${burstRetries} retries exhausted] `
+                : "") + spawnResult.stderr.slice(0, 500),
           startedAt,
           endedAt,
         },

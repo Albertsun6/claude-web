@@ -63,6 +63,29 @@ implement work — the chain stopped at SIGTERM after 5 min before the
 patch.diff finished rendering. Bumped to 10 min as the new default; if
 your task hits the wall again, raise it per-run.
 
+### Burst-limit auto-retry (v0.3 F6, 2026-05-13)
+
+Anthropic's backend has an undocumented per-account burst limiter that
+throttles roughly 3-4 concurrent `claude --print` sessions started in
+quick succession (anthropics/claude-code#53922). AISEP's `ClaudeExecutor`
+auto-detects burst-limit errors in stderr and retries with **30s / 60s /
+120s backoff** (max 3 retries; total max extra wait 3.5 min).
+
+Detection patterns (case-insensitive, in stderr):
+- `Server is temporarily limiting requests`
+- `Rate limited`
+- HTTP `429`
+
+You'll see a `[aisep claude-executor] burst limit detected on stage="..."
+; retry N/3 after Xms backoff` warning when a retry triggers. If all 3
+retries exhaust, the attempt's `error` field is prefixed with
+`[burst-limited, 3 retries exhausted]` so it's visible in
+`state.json` / `report.html` forensic.
+
+Hard timeouts (`--claude-timeout-ms`) do **not** trigger retry — they
+indicate a different failure mode (model still running when budget
+expired) and are surfaced immediately.
+
 ### Fan-out (v1, aisep-protocol ≥ 0.3.0)
 
 For tasks naturally split into 2–4 parallel sub-implements (backend +
