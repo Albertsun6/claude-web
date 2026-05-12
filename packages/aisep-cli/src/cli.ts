@@ -17,6 +17,13 @@ Commands:
       Run the 10-stage chain on a workspace using MockStageExecutor.
       (Real claude-CLI execution will arrive in Phase 2.5 via aisep-agents.)
 
+  aisep run --real --workspace <path> [--parallel --children a,b,c [--concurrency N]]
+      v0.3 (v1 fan-out Stage 2.cli-A): when --parallel is on AND
+      --children lists >= 2 sub-stage names, the implement stage fans
+      out into N parallel child stage_runs. concurrency defaults to 4
+      (plan-roadmap hard ceiling); user can ratchet DOWN via --concurrency.
+      Sub-stage names must match /^[A-Za-z0-9_.:-]+$/ (RISK-Q4-c).
+
   aisep memory show [--workspace <path>] [workspace|global]
       List memory records of the given tier (default: workspace pending).
 
