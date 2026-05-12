@@ -11,5 +11,5 @@
 // - Reevaluate zod 4 migration: JSON Schema export, metadata/registry,
 //   performance/error-format improvements.
 
-export const AISEP_PROTOCOL_VERSION = "0.2.0";
+export const AISEP_PROTOCOL_VERSION = "0.3.0";
 export const MIN_CLIENT_VERSION = "0.1.0";

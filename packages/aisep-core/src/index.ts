@@ -6,3 +6,4 @@ export * from "./state-machine.js";
 export * from "./store.js";
 export * from "./runner.js";
 export * from "./m5-cap.js";
+export * from "./scheduler.js";
