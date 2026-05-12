@@ -19,11 +19,16 @@ Commands:
       (Real claude-CLI execution will arrive in Phase 2.5 via aisep-agents.)
 
   aisep run --real --workspace <path> [--parallel --children a,b,c [--concurrency N]]
+                                       [--claude-timeout-ms <ms>]
       v0.3 (v1 fan-out Stage 2.cli-A): when --parallel is on AND
       --children lists >= 2 sub-stage names, the implement stage fans
       out into N parallel child stage_runs. concurrency defaults to 4
       (plan-roadmap hard ceiling); user can ratchet DOWN via --concurrency.
       Sub-stage names must match /^[A-Za-z0-9_.:-]+$/ (RISK-Q4-c).
+
+      --claude-timeout-ms overrides per-attempt `claude --print` timeout
+      (default 600000 ms = 10 min; range 60000..1800000). Bump for heavy
+      implement stages on real-business tasks (Pilot-10 finding).
 
   aisep memory show [--workspace <path>] [workspace|global]
       List memory records of the given tier (default: workspace pending).

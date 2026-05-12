@@ -48,6 +48,12 @@ interface RunArgs {
   parallelChildren?: string[];
   /** v0.3: concurrency cap for fan-out (default 4 per plan roadmap; user-tunable). */
   concurrency?: number;
+  /**
+   * v0.3 (Pilot-10 finding 2026-05-13): override per-attempt `claude --print`
+   * subprocess timeout. Default in claude-executor.ts is 10 minutes; bump
+   * for heavy implement stages or ratchet down for quick smoke runs.
+   */
+  claudeTimeoutMs?: number;
 }
 
 /**
@@ -116,7 +122,10 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
   };
 
   const executor: StageExecutor = args.real
-    ? new ClaudeExecutor(new PromptCompiler(), { model: args.model })
+    ? new ClaudeExecutor(new PromptCompiler(), {
+        model: args.model,
+        ...(args.claudeTimeoutMs !== undefined ? { timeoutMs: args.claudeTimeoutMs } : {}),
+      })
     : new MockStageExecutor();
   const runner = new AisepRunner({
     store,
@@ -214,7 +223,7 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
   return 0;
 }
 
-function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
+export function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
   const args: RunArgs = { workspace: process.cwd(), dry: false, real: false };
   for (let i = 0; i < rawArgs.length; i += 1) {
     const arg = rawArgs[i]!;
@@ -287,6 +296,18 @@ function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
         return undefined;
       }
       args.concurrency = n;
+    } else if (arg === "--claude-timeout-ms") {
+      const next = rawArgs[++i];
+      const n = Number(next);
+      // 60s lower bound: anything lower is almost certainly a mistake
+      // (claude --print cold-start alone takes ~10s). 30min upper bound:
+      // prevents pathological hang-forever runs from accidentally being
+      // dispatched and locking up the workspace.
+      if (!Number.isFinite(n) || n < 60_000 || n > 30 * 60 * 1000) {
+        console.error(`[aisep run] --claude-timeout-ms must be in [60000, 1800000] ms; got "${next}"`);
+        return undefined;
+      }
+      args.claudeTimeoutMs = n;
     } else {
       console.error(`[aisep run] Unknown arg: ${arg}`);
       return undefined;

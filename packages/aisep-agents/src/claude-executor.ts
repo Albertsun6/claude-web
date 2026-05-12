@@ -75,7 +75,12 @@ interface SpawnResult {
   durationMs: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+// Per-attempt timeout for `claude --print` subprocess. Bumped from 5min to
+// 10min in v0.3 (Pilot-10 finding 2026-05-13): real-business implement
+// stage with multi-artifact upstream + full patch.diff render hits 5min
+// hard wall before the model finishes. CLI exposes `--claude-timeout-ms`
+// to ratchet up further per-run.
+const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const KILL_GRACE_MS = 5_000;
 
 export class ClaudeExecutor implements StageExecutor {

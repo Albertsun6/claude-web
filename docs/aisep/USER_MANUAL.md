@@ -49,7 +49,19 @@ aisep run --workspace <path> --dry          # use MockStageExecutor (no token sp
 aisep run --workspace <path> --real --stage architecture
 aisep run --workspace <path> --real --stages intake,research,plan
 aisep run --workspace <path> --real --phase architecture-brief
+aisep run --workspace <path> --real --claude-timeout-ms 900000   # 15min per attempt
 ```
+
+### `--claude-timeout-ms` (v0.3, Pilot-10 finding)
+
+Per-attempt `claude --print` subprocess timeout. Default **600,000 ms
+(10 min)**; range `[60000, 1800000]` (1 min to 30 min). Bump for heavy
+implement stages on real-business tasks; ratchet down for quick smoke runs.
+
+Pilot-10 (2026-05-13) found the old 5-min default insufficient for real
+implement work — the chain stopped at SIGTERM after 5 min before the
+patch.diff finished rendering. Bumped to 10 min as the new default; if
+your task hits the wall again, raise it per-run.
 
 ### Fan-out (v1, aisep-protocol ≥ 0.3.0)
 
