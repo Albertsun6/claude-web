@@ -61,6 +61,32 @@ describe("AisepMemoryStore", () => {
     expect(r!.verifiedBy).toBe("auto");
   });
 
+  it("recordPending rejects empty appliesTo.stage (v0.2 §Change 5a write-path parse + .min(1))", () => {
+    const store = newStore();
+    expect(() =>
+      store.recordPending({
+        stage: "verify",
+        failurePattern: "x",
+        fix: "y",
+        appliesTo: { domain: ["*"], stage: [], techStack: ["*"] },
+      } as Parameters<typeof store.recordPending>[0]),
+    ).toThrow();
+    expect(store.listWorkspacePending()).toHaveLength(0);
+  });
+
+  it("recordGlobal rejects empty appliesTo.stage (v0.2 §Change 5a + .min(1))", () => {
+    const store = newStore();
+    expect(() =>
+      store.recordGlobal({
+        stage: "verify",
+        failurePattern: "x",
+        fix: "y",
+        appliesTo: { domain: ["*"], stage: [], techStack: ["*"] },
+      } as Parameters<typeof store.recordGlobal>[0]),
+    ).toThrow();
+    expect(store.listGlobalVerified()).toHaveLength(0);
+  });
+
   it("recordGlobal dedups on (stage, failurePattern[:100])", () => {
     const store = newStore();
     const first = store.recordGlobal({

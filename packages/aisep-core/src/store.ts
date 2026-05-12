@@ -197,7 +197,13 @@ export class AisepStore {
     return this.state.attempts.filter((a) => a.stageRunId === stageRunId);
   }
 
-  /** Most recent attempt for a stage_run (used for M4 ping-pong cap by aisep-agents). */
+  /** Most recent attempt for a stage_run (used for M5 ping-pong cap;
+   *  aisep-protocol v0.2 widened M5 counter set to `revise_required` ∪
+   *  `request_reverify` — see docs/aisep/02_methodology-v0.1.md L343.
+   *  Prior comment incorrectly cited M4 which is the contract-freeze
+   *  red line, per Phase 2.D #7 rename. v0.2 carve-out: actual M5
+   *  enforcement deferred to Phase 2.E baseline; see
+   *  packages/aisep-protocol/src/attempt.ts AisepAttempt JSDoc. */
   latestAttemptN(stageRunId: string): number {
     const attempts = this.listAttemptsByStageRun(stageRunId);
     if (attempts.length === 0) return 0;

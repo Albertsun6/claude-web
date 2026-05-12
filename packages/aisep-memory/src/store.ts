@@ -16,6 +16,7 @@ import { randomBytes } from "node:crypto";
 
 import {
   AisepEvolutionLogV1Schema,
+  AisepMemoryRecordSchema,
   type AisepEvolutionLogV1,
   type AisepMemoryRecord,
   type AisepStage,
@@ -27,16 +28,38 @@ function emptyLog(): AisepEvolutionLogV1 {
   return { version: 1, records: [] };
 }
 
-function loadFile(path: string): AisepEvolutionLogV1 {
+/**
+ * Inspector path (aisep-protocol v0.2 §Change 5b): fail-open to empty
+ * on parse failure. Safe for read-only stats / list / retrieve — does
+ * NOT trigger a write that could overwrite a parseable file with
+ * `emptyLog()` content.
+ */
+function loadFileSafe(path: string): AisepEvolutionLogV1 {
   if (!existsSync(path)) return emptyLog();
   const raw = readFileSync(path, "utf-8");
   try {
     const parsed = JSON.parse(raw);
     return AisepEvolutionLogV1Schema.parse(parsed);
   } catch {
-    // newaisep behavior: corrupt file falls back to empty (server is truth)
+    // newaisep behavior: corrupt file falls back to empty (server is truth).
+    // Inspector path only — mutators MUST use loadFileStrict instead.
     return emptyLog();
   }
+}
+
+/**
+ * Read-then-write path (aisep-protocol v0.2 §Change 5b): MUST throw on
+ * parse failure so caller does NOT proceed to overwrite a parseable
+ * file with empty content. Prevents the silent log erasure vector
+ * that would otherwise compound `.min(1)` tightening with v0.1's
+ * fallback-to-empty behavior (Phase 2.D cross-review A.F8 + B.F1 BLOCKER).
+ */
+function loadFileStrict(path: string): AisepEvolutionLogV1 {
+  if (!existsSync(path)) return emptyLog();
+  const raw = readFileSync(path, "utf-8");
+  // Let parse errors propagate to caller.
+  const parsed = JSON.parse(raw);
+  return AisepEvolutionLogV1Schema.parse(parsed);
 }
 
 function saveFile(path: string, log: AisepEvolutionLogV1): void {
@@ -89,7 +112,7 @@ export class AisepMemoryStore {
   recordPending(
     input: Omit<AisepMemoryRecord, "id" | "source" | "shipCount" | "promoteCount" | "verifiedBy">,
   ): AisepMemoryRecord {
-    const log = loadFile(this.workspacePath);
+    const log = loadFileStrict(this.workspacePath);
     const record: AisepMemoryRecord = {
       ...input,
       id: generateMemoryId(),
@@ -98,6 +121,10 @@ export class AisepMemoryStore {
       shipCount: 0,
       promoteCount: 0,
     };
+    // v0.2 §Change 5a: write-path zod parse. Throws if `.min(1)` on
+    // appliesTo.stage is violated (or any other schema constraint).
+    // Prevents A.F8 silent-log-erasure compound failure.
+    AisepMemoryRecordSchema.parse(record);
     log.records.push(record);
     saveFile(this.workspacePath, log);
     return record;
@@ -120,7 +147,7 @@ export class AisepMemoryStore {
       verifiedBy?: AisepMemoryRecord["verifiedBy"];
     },
   ): AisepMemoryRecord | null {
-    const log = loadFile(this.globalPath);
+    const log = loadFileStrict(this.globalPath);
     const key = `${input.stage}::${input.failurePattern.slice(0, 100)}`;
     const dup = log.records.find(
       (r) => `${r.stage}::${r.failurePattern.slice(0, 100)}` === key,
@@ -136,6 +163,8 @@ export class AisepMemoryStore {
       shipCount: 0,
       promoteCount: 1, // counts as one promote even though it skipped workspace
     };
+    // v0.2 §Change 5a: write-path zod parse (A.F8 + B.F1 BLOCKER).
+    AisepMemoryRecordSchema.parse(record);
     log.records.push(record);
     saveFile(this.globalPath, log);
     return record;
@@ -153,8 +182,8 @@ export class AisepMemoryStore {
    * Returns the count of records newly promoted (excluding duplicates).
    */
   promote(filter: { stage: AisepStage; failurePatternIncludes?: string }, fix: string): number {
-    const workspaceLog = loadFile(this.workspacePath);
-    const globalLog = loadFile(this.globalPath);
+    const workspaceLog = loadFileStrict(this.workspacePath);
+    const globalLog = loadFileStrict(this.globalPath);
 
     const matches = workspaceLog.records.filter(
       (r) =>
@@ -186,6 +215,8 @@ export class AisepMemoryStore {
         fix,                       // human-verified fix overrides pending text
         promoteCount: (m.promoteCount ?? 0) + 1,
       };
+      // v0.2 §Change 5a: write-path zod parse on each promoted record.
+      AisepMemoryRecordSchema.parse(verified);
       globalLog.records.push(verified);
       promoted += 1;
     }
@@ -201,7 +232,8 @@ export class AisepMemoryStore {
    * union (R11 red line).
    */
   retrieve(query: MemoryRetrievalQuery): AisepMemoryRecord[] {
-    const log = query.tier === "workspace" ? loadFile(this.workspacePath) : loadFile(this.globalPath);
+    // Inspector path — safe fallback if file is corrupt (read-only query).
+    const log = query.tier === "workspace" ? loadFileSafe(this.workspacePath) : loadFileSafe(this.globalPath);
     const filtered = log.records.filter((r) => {
       if (r.stage !== query.stage) return false;
 
@@ -226,8 +258,8 @@ export class AisepMemoryStore {
 
   /** Stats across both tiers. */
   stats(): MemoryStats {
-    const workspaceLog = loadFile(this.workspacePath);
-    const globalLog = loadFile(this.globalPath);
+    const workspaceLog = loadFileSafe(this.workspacePath);
+    const globalLog = loadFileSafe(this.globalPath);
 
     const perStage: Partial<Record<AisepStage, number>> = {};
     for (const r of [...workspaceLog.records, ...globalLog.records]) {
@@ -243,9 +275,9 @@ export class AisepMemoryStore {
 
   /** Inspector helpers (used by aisep-cli `memory show`). */
   listWorkspacePending(): AisepMemoryRecord[] {
-    return loadFile(this.workspacePath).records;
+    return loadFileSafe(this.workspacePath).records;
   }
   listGlobalVerified(): AisepMemoryRecord[] {
-    return loadFile(this.globalPath).records;
+    return loadFileSafe(this.globalPath).records;
   }
 }
