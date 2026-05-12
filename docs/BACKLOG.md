@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T05:00:00Z
+**最近更新**: 2026-05-12T05:30:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -11,20 +11,6 @@
 
 ```yaml
 items:
-  - id: installer-auto-build-ci
-    title: Vessel-Backend .pkg 自动构建 — push tag 触发 GitHub Actions → 自动 release
-    priority: P1
-    size: M
-    status: in_progress
-    assigned_kind: main
-    parallel_safe_files:
-      - ".github/workflows/release-pkg.yml"
-      - "scripts/build-pkg.sh"
-      - "docs/RELEASE_FLOW.md"
-    depends_on: []
-    note: "Trigger: push tag v*.*.* → macos-15 (arm64) runner → checkout → pnpm install → bash scripts/build-pkg.sh → gh release upload。开 GitHub Actions 后端构建 minutes (macos runner ~10x billing) 注意 quota；如 quota 紧可移到 self-hosted Mac mini。Intel 二份 build 是另一条 backlog (cross-arch)。"
-    refs: ["release:v0.8.1", "proposal:installer §F"]
-
   - id: installer-auto-update
     title: Vessel-Backend .pkg 自动更新机制 — Sparkle 或自研 GitHub-API polling
     priority: P2
@@ -201,4 +187,11 @@ items:
     completed_at: 2026-05-12T04:30:00Z
     refs: ["retro:docs/retrospectives/HEALTH_CHECK_2026-05-12.md"]
     note: "1 BLOCKER (test:cli cleanup race) + 2 MAJOR (eva.json drift / 3 launchd backends) + 3 MINOR (untracked files / 本地 branch). 修复 spawn 独立 backlog 项"
+
+  - id: installer-auto-build-ci
+    title: Vessel-Backend .pkg 自动构建 — push tag 触发 GitHub Actions → 自动 release
+    status: done
+    completed_at: 2026-05-12T05:30:00Z
+    refs: ["pr:#59", "pr:#60", "release:v0.8.2", "commit:b90677f"]
+    note: "release.yml 加 build-pkg job (macos-15 arm64 runner) → bash scripts/build-pkg.sh → gh release upload --clobber。验证：v0.8.2-rc1 测试 + v0.8.2 正式 release，2m55s/2m50s wall。CI pkg 10425 文件，比本地 20965 干净 (无 ._ AppleDouble 资源叉)。Intel x64 / code signing 留作后续 backlog"
 ```
