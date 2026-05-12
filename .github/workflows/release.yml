@@ -22,19 +22,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-pkg:
-    # Build the macOS .pkg installer on both arm64 (macos-15) and Intel x64
-    # (macos-13) runners and attach to the release stub created by the
-    # `release` job. Public-repo macOS minutes are free.
+    # Build the macOS .pkg installer on an arm64 GHA runner and attach it to
+    # the release stub created by the `release` job. Public-repo macOS minutes
+    # are free, so this runs on every v* tag push.
+    #
+    # Intel x64: dropped from CI in v0.8.6 — GHA macos-13 runner capacity is
+    # too low (v0.8.5 x64 job queued 19h with no runner). Intel users build
+    # locally via `bash scripts/build-pkg.sh` on an Intel Mac (see
+    # installer/README.md "Intel Mac 构建说明").
     needs: release
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-13
-            arch: x64
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,19 +47,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build .pkg (${{ matrix.arch }})
-        # Downloads Node 24.12.0 darwin-${{ matrix.arch }}, rebuilds
-        # better-sqlite3 against bundled Node ABI, trims devDeps, pkgbuild.
-        # build-pkg.sh refuses cross-build, so the host arch must match.
+      - name: Build .pkg
+        # Downloads Node 24.12.0 darwin-arm64, rebuilds better-sqlite3 against
+        # bundled Node ABI, trims devDeps, pkgbuild → dist/Vessel-Backend-v*.pkg
         run: bash scripts/build-pkg.sh
 
       - name: Upload .pkg to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PKG_PATH=$(ls dist/Vessel-Backend-v*-${{ matrix.arch }}.pkg | head -1)
+          PKG_PATH=$(ls dist/Vessel-Backend-v*-arm64.pkg | head -1)
           if [ -z "$PKG_PATH" ] || [ ! -f "$PKG_PATH" ]; then
-            echo "::error::No .pkg produced under dist/ for ${{ matrix.arch }}"
+            echo "::error::No .pkg produced under dist/"
             exit 1
           fi
           echo "Uploading: $PKG_PATH ($(du -h "$PKG_PATH" | awk '{print $1}'))"

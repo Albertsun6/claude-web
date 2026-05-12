@@ -4,6 +4,23 @@ Significant changes per release. Per-PR detail in each [release page](https://gi
 
 Versioning: `v<MAJOR>.<MINOR>.<PATCH>[-Mx]`. `Mx` suffix marks milestone tags.
 
+## v0.8.6 — 2026-05-13
+
+**CI simplification — drop Intel x64 from CI**
+
+- GHA `macos-13` Intel runner capacity is unreliable (v0.8.5 x64 job queued 19h with no runner pickup). Reverted PR #66's matrix; CI now builds only arm64.
+- Intel users build locally on an Intel Mac via `bash scripts/build-pkg.sh` (see [installer/README.md](installer/README.md))
+- `scripts/build-pkg.sh` itself unchanged — still detects host arch + supports both
+
+## v0.8.5 — 2026-05-12
+
+**iOS UpdateBanner mirror + test coverage + CHANGELOG**
+
+- iOS Seaidea `UpdateBannerView.swift` + `VersionAPI.swift` — parity with web UpdateBanner ([PR #64](https://github.com/Albertsun6/claude-web/pull/64))
+- 8 unit tests for `getCurrentVersion` / `parsePkgVersion` / `compareVersions` + ci.yml step ([PR #63](https://github.com/Albertsun6/claude-web/pull/63))
+- Consolidated CHANGELOG.md (this file) replaces auto-generated conventional-commits dump
+- (CI matrix change to Intel x64 in PR #66 reverted in v0.8.6 — see above)
+
 ## v0.8.3 — 2026-05-12
 
 **Auto-update banner triggers for v0.8.2 users**

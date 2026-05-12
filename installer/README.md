@@ -17,9 +17,24 @@ cd /path/to/Vessel
 bash scripts/build-pkg.sh
 ```
 
-产物：`dist/Vessel-Backend-v<version>-arm64.pkg`（约 120 MB）。
+产物：`dist/Vessel-Backend-v<version>-<arch>.pkg`（约 120-190 MB）。`<arch>` 自动检测：Apple Silicon → `arm64`，Intel → `x64`。
 
 干净缓存：`rm -rf build/ installer/cache/`。
+
+### Intel Mac 构建说明（v0.8.6+ CI 只发 arm64）
+
+GitHub Actions 上从 v0.8.6 起仅自动构建 arm64 `.pkg`（macos-13 hosted runner 容量不稳，详见 [CHANGELOG v0.8.6](../CHANGELOG.md)）。Intel Mac 用户需自己在本地 Intel Mac 上跑：
+
+```bash
+git clone https://github.com/Albertsun6/claude-web.git Vessel
+cd Vessel
+pnpm install
+bash scripts/build-pkg.sh
+# → dist/Vessel-Backend-v<version>-x64.pkg
+sudo installer -pkg dist/Vessel-Backend-v<version>-x64.pkg -target /
+```
+
+`scripts/build-pkg.sh` 显式拒绝 cross-build（npm rebuild 不支持），所以必须在 Intel Mac 上跑才能产出 x64 包。
 
 ## 给用户：安装
 
