@@ -1,0 +1,35 @@
+#!/bin/bash
+# Vessel .pkg preinstall — runs as root.
+# Goal: when re-installing or upgrading, stop the currently-running backend
+# (and the legacy claude-web one) BEFORE pkgutil overwrites /usr/local/vessel.
+# Never fail the install — installation is more important than a clean stop.
+
+set -u
+
+# Identify the user the installer is running on behalf of. macOS sets $USER
+# inside Installer.app context; fall back to the console owner otherwise.
+USER_NAME="${USER:-}"
+if [ -z "${USER_NAME}" ] || [ "${USER_NAME}" = "root" ]; then
+  USER_NAME="$(stat -f %Su /dev/console 2>/dev/null || echo "")"
+fi
+
+if [ -z "${USER_NAME}" ] || [ "${USER_NAME}" = "root" ]; then
+  echo "[vessel preinstall] no console user detected — skipping bootout (fresh install)"
+  exit 0
+fi
+
+UID_NUM="$(id -u "${USER_NAME}" 2>/dev/null || echo "")"
+if [ -z "${UID_NUM}" ]; then
+  echo "[vessel preinstall] could not resolve uid for ${USER_NAME} — skipping bootout"
+  exit 0
+fi
+
+# Stop the current Vessel backend (if previously installed via this same .pkg).
+sudo -u "${USER_NAME}" launchctl bootout "gui/${UID_NUM}/com.vessel.backend" 2>/dev/null || true
+
+# Stop the legacy claude-web backend (the pre-rename plist users may still
+# have loaded from ~/Library/LaunchAgents or via promote.sh).
+sudo -u "${USER_NAME}" launchctl bootout "gui/${UID_NUM}/com.claude-web.backend" 2>/dev/null || true
+
+echo "[vessel preinstall] stopped any running backend for ${USER_NAME} (uid ${UID_NUM})"
+exit 0
