@@ -106,6 +106,38 @@ Architecture will not run if plan ends NO-GO.
 
 What architecture must investigate first; which intake unknowns are
 blocking; which research counter-evidence to revisit.
+
+## 7. Implement fan-out declaration (OPTIONAL — v0.3 / v1 fan-out)
+
+If the implement stage is naturally splittable into 2-4 independent
+parallel sub-implements (e.g. backend + frontend + tests; or
+domain-module-1 + domain-module-2 + domain-module-3), emit a
+`parallel:` block. Otherwise omit this section entirely.
+
+```yaml
+parallel:
+  - id: T-impl-a
+    name: backend                          # /^[A-Za-z0-9_.:-]+$/ (shell-safe per RISK-Q4-c)
+    affects: ^packages/backend/             # path regex; MUST NOT overlap with other entries
+  - id: T-impl-b
+    name: frontend
+    affects: ^packages/frontend/
+  - id: T-impl-c
+    name: tests
+    affects: ^(packages/.*/__tests__|tests)/
+```
+
+Hard rules for the `parallel` block:
+- ≥ 2 entries (a 1-entry parallel isn't a fan-out — use single
+  implement instead)
+- ≤ 4 entries (plan-roadmap concurrency cap; SmartBear 400-LOC
+  research per Pilot-02 motivates keeping per-patch attention bounded)
+- `name` MUST match `/^[A-Za-z0-9_.:-]+$/` (shell-safe + becomes
+  filename `implement-<name>.md`)
+- `affects` regex MUST NOT overlap with any other entry's `affects`
+  (verify stage validator will reject overlaps as plan bug)
+- No nested fan-out in v1 (child sub-implements cannot themselves
+  declare `parallel:`)
 ```
 
 ## Hard limits

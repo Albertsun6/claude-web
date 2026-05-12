@@ -43,6 +43,20 @@ export interface StageExecutorArgs {
   upstreamArtifacts: AisepArtifact[];
   /** Memory hits injected from aisep-memory.retrieve(). */
   memoryHits: unknown[];   // AisepMemoryRecord[] - kept loose to avoid coupling here
+  /**
+   * v0.3 (v1 fan-out Stage 2.cli-B): when this stage_run is a fan-out
+   * child (`fanOutRole === "child"`), this is the sub-stage name
+   * declared by the parent (e.g. "backend"/"frontend"/"tests").
+   *
+   * Executor uses it to:
+   * - flow `--sub-name <name>` to the claude CLI argv
+   * - name the output file `<stage>-<subName>.md` instead of `<stage>.md`
+   * - render template context about which sub-implement this is
+   *
+   * Caller responsibility: matches /^[A-Za-z0-9_.:-]+$/ (RISK-Q4-c).
+   * Absent for fanOutRole="normal" | "parent".
+   */
+  subStageName?: string;
 }
 
 export interface StageExecutorResult {
@@ -236,10 +250,16 @@ export class AisepRunner {
       }
 
       // Dispatch the batch concurrently. Each Promise resolves with the
-      // final AisepStageRun (status=succeeded|failed).
+      // final AisepStageRun (status=succeeded|failed). v0.3
+      // (Stage 2.cli-B): flow each child's subStageName to the executor
+      // by id-to-name lookup against the declared `args.children` order.
+      const childNameById = new Map<string, string>();
+      for (let i = 0; i < childRuns.length; i += 1) {
+        childNameById.set(childRuns[i]!.id, args.children[i]!.name);
+      }
       const finished = await Promise.all(
         decision.readyToDispatch.map((id) =>
-          this.executeStageRunBody(id, args.stage, "none"),
+          this.executeStageRunBody(id, args.stage, "none", childNameById.get(id)),
         ),
       );
       for (const f of finished) {
@@ -306,6 +326,7 @@ export class AisepRunner {
     stageRunId: string,
     stage: AisepStage,
     phase: AisepStagePhase,
+    subStageName?: string,
   ): Promise<AisepStageRun> {
     const { store, workspace, executor } = this.opts;
 
@@ -332,6 +353,7 @@ export class AisepRunner {
         workspace,
         upstreamArtifacts,
         memoryHits,
+        ...(subStageName !== undefined ? { subStageName } : {}),
       });
 
       for (const a of result.producedArtifacts) {

@@ -1,9 +1,21 @@
 {{systemPrompt}}
 
-# Stage: implement — produce the patch
+# Stage: implement — produce the patch{{#if isFanOutChild}} (sub-stage: `{{subStageName}}`){{/if}}
 
 ## Goal
 
+{{#if isFanOutChild}}
+**Fan-out child mode** (v0.3 / v1 fan-out): you are sub-implement
+`{{subStageName}}` of a parallel implement parent. Other siblings are
+running concurrently — DO NOT touch files outside your `affects:`
+regex declared in plan.md §7 `parallel:` block (overlap with sibling
+patches is a parent-level scope violation).
+
+Your output file is `implement-{{subStageName}}.md` (NOT `implement.md`).
+The parent stage will aggregate all sub-implements into a `patch_set`
+manifest after every child succeeds.
+
+{{/if}}
 Read the **frozen contract** (`contract/*` upstream) and the **task DAG**
 (`plan.md`), then produce a single unified-diff patch that implements
 EXACTLY what the contract specifies. Nothing more, nothing less.

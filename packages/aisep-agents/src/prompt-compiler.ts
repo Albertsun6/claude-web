@@ -104,6 +104,22 @@ export interface CompilerRenderArgs {
   sliceIndex?: number;
   sliceTotal?: number;
   stageGoal?: string;
+  /**
+   * v0.3 (v1 fan-out Stage 2.cli-B): when this stage is a fan-out child
+   * (`fanOutRole === "child"`), this is the sub-stage name declared by
+   * the parent (e.g. "backend" / "frontend" / "tests"). Template uses
+   * this to:
+   * - name the output file `implement-<subStageName>.md` (instead of
+   *   `implement.md`)
+   * - emit context like "this is the {{subStageName}} sub-implement"
+   *
+   * Caller responsibility: matches /^[A-Za-z0-9_.:-]+$/ (RISK-Q4-c
+   * shell-safe constraint; same regex as AisepReviewVerdict
+   * .requestReverify.checkId).
+   *
+   * Absent for `fanOutRole === "normal" | "parent"`.
+   */
+  subStageName?: string;
 }
 
 export interface CompilerRenderResult {
@@ -132,6 +148,9 @@ export class PromptCompiler {
       sliceIndex: args.sliceIndex,
       sliceTotal: args.sliceTotal,
       stageGoal: args.stageGoal ?? `Execute the AISEP ${args.stage} stage.`,
+      /** v0.3 (v1 fan-out Stage 2.cli-B): fan-out child sub-stage name. */
+      subStageName: args.subStageName,
+      isFanOutChild: args.subStageName !== undefined,
     };
 
     const promptText = template(data);
