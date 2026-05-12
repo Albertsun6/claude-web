@@ -116,3 +116,92 @@ truncation，跟这次的"模型实际 reasoning 时间不够"是不同的根因
 - Run log: `/tmp/aisep-pilot-10-msg-fold-ux-2026-05-13/.run-log.txt`
 - State snapshot: `/tmp/aisep-pilot-10-msg-fold-ux-2026-05-13/.aisep/state.json`
 - Seed: `/tmp/aisep-pilot-10-msg-fold-ux-2026-05-13/seed.txt`
+
+---
+
+## Pilot-10b — re-run after F1+F2 fix (2026-05-13 same day)
+
+After F1 (default 5→10min) + F2 (`--claude-timeout-ms` flag) shipped in
+commit `263b87b`, re-ran the same seed in a fresh workspace
+`/tmp/aisep-pilot-10b-msg-fold-rerun-2026-05-13/` to validate F1 actually
+unblocks real-business implement.
+
+### Outcome: 10/10 stages succeeded — full chain closed
+
+| Stage | Status | Wall (s) | Output size |
+|---|---|---|---|
+| intake | succeeded | 59.4 | 11,366 B |
+| research | succeeded | 67.9 | 11,844 B |
+| plan | succeeded | 76.5 | 10,747 B |
+| architecture (brief) | succeeded | 158.0 | (in architecture/brief.md) |
+| contract | succeeded | 102.5 | 7,577 B |
+| **implement** | **succeeded** | **275.1** | 3,637 B (manifest + diff) |
+| verify | succeeded | 64.2 | 5,607 B (17 contract_grep checks, all ok) |
+| review | succeeded | 142.2 | 3,823 B |
+| integrate | succeeded | 14.6 | 2,559 B |
+| retrospect | succeeded | 48.9 | 10,109 B |
+
+Total wall: 1,009 s ≈ **16.8 min**.
+
+### Key finding 1 — implement landed at 275s (4.6 min)
+
+Pilot-10a hit 300s SIGTERM; Pilot-10b finished in 275s **just under the
+old 5min wall** but with 10min default the run has 5min headroom. The
+right reading: 5min is on the edge of variance; 10min is comfortably
+safe. F1 default 10min validated.
+
+### Key finding 2 — review.md is a real fact-check, not template
+
+Reviewer-cross stage opened `packages/frontend/src/styles.css` +
+`MessageItem.tsx` line 319 and 363 to fact-check the implementer's
+gradient color substitution. Found that `var(--tool)` only matches 1 of
+2 callsites — `.tool-use` (#2d2f3a) yes, `.tool-result` (#20242e) no.
+Marked `major` with `accept-with-followup`, suggested 2 concrete fixes
+(prop drilling vs CSS lifting). Plus a `minor` about the abs-positioned
+recollapse button potentially overlapping text without paddingRight on
+the wrapper. This is genuine cross-correctness work, not surface
+review.
+
+### Key finding 3 — integrate.md correctly triages pass_with_comments
+
+`ready_to_integrate: true` + `target_branch: dev` + `squash` strategy +
+2 `deferred_followups` (the gradient + text-overlap findings) — NOT
+blockers. This matches the v0.3 integrate.hbs contract: comments
+become followups, only `revise-required` blocks. Migration safe,
+rollback_path filled with literal `git revert --no-edit HEAD`.
+
+### Key finding 4 — `report.html` is 28,732 bytes (2.5× Pilot-10a)
+
+Full 10-stage timeline, 17 contract_grep checks drill-down, trace
+matrix populated. Open in browser → all 5 sections render. Visual
+audit-ready.
+
+### Key finding 5 — incidental HELP template literal bug
+
+First Pilot-10b run **failed at CLI parse** because my F2 HELP text
+used `` `claude --print` `` (backticks inside a backtick-template
+literal). tsx/esbuild rejected. Test suite didn't catch because no
+test imports `cli.ts` directly (only `runCommand` / `reportCommand`
+are imported, HELP string is module-scope but never parsed by Vitest).
+
+**Phase 2.F backlog new item F5 (low priority)**: add a smoke test
+that imports `cli.ts` (or runs `aisep --help` via spawn) so HELP parse
+errors don't sneak past CI.
+
+### Dogfood verdict
+
+**AISEP produces real value on real-business frontend bugs** when not
+artificially constrained by mock-era defaults. The 10-stage chain is a
+working evidence pipeline; review + integrate are not theater. Two
+sessions of work (Pilot-04 hand-off truncation fix + Pilot-10 timeout
+fix) have removed the two main mock-era barriers; remaining gaps
+(F3 retry / F4 incremental prompt / F5 HELP smoke test) are
+incremental.
+
+### Pilot-10b files
+
+- Workspace: `/tmp/aisep-pilot-10b-msg-fold-rerun-2026-05-13/`
+- Report: `/tmp/aisep-pilot-10b-msg-fold-rerun-2026-05-13/report.html`
+  (28,732 bytes, open in browser)
+- Cost (rough): ~16.8 min wall + Sonnet 4.6 token usage for 10 attempts
+  (no parallel fan-out, sequential)

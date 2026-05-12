@@ -26,7 +26,7 @@ Commands:
       (plan-roadmap hard ceiling); user can ratchet DOWN via --concurrency.
       Sub-stage names must match /^[A-Za-z0-9_.:-]+$/ (RISK-Q4-c).
 
-      --claude-timeout-ms overrides per-attempt `claude --print` timeout
+      --claude-timeout-ms overrides per-attempt 'claude --print' timeout
       (default 600000 ms = 10 min; range 60000..1800000). Bump for heavy
       implement stages on real-business tasks (Pilot-10 finding).
 
