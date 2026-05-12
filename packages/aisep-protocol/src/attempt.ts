@@ -94,17 +94,21 @@ export type AisepAgentInvocation = z.infer<typeof AisepAgentInvocationSchema>;
  * docs/aisep/02_methodology-v0.1.md L343) is designed for `aisep-core`
  * runtime enforcement keyed on `stage === "review"`, NOT schema.
  *
- * **v0.2 carve-out**: aisep-core enforcement code is NOT yet implemented
- * — runner currently lacks the cross-attempt verdict counter. M5
- * enforcement is gated on a future Phase 2.E baseline (see
- * `docs/proposals/aisep-protocol-v0.2-review-reverify-and-applies-to.md`
- * §6b carve-out + arbitration log §"Implementation plan"). v0.2 ships
- * the schema (4-value verdict + discriminated union); v0.3 / v3 cycle
- * will ship the enforcement. M4 is a different red line
- * (contract-freeze).
+ * **Phase 2.E #1 status**: the M5 counter logic exists as a pure
+ * function at `@claude-web/aisep-core` `checkM5Cap()` (file
+ * `aisep-core/src/m5-cap.ts`, 9 unit tests). It accepts a list of
+ * prior review verdicts on a single `stageRunId` and returns whether
+ * the cap (2 blocking verdicts) is exceeded.
+ *
+ * **Carve-out remaining** (Phase 2.E #2 / v3 cycle): the runner does
+ * NOT yet call `checkM5Cap` because aisep-run is currently single-pass
+ * per stage_run — each new run gets a fresh `stageRunId`, so the
+ * counter never accumulates in normal CLI use. Runner integration is
+ * gated on the v3 review→implement loop machinery (multi-attempt
+ * stage_runs). Until then, code is future-ready but not wired.
  *
  * Other stages may legitimately retry more times (e.g. flaky integration
- * test rerun).
+ * test rerun). M4 is a different red line (contract-freeze).
  */
 export const AisepAttemptSchema = z.object({
   id: OpaqueIdSchema,
