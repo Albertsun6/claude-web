@@ -57,6 +57,15 @@ export interface StageExecutorArgs {
    * Absent for fanOutRole="normal" | "parent".
    */
   subStageName?: string;
+  /**
+   * v0.3 Stage 3.1: AbortSignal for sibling-failure cancellation in
+   * fan-out. When the signal aborts (parent observed a child failure),
+   * the executor MUST kill its in-flight subprocess via SIGTERM →
+   * KILL_GRACE_MS (5s) → SIGKILL per workspace.exec contract.
+   *
+   * Absent for non-fan-out paths (runStage / fanOutRole="normal").
+   */
+  signal?: AbortSignal;
 }
 
 export interface StageExecutorResult {
@@ -212,11 +221,12 @@ export class AisepRunner {
     // 5. Dispatch children via scheduler-driven batched parallelism
     //    (v0.3 Stage 2.cli-A — wire scheduler.nextReady + Promise.all).
     //
-    //    When concurrencyCap is undefined OR 1, the loop degenerates to
-    //    serial dispatch (== Stage 2.runner baseline behavior). When
-    //    concurrencyCap >= 2, scheduler picks up to N pending children
-    //    each iteration and runs them concurrently via Promise.all.
+    //    Stage 3.1: AbortController is shared by all in-flight children;
+    //    the first child to fail triggers `controller.abort()`, which
+    //    cancels every other in-flight sibling (workspace.exec / claude
+    //    spawnClaude propagate SIGTERM → 5s → SIGKILL per A.F7).
     const cap = Math.max(1, args.concurrencyCap ?? 1);
+    const cancelController = new AbortController();
     const finishedById = new Map<string, AisepStageRun>();
     // Local mutable mirror of child status for the scheduler (we don't
     // want a store re-read on every iteration — pure function semantics
@@ -259,13 +269,30 @@ export class AisepRunner {
       }
       const finished = await Promise.all(
         decision.readyToDispatch.map((id) =>
-          this.executeStageRunBody(id, args.stage, "none", childNameById.get(id)),
+          this.executeStageRunBody(
+            id,
+            args.stage,
+            "none",
+            childNameById.get(id),
+            cancelController.signal,
+          ),
         ),
       );
       for (const f of finished) {
         finishedById.set(f.id, f);
         const slot = schedulerInput.find((s) => s.id === f.id);
         if (slot) slot.status = f.status;
+      }
+      // Stage 3.1: any child failure in this batch triggers
+      // cancellation for any subsequent batches (in serial / next loop
+      // iteration) and any siblings still in-flight when an earlier
+      // dispatch resolved late. Note that within a Promise.all batch
+      // siblings already running don't get the signal until the batch
+      // settles — that's an acceptable v0.3 tradeoff (batch-level cancel,
+      // not within-batch racy cancel; sibling work completed in-flight
+      // is recorded normally per RISK-FAN-IN "no partial recovery").
+      if (!cancelController.signal.aborted && finished.some((f) => f.status === "failed")) {
+        cancelController.abort();
       }
     }
 
@@ -327,8 +354,18 @@ export class AisepRunner {
     stage: AisepStage,
     phase: AisepStagePhase,
     subStageName?: string,
+    signal?: AbortSignal,
   ): Promise<AisepStageRun> {
     const { store, workspace, executor } = this.opts;
+
+    // v0.3 Stage 3.1: if cancel already requested before we even start
+    // (e.g. scheduler dispatched us late in a batch where a sibling
+    // already failed), short-circuit to cancelled without spawning.
+    if (signal?.aborted) {
+      let run = store.updateStageRunStatus(stageRunId, "running");
+      run = store.updateStageRunStatus(stageRunId, "cancelled");
+      return run;
+    }
 
     // Transition to running.
     let run = store.updateStageRunStatus(stageRunId, "running");
@@ -354,6 +391,7 @@ export class AisepRunner {
         upstreamArtifacts,
         memoryHits,
         ...(subStageName !== undefined ? { subStageName } : {}),
+        ...(signal !== undefined ? { signal } : {}),
       });
 
       for (const a of result.producedArtifacts) {

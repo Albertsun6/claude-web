@@ -71,19 +71,36 @@ export class NodeWorkspace implements AisepWorkspace {
       let timeoutHandle: NodeJS.Timeout | undefined;
       let killGraceHandle: NodeJS.Timeout | undefined;
 
+      // SIGTERM → 5s → SIGKILL kill ladder; shared by timeout + abort paths
+      // (v0.3 Stage 3.1 — A.F7 cancel semantics).
+      const initiateKill = (markTimedOut: boolean) => {
+        if (markTimedOut) timedOut = true;
+        child.kill("SIGTERM");
+        killGraceHandle = setTimeout(() => {
+          child.kill("SIGKILL");
+        }, KILL_GRACE_MS);
+      };
+
       if (opts.timeoutMs !== undefined && opts.timeoutMs > 0) {
-        timeoutHandle = setTimeout(() => {
-          timedOut = true;
-          child.kill("SIGTERM");
-          killGraceHandle = setTimeout(() => {
-            child.kill("SIGKILL");
-          }, KILL_GRACE_MS);
-        }, opts.timeoutMs);
+        timeoutHandle = setTimeout(() => initiateKill(true), opts.timeoutMs);
+      }
+
+      // v0.3 Stage 3.1: AbortSignal-driven cancel (sibling-failure
+      // propagation in runner.runFanOutParent).
+      const onAbort = () => initiateKill(false);
+      if (opts.signal) {
+        if (opts.signal.aborted) {
+          // Already aborted before spawn settled — kill immediately.
+          initiateKill(false);
+        } else {
+          opts.signal.addEventListener("abort", onAbort, { once: true });
+        }
       }
 
       const finalize = (exitCode: number) => {
         if (timeoutHandle) clearTimeout(timeoutHandle);
         if (killGraceHandle) clearTimeout(killGraceHandle);
+        if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
         resolve({
           exitCode,
           stdout,

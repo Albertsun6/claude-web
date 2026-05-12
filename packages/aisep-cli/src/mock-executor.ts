@@ -59,6 +59,30 @@ export class MockStageExecutor implements StageExecutor {
       2,
     );
 
+    // v0.3 Stage 3.1: if cancel-signal already aborted before/at execute
+    // entry, mock returns ok=false with status="cancelled" attempt to
+    // mirror real executor behavior (workspace.exec kills via SIGTERM).
+    if (args.signal?.aborted) {
+      return {
+        producedArtifacts: [],
+        attempt: {
+          invocation: {
+            provider: "other",
+            model: "mock",
+            argv: [],
+            cwd: args.workspace.cwd,
+            promptHash: hashString(`mock:cancelled:${args.stage}`),
+          },
+          outputArtifactIds: [],
+          reviewState: "draft",
+          status: "cancelled",
+          exitCode: -1,
+          error: "cancelled by sibling failure (mock)",
+        },
+        ok: false,
+      };
+    }
+
     const failByStage = (this.opts.failOnStages ?? []).includes(args.stage);
     const failBySubStage =
       args.subStageName !== undefined &&

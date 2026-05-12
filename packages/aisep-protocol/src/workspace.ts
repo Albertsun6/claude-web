@@ -50,6 +50,18 @@ export interface AisepExecOptions {
   cwd?: string;
   timeoutMs?: number;
   env?: Record<string, string>;
+  /**
+   * v0.3 (v1 fan-out Stage 3.1): when this AbortSignal aborts, exec
+   * kills the subprocess via SIGTERM → KILL_GRACE_MS (5s) → SIGKILL,
+   * same path as timeoutMs-driven kill. Used by `runner.runFanOutParent`
+   * to propagate sibling-failure cancellation to in-flight children
+   * (per cross-review arbitration A.F7).
+   *
+   * On abort-triggered kill, `AisepExecResult.timedOut` stays false
+   * (timedOut is reserved for timeoutMs-driven kills); consumer detects
+   * cancellation via the signal itself (not via the result).
+   */
+  signal?: AbortSignal;
 }
 
 /**

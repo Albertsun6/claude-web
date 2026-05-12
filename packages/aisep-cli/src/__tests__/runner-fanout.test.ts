@@ -97,23 +97,47 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     ]);
   });
 
-  it("partial failure: 1 of 3 children fails → parent fails", async () => {
+  it("partial failure: all children fail (concurrent batch) → parent fails", async () => {
     const ws = newWorkspace();
     const store = new AisepStore(cwd, ws.meta.id);
     const runner = new AisepRunner({
       store,
       workspace: ws,
-      // Mock executor fails ALL implement stages — every child of this fan-out fails.
       executor: new MockStageExecutor({ failOnStages: ["implement"] }),
     });
 
+    // concurrencyCap=2 dispatches both children together → both fail
+    // (no abort short-circuit because they fail in the same batch).
     const { parent, children } = await runner.runFanOutParent({
       stage: "implement",
+      concurrencyCap: 2,
       children: [{ name: "backend" }, { name: "frontend" }],
     });
 
     expect(parent.status).toBe("failed");
     expect(children.every((c) => c.status === "failed")).toBe(true);
+  });
+
+  it("Stage 3.1 cancel: first child fails serially → subsequent siblings cancelled (not failed)", async () => {
+    const ws = newWorkspace();
+    const store = new AisepStore(cwd, ws.meta.id);
+    const runner = new AisepRunner({
+      store,
+      workspace: ws,
+      executor: new MockStageExecutor({ failOnSubStages: ["backend"] }),
+    });
+
+    // Default cap=1 (serial); backend fails first, then frontend + tests
+    // should be cancelled (not even run).
+    const { parent, children } = await runner.runFanOutParent({
+      stage: "implement",
+      children: [{ name: "backend" }, { name: "frontend" }, { name: "tests" }],
+    });
+    expect(parent.status).toBe("failed");
+    const byName = new Map(children.map((c, i) => [["backend", "frontend", "tests"][i]!, c]));
+    expect(byName.get("backend")!.status).toBe("failed");
+    expect(byName.get("frontend")!.status).toBe("cancelled");
+    expect(byName.get("tests")!.status).toBe("cancelled");
   });
 
   it("Pilot-09 9b boundary mock: 1 of 3 children fails → parent fails + sibling succeeds preserved", async () => {
