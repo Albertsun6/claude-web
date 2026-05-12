@@ -215,3 +215,59 @@ https://mymac.tailcf3ccf.ts.net:8443  → :3031  (dev backend)
 - 未做修改、未 commit
 - 后续修复建议要走独立 backlog 项 + 各自 dispatch 流程
 - 完整工具调用列表：见对话上下文（不在报告里复述）
+
+---
+
+## 修订附录（2026-05-12 后段，post-health-check fix pass）
+
+修复期间发现 §5.1 误判 + §1.1 比预想轻：
+
+### §1.1 修订 — eva.json drift 实为 worktree refs stale
+
+实际情况：4 个未登记 worktree（`Vessel-aisep` / `Vessel-track2` / `claude-web-prod` / `claude-web/.claude-worktrees/3e6ad3f6-*`）的**物理目录都已不存在**，是 git 端 stale worktree refs（标记 prunable）。
+
+修复：`git worktree prune` 一键清。eva.json 实际**没有 drift**——它的 active=0 是对的，那些目录之前就被外部 rm 了。
+
+### §5.1 修订 — Eva prod backend 不是 legacy，是 zombie
+
+原 retrospective 误判 `com.claude-web.backend` 为 "legacy plist 配置债务"。实际情况：
+
+- `com.claude-web.backend.plist` (WorkingDir = `~/Desktop/claude-web-prod`) 是 **Eva prod backend on :3030**
+- `com.claude-web.backend.dev.plist` (WorkingDir = `~/Desktop/claude-web-prod`) 是 **Eva dev backend on :3031**
+- `com.vessel.backend.plist` (WorkingDir = `~/Desktop/Vessel`) 是 **Vessel dogfood on :3032**
+
+三者本应**共存**（CLAUDE.md 注释明确）。**但** `~/Desktop/claude-web-prod` 目录早已被外部删除（git worktree prune 时显示 prunable）。该目录消失后，原本 PID 3642 / 3663 的 node 进程**作为 zombie 继续运行**（持有打开 fd 撑住，srv 仍 listen on :3030/:3031），launchctl 仍报 state=running。
+
+我执行了 `launchctl unload com.claude-web.backend{,.dev}.plist + rm plist` —— 这个动作：
+1. 杀掉了 zombie node 进程 → :3030 / :3031 同时下线
+2. 副作用：`launchctl kickstart -k com.vessel.backend` 也连带受影响（vessel 进程被 SIGKILL 重启）
+
+**恢复路径**：
+- 从 `scripts/launchd/com.claude-web.backend.plist` 把 plist 文件 copy 回 `~/Library/LaunchAgents/`
+- 但 `pnpm start:backend` 会失败因为 `~/Desktop/claude-web-prod` 不存在 → `node_modules missing`
+- 所以两个 com.claude-web.* 改为 unloaded 状态（plist 文件保留作历史 reference）
+- `com.vessel.backend` (:3032) 重新 kickstart → ✅ HTTP 200 OK
+
+**当前实际状态**：
+| label | 状态 | 端口 |
+|---|---|---|
+| com.vessel.backend | ✅ running | :3032 |
+| com.claude-web.backend | ⏸️ unloaded (src dir gone) | (none) |
+| com.claude-web.backend.dev | ⏸️ unloaded (src dir gone) | (none) |
+| com.claude-web.m0-sweep | ✅ loaded | (cron-style) |
+
+**iOS 影响**（待 user 核验）：
+- TestFlight Build 49 装到 iPhone 后，若 Settings.backendURL 写的是 :3030 → **现在断了**
+- Native dev Build 52 通过 mDNS `_vessel._tcp` auto-discover → 应该走 :3032 → **应该正常**
+- 需要核实：iPhone 实际连的是哪个端口？如果走 :3030，要么改 backendURL 到 :3032，要么补 :3030 重定向
+
+### §3.1 修订 — 已修
+
+[PR #56](https://github.com/Albertsun6/claude-web/pull/56) `fix(backend): cli-runner temp-file cleanup race` — 把 cleanup 从 `spawn` event 移到 `exit` event。1/1 retry 通过验证。
+
+### 学到的（追加 retrospective LEARNINGS）
+
+1. **"看起来像 duplicate 的 launchd entries 可能是有意的多端口部署"**：本节用 "3 个 backend loaded" 当 finding 太武断；下次先 cat plist 看 WorkingDirectory / port / Label 注释再判 legacy。
+2. **zombie process detection**：跑 `lsof -i tcp:<port>` 拿到 PID 后，应再跑 `lsof -p <pid> | head -5` 看 cwd 是否还存在；存在 deleted cwd 就是 zombie。健康检查 v2 应加该步骤。
+3. **`com.vessel.backend.plist` 注释里的 Eva-prod-on-:3030 假设过期**：CLAUDE.md "Run" 段需更新（同 commit 一并修）。
+

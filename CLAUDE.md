@@ -82,22 +82,25 @@ changes do not require reinstalling the iOS app.
 # one-time: install
 pnpm install
 
-# launchd-managed backend (recommended)
-launchctl load -w ~/Library/LaunchAgents/com.claude-web.backend.plist
-# manual: pnpm dev:backend
+# launchd-managed backend (recommended) — Vessel backend on :3032
+launchctl load -w ~/Library/LaunchAgents/com.vessel.backend.plist
+# kickstart after code change: launchctl kickstart -k gui/$(id -u)/com.vessel.backend
+# manual: pnpm dev:backend (uses port 3030 by default; set PORT=3032 to mirror launchd)
 
 # dev frontend (only when changing UI)
-pnpm dev:frontend     # http://localhost:5173, proxies /api + /ws to :3030
+pnpm dev:frontend     # http://localhost:5173, proxies /api + /ws to :3032
 
 # build for prod (served by backend)
 pnpm --filter @claude-web/frontend build
 ```
 
-Tailscale serve already wired to expose :3030 on `https://<your-mac-hostname>.<tailnet>.ts.net`:
+Tailscale serve already wired to expose :3032 on `https://<your-mac-hostname>.<tailnet>.ts.net`:
 
 ```bash
-tailscale serve --bg --https=443 http://localhost:3030
+tailscale serve --bg --https=443 http://localhost:3032
 ```
+
+**端口变更历史**：Eva 旧 prod backend 跑 :3030（`com.claude-web.backend.plist`，源在 `~/Desktop/claude-web-prod`）。Vessel kernel migration (PR #39) 之后该目录被移除，`com.claude-web.backend{,.dev}` 改为 unloaded，**Vessel-on-:3032 是当前唯一现役 backend**。tailscale 转发已切到 :3032。iOS app 通过 mDNS `_vessel._tcp` auto-discover 或 Settings.backendURL 显式指定。
 
 ## Branch & Release
 
