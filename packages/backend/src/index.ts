@@ -30,6 +30,7 @@ import {
   resolvePermission,
 } from "./routes/permission.js";
 import { inboxRouter } from "./routes/inbox.js";
+import { updateCheckRouter } from "./routes/update-check.js";
 import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
 import { vesselRouter, redactAgentResult } from "./routes/vessel-intent.js";
@@ -127,6 +128,7 @@ app.route("/api/projects", projectsRouter);
 app.route("/api/telemetry", telemetryRouter);
 app.route("/api/permission", permissionRouter);
 app.route("/api/inbox", inboxRouter);
+app.route("/api/version", updateCheckRouter);
 app.route("/api/runs", runsRouter);
 app.route("/api/help", helpRouter);
 app.route("/api/harness/config", harnessConfigRouter);

@@ -12,19 +12,20 @@
 ```yaml
 items:
   - id: installer-auto-update
-    title: Vessel-Backend .pkg 自动更新机制 — Sparkle 或自研 GitHub-API polling
+    title: Vessel-Backend .pkg 自动更新机制 — backend GitHub-API polling + frontend banner (方案 B)
     priority: P2
-    size: L
-    status: planned
+    size: M
+    status: in_progress
     assigned_kind: main
     parallel_safe_files:
       - "packages/backend/src/routes/update-check.ts"
-      - "packages/backend/src/lib/version-check.ts"
+      - "packages/backend/src/lib/update-check.ts"
+      - "packages/backend/src/lib/version-info.ts"
+      - "packages/frontend/src/api/update-check.ts"
       - "packages/frontend/src/components/UpdateBanner.tsx"
-      - "installer/com.vessel.backend.plist.template"
     depends_on: ["installer-auto-build-ci"]
-    note: "选型：(A) Sparkle XML appcast feed — 标准 macOS auto-update，需 EdDSA 签名；(B) 后端轮询 GitHub Releases API — 简单但只能 notify，不能自动 install；(C) 混合：banner notify + 一键 download + 用户手动 sudo installer。当前未签名 → 走 (B) 或 (C)。前置：先做 auto-build 让 release 节奏可控；后续可加 code signing 升级到 Sparkle。"
-    refs: ["release:v0.8.1"]
+    note: "选 B (轮询 + banner，未签名也能跑)。/api/version/latest 6h cache，frontend 启动一次性 fetch，hasUpdate=true 时显示蓝色 banner + 下载链接 + dismiss-per-tag。Sparkle (方案 A) 需 EdDSA 签名留作后续 backlog；一键 DL (方案 C) 等用户反馈"
+    refs: ["release:v0.8.2"]
 
   - id: voice-roundtrip-measure
     title: 真机 voice round-trip ≤ 8 秒实测
