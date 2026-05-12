@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T00:30:00Z
+**最近更新**: 2026-05-12T04:30:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -11,27 +11,6 @@
 
 ```yaml
 items:
-  - id: testflight-encryption-compliance
-    title: TestFlight Build 49 加密合规对话框
-    priority: P1
-    size: S
-    status: in_progress
-    assigned_kind: user-manual
-    parallel_safe_files: []
-    depends_on: []
-    note: "App Store Connect → Seaidea → TestFlight → 编辑加密信息；走 HTTPS/WSS 选'未含加密'或'Apple 提供'"
-    refs: ["pr:#42"]
-
-  - id: testflight-install-verify
-    title: TestFlight Build 49 装到 iPhone 验证
-    priority: P1
-    size: S
-    status: planned
-    assigned_kind: user-manual
-    depends_on: ["testflight-encryption-compliance"]
-    parallel_safe_files: []
-    note: "iPhone TestFlight app → 接受邀请 → 安装；首启动验证 backend 连通"
-
   - id: voice-roundtrip-measure
     title: 真机 voice round-trip ≤ 8 秒实测
     priority: P2
@@ -64,16 +43,6 @@ items:
     depends_on: []
     note: "调研 whisper-large > 500MB 走 worker subprocess (ADR-012)；写到 docs/proposals/M2-VOICE-CAPABILITY.md；可并行候选"
 
-  - id: eva-sessions-json-output
-    title: pnpm eva:sessions 加 --format json
-    priority: P2
-    size: S
-    status: planned
-    assigned_kind: main
-    parallel_safe_files: ["scripts/"]
-    depends_on: []
-    note: "Steward boot ritual 依赖；契约 API 升级，单独 PR"
-    refs: ["adr:019"]
 ```
 
 ---
@@ -96,9 +65,31 @@ items:
     priority: P3
     size: M
     status: blocked
-    blocked_reason: "无具体场景；eva:sessions 可见性已能 cover 多数协调需求"
+    blocked_reason: "R1 file flag (steward-v05-r1) 覆盖了 worker→master 完成场景；通用 cross-session push 仍无 specific use case"
     parallel_safe_files: ["packages/backend/src/routes/inbox.ts"]
-    note: "Inbox 加 target=sessionId|worktreeName 字段，撞到时再做"
+    note: "Inbox 加 target=sessionId|worktreeName 字段；现在 R1 Layer 2 mirror 用 inbox 但只走完成信号，通用 push 等具体场景再开"
+
+  - id: steward-v05-r3-trajectory-persist
+    title: R3 worker trajectory 持久化 (Steward V0.5+)
+    priority: P3
+    size: M
+    status: blocked
+    blocked_reason: "观察 2-3 周真实并行 dogfood 之后再决定优先级；OpenHands trajectory 是参考实现"
+    parallel_safe_files:
+      - "packages/backend/src/routes/sessions.ts"
+      - "docs/STEWARD_USAGE.md"
+    note: "worker session jsonl 落 ~/.vessel/trajectories/<task-id>/ 供 retrospective；proposal §5 R3。**前置 gate**: 至少 3 次真实并行 task 之后人工评估"
+    refs: ["pr:#53"]
+
+  - id: steward-v05-r4-sandbox-staging
+    title: R4 sandbox-staging 探索 (Steward V0.5+, 远期)
+    priority: P3
+    size: L
+    status: blocked
+    blocked_reason: "Plandex 的 plan/context branches 是参考；Vessel 当前 worktree 隔离已 cover 80% 场景，sandbox 引入复杂度需 specific use case 驱动"
+    parallel_safe_files: []
+    note: "worker 改动落 sandbox branch，主线决定是否 promote；proposal §5 R4。**前置 gate**: R1+R2 ship 后观察 worktree 隔离是否仍有 leakage"
+    refs: ["pr:#53"]
 ```
 
 ---
@@ -132,4 +123,53 @@ items:
     status: done
     completed_at: 2026-05-12T00:00:00Z
     refs: ["pr:#44", "pr:#45", "tag:v0.7.2", "commit:8743fc5"]
+
+  - id: eva-sessions-json-output
+    title: pnpm eva:sessions 加 --format json
+    status: done
+    completed_at: 2026-05-12T17:40:00Z
+    refs: ["adr:019"]
+    note: "契约 API 升级；JSON shape 锁进 ADR-019 §eva:sessions JSON contract（Steward 消费侧依赖）"
+
+  - id: ai-coding-agent-execution-control-survey
+    title: AI coding agent (Claude Code / Cursor / Aider / Windsurf / OpenHands 等) 执行控制机制横向调研
+    status: done
+    completed_at: 2026-05-12T03:30:00Z
+    refs: ["pr:#55", "pr:#52", "commit:de249c2"]
+    note: "/survey Deep + hetero + strict 跑 9 工具 × 7 维度，~100 sources，Phase 6 cursor-agent verdict Refine。worktree ~/Desktop/Vessel-coding-agent-survey 已 pre-remove (eva.json done)"
+
+  - id: steward-v05-r1-worker-signal-fileflag
+    title: R1 worker→master signaling — file flag canonical (Steward V0.5)
+    status: done
+    completed_at: 2026-05-12T04:00:00Z
+    refs: ["pr:#54", "pr:#53", "adr:019", "proposal:STEWARD_PARALLEL_MECHANISM_EVAL.md"]
+    note: "scripts/steward-signal-done.sh (worker writer) + scripts/eva-collect.mjs + pnpm eva:collect (master reader); 新不变量 I12 进 ADR-019; ~/.vessel/spawn-done/<id>.json schema vessel-spawn-done-v1"
+
+  - id: steward-v05-r2-worker-pr-no-auto-merge
+    title: R2 worker open PR + signal, code 不默认 auto-merge (Steward V0.5)
+    status: done
+    completed_at: 2026-05-12T04:00:00Z
+    refs: ["pr:#54", "pr:#53", "adr:019"]
+    note: "纯协议 + 文档：代码改动 worker 开 PR + signal 但不 auto-merge；docs/research 类 worker 标 'ready for auto-merge' 主线确认后 gh pr merge --auto。新不变量 I13 进 ADR-019"
+
+  - id: testflight-encryption-compliance
+    title: TestFlight Build 49 加密合规对话框
+    status: done
+    completed_at: 2026-05-12T04:10:00Z
+    refs: ["pr:#42"]
+    note: "App Store Connect → Seaidea → TestFlight 加密信息填完（HTTPS/WSS 走默认豁免）"
+
+  - id: testflight-install-verify
+    title: TestFlight Build 49 装到 iPhone 验证
+    status: done
+    completed_at: 2026-05-12T04:10:00Z
+    refs: []
+    note: "iPhone TestFlight app 接受邀请 + 安装 + 首启动 backend 连通验证通过"
+
+  - id: project-health-check-2026-05-12
+    title: 项目健康度检查 (S 快速版 — git / CI / 基础设施 三维)
+    status: done
+    completed_at: 2026-05-12T04:30:00Z
+    refs: ["retro:docs/retrospectives/HEALTH_CHECK_2026-05-12.md"]
+    note: "1 BLOCKER (test:cli cleanup race) + 2 MAJOR (eva.json drift / 3 launchd backends) + 3 MINOR (untracked files / 本地 branch). 修复 spawn 独立 backlog 项"
 ```

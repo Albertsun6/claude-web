@@ -214,14 +214,12 @@ async function runOnce(p: RunSessionParams, resume: string | undefined): Promise
     detached: p.detached === true,
   });
 
-  // M2-Soul deferred MINOR fix: clean up the --append-system-prompt-file
-  // temp file once the spawned CLI has read it. Claude CLI loads the file
-  // synchronously at startup, so we can unlink shortly after spawn — but
-  // wait for `spawn` event to be safe.
-  child.once('spawn', () => {
-    for (const f of tempFiles) cleanupAppendSystemPromptFile(f);
-  });
-  // Defensive: if spawn ever fails to fire (rare), still cleanup on exit.
+  // Clean up the --append-system-prompt-file temp file after the spawned CLI
+  // exits. The `spawn` event fires when the child process is forked, NOT when
+  // Claude CLI has read its CLI args — so unlinking on `spawn` would race with
+  // CLI startup and trigger "Append system prompt file not found" (see health
+  // check 2026-05-12 retro). Mode 0o600 + os.tmpdir() means leaving the file
+  // until exit is safe.
   child.once('exit', () => {
     for (const f of tempFiles) cleanupAppendSystemPromptFile(f);
   });

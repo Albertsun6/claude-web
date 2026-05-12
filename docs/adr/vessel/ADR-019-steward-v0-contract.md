@@ -1,6 +1,6 @@
-# ADR-019: Steward V0 contract — BACKLOG.md + 9-prompt UI + boot ritual
+# ADR-019: Steward V0 contract — BACKLOG.md + 10-prompt UI + boot ritual
 
-**Status**: Accepted
+**Status**: Accepted (amended in-place 2026-05-12: v0.3 added I11 dispatch protocol; v0.4 added `即时代办` as 10th prompt + §3.7 combined add+start flow)
 **Date**: 2026-05-12
 **Reviewers**: harness-architecture-review (Claude) + reviewer-cross (cursor-agent gpt-5.5-medium)
 **Review trail**: see `docs/reviews/steward-v0-{arch,cross,react-arch,react-cross,arbitration}-2026-05-12-0026.md`
@@ -30,7 +30,7 @@ Vessel 项目任务追踪状态分散在 5 个 surface（docs/IMPROVEMENTS.md / 
 - `refs`: 数组，元素格式 `<kind>:<id>` (例: `pr:#42` / `commit:<sha>` / `inbox:<uuid>` / `lesson:<id>` / `adr:<num>`)
 - `harness_issue_id`: Phase 0 留空；Phase 2 promote 时填
 
-### 用户面 9 个 prompt 短语（docs/STEWARD_PROMPTS.md）
+### 用户面 10 个 prompt 短语（docs/STEWARD_PROMPTS.md）
 
 1. `/boot` 或 `看 backlog 推荐下一步`
 2. `开始干 <task-id>`
@@ -41,6 +41,7 @@ Vessel 项目任务追踪状态分散在 5 个 surface（docs/IMPROVEMENTS.md / 
 7. `<task-id> unblock`
 8. `<task-id> drop 因为 <reason>`
 9. `现在哪些窗口在干啥`
+10. `即时代办: <title>; [P<0-3>]; [<S/M/L>]; [note]` — v0.4 amendment：`加待办` + `开始干` 双步合一，1 个 ack 替代 2 个
 
 ### Session boot ritual (CLAUDE.md addition)
 
@@ -52,7 +53,50 @@ Claude 新 session 应主动：
 **Lazy**：`pnpm eva:sessions` 不在 boot 时跑，问"下一步/活窗口"再跑。
 **Fallback**：用户粘 `/boot` 或 `看 backlog 推荐下一步` 手动触发。
 
-### Invariants (10 条)
+### eva:sessions JSON contract
+
+Claude 在自动消费（dispatch 推荐 / `看 backlog 推荐下一步` 等）时**应**用
+`pnpm eva:sessions --format json`；ASCII 表只给人眼看。脚本实现：[`scripts/eva-sessions.mjs`](../../../scripts/eva-sessions.mjs)。
+
+形状：
+
+```json
+{
+  "generated": "<ISO timestamp>",
+  "total": <number>,
+  "recentlyActive": <number>,
+  "processesNoResume": <number>,
+  "sessions": [
+    {
+      "pid": "<string>",
+      "etime": "<string, ps elapsed e.g. '05:14:40' or '01-23:45:12'>",
+      "sessionId": "<uuid string | null>",
+      "cwd": "<absolute path | null>",
+      "branch": "<string | null>",
+      "lastSeenMs": <epoch ms | null>,
+      "lastSeenAgo": "<human string e.g. '2m ago' | null>"
+    }
+  ]
+}
+```
+
+字段约束（Steward 消费侧依赖；改这些属契约级修订，需 ADR-020+）：
+
+- `total` = `sessions.length`
+- `recentlyActive` = 5 分钟内 jsonl 有写入的 session 数
+- `processesNoResume` = 没拿到 `--resume <uuid>` 的进程数（通常是 Claude.app / desktop / hook 子进程残留）
+- `sessions` 按"最近活跃优先"排序；`lastSeenMs == null` 的排末尾
+- 缺失字段一律 JSON `null`，**不**写文本占位串（如 `"(unresolved)"`、`"-"`）
+- 空集仍返回完整对象 + `sessions: []`，**不**走"无活进程"快捷退出
+- macOS-only（依赖 `ps -axo`）；其它平台行为未定义
+
+退出码：
+- `0`：成功（含空集）
+- `2`：参数错误（未知 flag / 未知 format 值）
+
+未来加字段对消费方应是非破坏性（默认忽略未知字段）。
+
+### Invariants (11 条)
 
 - **I1**: BACKLOG.md 是唯一写入点
 - **I2**: id 永久不变；rename 算新建
@@ -67,6 +111,11 @@ Claude 新 session 应主动：
   - destructive needs explicit affirmative: 用户主动短语肯定 (`rm -rf` / `git push --force` / `git worktree remove`)
 - **I9**: commit 守门：BACKLOG.md 改后 `git status --porcelain` 检查；纯净则自动 commit；有其它 dirty 文件则只 stage BACKLOG + ack 后 commit；决不静默 stage 其它
 - **I10**: `status` 字段是状态唯一权威；section header (Active / Blocked / Done) 仅人眼导航；Claude 解析时只看 `status`
+- **I11** (v0.3 amendment 2026-05-12): Dispatch 决策必经用户拍板。`开始干 <id>` 触发时 Claude 给 spawn 分析 + 推荐 + 等用户回 `ok spawn` / `ok stay` / `用户做`；永不静默选边。这是 I8 mid-tier 在 dispatch 场景的细化，**不是新决策**——in-place amendment，无新 review。详见 `docs/proposals/STEWARD-V0-DESIGN.md` v0.3 §3.5。
+
+- **I12** (v0.5 amendment 2026-05-12): Worker self-signaling 走 file flag canonical。worker session 完成 task 时 **应** 跑 `./scripts/steward-signal-done.sh <task-id> [--pr URL] [--summary TEXT]` 写 `~/.vessel/spawn-done/<task-id>.json`（atomic）。主线 (master Claude) 用 `pnpm eva:collect` 扫该目录获 pending 完成项，再走原 `<id> 收线` 协议。**Worker 不许直接改 BACKLOG.md / eva.json**——状态变更权限属主线（I1 source-of-truth 保留）。理由：物理隔离（worker 在 feat branch 改 BACKLOG.md 反映不回 dev branch）+ 业内一致（Claude Code agent-teams TaskCompleted hook 模式）。Schema: `vessel-spawn-done-v1`（schema/task_id/branch/commit_sha/worktree_path/completed_at + 可选 pr_url/summary）。详见 `docs/proposals/STEWARD_PARALLEL_MECHANISM_EVAL.md` §5 R1。
+
+- **I13** (v0.5 amendment 2026-05-12): Worker 开 PR 但默认 **不 auto-merge code 改动**。worker push branch + `gh pr create` OK；但代码改动（backend / frontend / ios-native / scripts / 配置）**必须**留主线 + 用户 review 后 merge。仅 docs / research / proposal / ADR / retrospective 类，且 CI 通过 + branch protection 满足时，worker 可在 signal `--summary` 备注 "ready for auto-merge" 让主线确认 → `gh pr merge --auto`。理由：multi-agent 让 worker 自己 merge 自己改动 = 失审查边界。详见 `docs/proposals/STEWARD_PARALLEL_MECHANISM_EVAL.md` §5 R2（Phase 6 v2 verdict 收紧项）。
 
 ## Consequences
 
@@ -124,3 +173,11 @@ Claude 新 session 应主动：
 - Converged proposal: `docs/proposals/STEWARD-V0-DESIGN.md` v0.2
 
 **收敛 verdict**: ✅ 12 accept · ⚠️ 5 partial · 🚫 1 rebut (cross m2 starvation) · 🟡 0 user-decision
+
+### V0.5 R1+R2 amendment (2026-05-12)
+
+- 评估报告 (proposal): `docs/proposals/STEWARD_PARALLEL_MECHANISM_EVAL.md` v0.2
+- Method: /survey skill Deep + hetero + strict (Phase 6 v2 cursor-agent web-verified, **Refine**)
+- 新增 invariants I12 (worker signal canonical) + I13 (PR open but no auto-merge code)
+- 实现 PR: `feat/steward-v05-r1-r2` (本 amendment 落地分支)
+- 不可逆度增量：低（新增 file flag schema + 文档约定；rollback 仅删 scripts + 撤 I12/I13）

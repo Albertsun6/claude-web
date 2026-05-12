@@ -2,8 +2,11 @@
 // scripts/eva-sessions.mjs — print active Claude Code sessions (Step 2 of
 // 并行 session 协调 plan).
 //
-// 用法：`node scripts/eva-sessions.mjs` 或 `pnpm eva:sessions`。
-// 也被 `pnpm eva:status` 在 worktree 表后顺手打印一遍。
+// 用法：
+//   `pnpm eva:sessions`                  → 人眼 ASCII 表（默认）
+//   `pnpm eva:sessions --format json`    → 机器消费契约（Steward boot ritual 用）
+//
+// 也被 `pnpm eva:status` 在 worktree 表后顺手打印一遍（默认 text）。
 //
 // 设计：纯派生视图，零写入。Claude Code 已经把所有需要的状态写在磁盘上了：
 //   - 每个会话的 jsonl 在 ~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl
@@ -11,6 +14,19 @@
 //   - jsonl 的 mtime 就是「最近活动时间」
 //
 // 因此不需要新文件 / 注册 / 心跳 / hook，零侵入；只要 ps + readdir + stat。
+//
+// JSON 输出契约（与 ADR-019 §eva:sessions JSON contract 镜像；Steward 消费侧依赖）：
+//   {
+//     generated:          ISO timestamp,
+//     total:              活进程数,
+//     recentlyActive:     5 分钟内 jsonl 有写入的数,
+//     processesNoResume:  进程在但没拿到 --resume <uuid> 的数,
+//     sessions: [{
+//       pid, etime, sessionId, cwd, branch, lastSeenMs, lastSeenAgo
+//     }]
+//   }
+// 缺失字段（cwd/branch/sessionId/lastSeen*）一律 JSON null，不用文本占位串。
+// 空集仍返回完整对象 + sessions:[]，不退出到 "(no live ...)" 文本路径。
 //
 // macOS-only（用了 `ps -axo`），跟项目其它脚本一致。
 
@@ -21,6 +37,31 @@ import os from "node:os";
 
 const HOME = os.homedir();
 const CLAUDE_PROJECTS = path.join(HOME, ".claude", "projects");
+
+// Manual flag parsing (sibling style to scripts/eva-hook.mjs:73-84;
+// keep zero-dep tradition).
+function parseFormat(argv) {
+  let format = "text";
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--format") {
+      format = argv[++i];
+    } else if (a.startsWith("--format=")) {
+      format = a.slice("--format=".length);
+    } else {
+      process.stderr.write(`eva-sessions: unknown arg '${a}'\n`);
+      process.exit(2);
+    }
+  }
+  if (format !== "text" && format !== "json") {
+    process.stderr.write(
+      `eva-sessions: unknown format '${format}', expected text|json\n`,
+    );
+    process.exit(2);
+  }
+  return format;
+}
+const FORMAT = parseFormat(process.argv.slice(2));
 
 function color(text, code) {
   return process.stdout.isTTY ? `[${code}m${text}[0m` : text;
@@ -115,18 +156,51 @@ const rows = sessions.map((s) => {
   };
 });
 
-// 3. Print
+// 3. Aggregate + sort (shared by both text and JSON output)
 const generated = new Date().toISOString();
+const totalCount = rows.length;
+const liveCount = rows.filter(
+  (r) => r.lastSeenMs && Date.now() - r.lastSeenMs < 5 * 60_000,
+).length;
+const noResumeCount = rows.filter((r) => !r.sessionId).length;
+
+// Sort: most recently active first; processes without sessionId last
+rows.sort((a, b) => {
+  if (a.lastSeenMs && !b.lastSeenMs) return -1;
+  if (!a.lastSeenMs && b.lastSeenMs) return 1;
+  return (b.lastSeenMs ?? 0) - (a.lastSeenMs ?? 0);
+});
+
+// 4. JSON format — emit machine-readable payload, then exit.
+//    Schema mirrored in ADR-019 §eva:sessions JSON contract.
+if (FORMAT === "json") {
+  const payload = {
+    generated,
+    total: totalCount,
+    recentlyActive: liveCount,
+    processesNoResume: noResumeCount,
+    sessions: rows.map((r) => ({
+      pid: r.pid,
+      etime: r.etime,
+      sessionId: r.sessionId,
+      cwd: r.cwd,
+      branch: r.branch,
+      lastSeenMs: r.lastSeenMs,
+      lastSeenAgo: r.lastSeenAgo,
+    })),
+  };
+  console.log(JSON.stringify(payload, null, 2));
+  process.exit(0);
+}
+
+// 5. Text format — unchanged human-readable rendering.
 console.log(
   `Active Claude Code sessions · derived from ps + ~/.claude/projects · generated ${generated}\n`,
 );
-
-const liveCount = rows.filter((r) => r.lastSeenMs && Date.now() - r.lastSeenMs < 5 * 60_000).length;
-const totalCount = rows.length;
 console.log(
   `Total: ${totalCount}  ` +
     `${color("recently_active=" + liveCount, "32")}  ` +
-    `${color("processes_no_resume=" + rows.filter((r) => !r.sessionId).length, "37")}\n`,
+    `${color("processes_no_resume=" + noResumeCount, "37")}\n`,
 );
 
 if (rows.length === 0) {
@@ -144,13 +218,6 @@ const header = [
 ].join("  ");
 console.log(color(header, "1"));
 console.log("-".repeat(header.length));
-
-// Sort: most recently active first; processes without sessionId last
-rows.sort((a, b) => {
-  if (a.lastSeenMs && !b.lastSeenMs) return -1;
-  if (!a.lastSeenMs && b.lastSeenMs) return 1;
-  return (b.lastSeenMs ?? 0) - (a.lastSeenMs ?? 0);
-});
 
 for (const r of rows) {
   const cwdDisplay = r.cwd ? r.cwd.replace(HOME, "~") : color("(unresolved)", "37");

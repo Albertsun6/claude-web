@@ -82,22 +82,25 @@ changes do not require reinstalling the iOS app.
 # one-time: install
 pnpm install
 
-# launchd-managed backend (recommended)
-launchctl load -w ~/Library/LaunchAgents/com.claude-web.backend.plist
-# manual: pnpm dev:backend
+# launchd-managed backend (recommended) — Vessel backend on :3032
+launchctl load -w ~/Library/LaunchAgents/com.vessel.backend.plist
+# kickstart after code change: launchctl kickstart -k gui/$(id -u)/com.vessel.backend
+# manual: pnpm dev:backend (uses port 3030 by default; set PORT=3032 to mirror launchd)
 
 # dev frontend (only when changing UI)
-pnpm dev:frontend     # http://localhost:5173, proxies /api + /ws to :3030
+pnpm dev:frontend     # http://localhost:5173, proxies /api + /ws to :3032
 
 # build for prod (served by backend)
 pnpm --filter @claude-web/frontend build
 ```
 
-Tailscale serve already wired to expose :3030 on `https://<your-mac-hostname>.<tailnet>.ts.net`:
+Tailscale serve already wired to expose :3032 on `https://<your-mac-hostname>.<tailnet>.ts.net`:
 
 ```bash
-tailscale serve --bg --https=443 http://localhost:3030
+tailscale serve --bg --https=443 http://localhost:3032
 ```
+
+**端口变更历史**：Eva 旧 prod backend 跑 :3030（`com.claude-web.backend.plist`，源在 `~/Desktop/claude-web-prod`）。Vessel kernel migration (PR #39) 之后该目录被移除，`com.claude-web.backend{,.dev}` 改为 unloaded，**Vessel-on-:3032 是当前唯一现役 backend**。tailscale 转发已切到 :3032。iOS app 通过 mDNS `_vessel._tcp` auto-discover 或 Settings.backendURL 显式指定。
 
 ## Branch & Release
 
@@ -184,7 +187,7 @@ When in doubt: ask the user "要更新手册吗？" rather than assume.
 **契约 + 用户面**：
 - 9 个用户 prompt 短语：[`docs/STEWARD_PROMPTS.md`](docs/STEWARD_PROMPTS.md)
 - 详细使用手册：[`docs/STEWARD_USAGE.md`](docs/STEWARD_USAGE.md)
-- Schema 契约（10 个 invariants）：[`docs/adr/vessel/ADR-019-steward-v0-contract.md`](docs/adr/vessel/ADR-019-steward-v0-contract.md)
+- Schema 契约（11 个 invariants）：[`docs/adr/vessel/ADR-019-steward-v0-contract.md`](docs/adr/vessel/ADR-019-steward-v0-contract.md)
 
 **Claude 跑命令前的 3 层执行白名单（I8）**：
 - **read-only auto**：`git status` / `ls` / `cat` / `pnpm eva:sessions` 等只读 → 默许自动跑
@@ -192,6 +195,14 @@ When in doubt: ask the user "要更新手册吗？" rather than assume.
 - **destructive needs explicit affirmative**：`rm -rf` / `git push --force` / `git worktree remove` → 永不静默；要求用户主动短语肯定
 
 **BACKLOG.md commit 守门（I9）**：改 BACKLOG.md 后 `git status --porcelain` 检查——纯净则自动 commit；有其它 dirty 文件则只 stage BACKLOG + ack 后 commit；决不静默 stage 用户其它文件。
+
+**Dispatch 决策必经用户拍板（I11，v0.3 amendment）**：`开始干 <id>` 触发时 Claude **不直接动手**——先 echo task size + parallel_safe_files + 主窗口状态 + spawn 推荐 + 理由，等用户回 `ok spawn` / `ok stay` / `用户做` 才执行下一步。永不静默选边。
+
+**即时代办 fastpath（v0.4 amendment）**：粘 `即时代办: <title>` 时 Claude **一次 echo 同时提议**：新增 backlog 条目 (`status=in_progress` 跳过 `planned`) + 跑 dispatch 协议（size 分析 + spawn 推荐）。用户 1 个 `ok` 同时承认两件事。等价于 `加待办` + `开始干` 双步合一；不破任何契约（仍走 I1/I5/I7/I8/I9/I10/I11）。
+
+**Worker self-signaling（I12，v0.5 amendment）**：worker session 完成 task 时 **应**跑 `./scripts/steward-signal-done.sh <task-id> [--pr URL] [--summary TEXT]` 写 `~/.vessel/spawn-done/<task-id>.json` (canonical file flag)。主线 (master Claude) 粘 `pnpm eva:collect` 或 `看看谁完成了` 时 Claude 扫该目录 echo pending 完成项，用户 `ok 收线 <id>` 之后 Claude 跑 `pnpm eva:collect --clear <id>` 删 flag + 走原 `<id> 收线` 协议。Worker **不许**直接改 BACKLOG.md / eva.json（I1 source-of-truth 归主线）。
+
+**Worker PR 不默认 auto-merge（I13，v0.5 amendment）**：worker 可 `git push` + `gh pr create`，但**代码改动**（backend / frontend / ios-native / scripts / 配置）默认 **NOT auto-merge**——留主线 + 用户 review。仅 docs / research / proposal / ADR / retrospective 类且 CI + branch protection 满足时，worker 在 `--summary` 备注 "ready for auto-merge"，主线确认后 `gh pr merge --auto`。
 
 ## Docs map
 
