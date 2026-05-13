@@ -17,10 +17,10 @@ importers:
 
   packages/aisep-agents:
     dependencies:
-      '@claude-web/aisep-core':
+      '@vessel/aisep-core':
         specifier: workspace:*
         version: link:../aisep-core
-      '@claude-web/aisep-protocol':
+      '@vessel/aisep-protocol':
         specifier: workspace:*
         version: link:../aisep-protocol
       handlebars:
@@ -39,19 +39,19 @@ importers:
 
   packages/aisep-cli:
     dependencies:
-      '@claude-web/aisep-agents':
+      '@vessel/aisep-agents':
         specifier: workspace:*
         version: link:../aisep-agents
-      '@claude-web/aisep-core':
+      '@vessel/aisep-core':
         specifier: workspace:*
         version: link:../aisep-core
-      '@claude-web/aisep-memory':
+      '@vessel/aisep-memory':
         specifier: workspace:*
         version: link:../aisep-memory
-      '@claude-web/aisep-protocol':
+      '@vessel/aisep-protocol':
         specifier: workspace:*
         version: link:../aisep-protocol
-      '@claude-web/aisep-workspace':
+      '@vessel/aisep-workspace':
         specifier: workspace:*
         version: link:../aisep-workspace
       ejs:
@@ -79,7 +79,7 @@ importers:
 
   packages/aisep-core:
     dependencies:
-      '@claude-web/aisep-protocol':
+      '@vessel/aisep-protocol':
         specifier: workspace:*
         version: link:../aisep-protocol
     devDependencies:
@@ -95,7 +95,7 @@ importers:
 
   packages/aisep-memory:
     dependencies:
-      '@claude-web/aisep-protocol':
+      '@vessel/aisep-protocol':
         specifier: workspace:*
         version: link:../aisep-protocol
     devDependencies:
@@ -127,7 +127,7 @@ importers:
 
   packages/aisep-workspace:
     dependencies:
-      '@claude-web/aisep-protocol':
+      '@vessel/aisep-protocol':
         specifier: workspace:*
         version: link:../aisep-protocol
     devDependencies:
