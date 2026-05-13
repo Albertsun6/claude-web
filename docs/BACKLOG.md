@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-12T06:00:00Z
+**最近更新**: 2026-05-13T08:53:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -186,4 +186,11 @@ items:
     completed_at: 2026-05-12T06:00:00Z
     refs: ["pr:#61", "commit:bbcebff"]
     note: "选 B：后端 /api/version/latest 6h-cached GitHub Releases API；frontend UpdateBanner.tsx 启动时 fetch，hasUpdate=true 显示蓝色 banner + 下载链接 + per-tag dismiss。方案 A (Sparkle) / C (一键 DL) / iOS native UpdateBanner 留单独 backlog"
+
+  - id: aisep-bootstrap-v0-v1
+    title: AISEP bootstrap — v0 线性 10 阶段链路 + v1 静态 fan-out + Option E HTML 报告
+    status: done
+    completed_at: 2026-05-13T08:53:00Z
+    refs: ["pr:#68", "tag:aisep-bootstrap-merged-2026-05-13", "commit:b31e341"]
+    note: "43 commits 合入 dev：6 个 @vessel/aisep-* TypeScript 包 (protocol/core/workspace/agents/memory/cli) + aisep-protocol@0.3.0 wire format + Pilot-10b 10/10 真业务 dogfood + 334 tests 0 dep-cruiser violations + F1/F2/F6 (claude --print timeout + burst-limit retry)。Phase 2.F 残留 F3/F4/F5 (timeout retry / incremental render hint / cli --help smoke test) 单独 backlog；v2 fan-in proposal target 2026-06。rebase 期间统一 namespace @claude-web/aisep-* → @vessel/aisep-* 跟 PR #39 Vessel kernel 对齐。"
 ```
