@@ -104,6 +104,31 @@ export function isBurstLimitError(stderr: string): boolean {
   return BURST_LIMIT_PATTERNS.some((re) => re.test(stderr));
 }
 
+// F3 (Phase 2.F, 2026-05-13): SIGTERM timeout retry with 1.5× cap.
+//
+// F1 raised DEFAULT_TIMEOUT_MS 5→10 min, but real-business implement
+// stages can still skim the wall under variance (Pilot-10b finished at
+// 4.6 min with only 24% headroom). When the model is actively reasoning
+// and a SIGTERM hits, a single retry with 1.5× timeout buys headroom
+// without the user reaching for `--claude-timeout-ms` per-run.
+//
+// Single retry only (multi-retry deferred to v2 risk eval). 1.5× cap:
+// 10min → 15min on retry; further bumps are user-driven via the CLI flag.
+// Hard ceiling MAX_TIMEOUT_MS_HARD mirrors the CLI flag's [1min, 30min]
+// upper bound so we never silently exceed the user-visible cap.
+const TIMEOUT_RETRY_MULTIPLIER = 1.5;
+const MAX_TIMEOUT_MS_HARD = 30 * 60 * 1000;
+
+export function nextTimeoutRetry(
+  currentTimeoutMs: number,
+  retriedCount: number,
+): { nextTimeoutMs: number } | null {
+  if (retriedCount >= 1) return null;
+  const next = Math.floor(currentTimeoutMs * TIMEOUT_RETRY_MULTIPLIER);
+  if (next > MAX_TIMEOUT_MS_HARD) return null;
+  return { nextTimeoutMs: next };
+}
+
 function sleepAbortable(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -171,24 +196,44 @@ export class ClaudeExecutor implements StageExecutor {
     // F6 (2026-05-13): wrap spawnClaude in burst-limit retry loop.
     // Anthropic backend throttles ~3-4 concurrent sessions
     // (anthropics/claude-code#53922). Retry transparently on detected
-    // burst-limit errors; surface real failures (non-burst stderr or
-    // timeouts) immediately.
+    // burst-limit errors.
+    //
+    // F3 (Phase 2.F, 2026-05-13): single timeout retry with 1.5× cap.
+    // SIGTERM timeouts are a different failure mode from burst-limit
+    // (model still reasoning vs server throttle), so they're counted
+    // separately. Either path can fire, never simultaneously per attempt.
     let spawnResult: SpawnResult;
     let burstRetries = 0;
+    let timeoutRetries = 0;
+    let currentTimeoutMs = this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     while (true) {
       spawnResult = await spawnClaude({
         bin,
         argv,
         cwd: args.workspace.cwd,
         promptText,
-        timeoutMs: this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        timeoutMs: currentTimeoutMs,
         // v0.3 Stage 3.1: propagate sibling-failure cancel via AbortSignal
         // (passed by runner.runFanOutParent). Non-fan-out paths omit it.
         ...(args.signal !== undefined ? { signal: args.signal } : {}),
       });
-      // Success or hard timeout → don't retry. Timeouts are a different
-      // failure mode and should be visible to the runner / user.
-      if (spawnResult.exitCode === 0 || spawnResult.timedOut) break;
+      if (spawnResult.exitCode === 0) break;
+      // F3: hard timeout → try one 1.5× retry if within ceiling.
+      if (spawnResult.timedOut) {
+        // Abort signal raced the timeout — don't retry against a parent
+        // that's already cancelling siblings.
+        if (args.signal?.aborted) break;
+        const bumped = nextTimeoutRetry(currentTimeoutMs, timeoutRetries);
+        if (bumped === null) break;
+        console.warn(
+          `[aisep claude-executor] timeout (${currentTimeoutMs}ms) on stage="${args.stage}"` +
+            (args.subStageName ? ` subStage="${args.subStageName}"` : "") +
+            `; retry 1/1 with timeoutMs=${bumped.nextTimeoutMs}`,
+        );
+        currentTimeoutMs = bumped.nextTimeoutMs;
+        timeoutRetries += 1;
+        continue;
+      }
       // Non-burst failure → surface immediately (compile error / model
       // refusal / etc.).
       if (!isBurstLimitError(spawnResult.stderr)) break;
@@ -231,7 +276,10 @@ export class ClaudeExecutor implements StageExecutor {
           status: spawnResult.timedOut ? "timeout" : "failed",
           exitCode: spawnResult.exitCode,
           error: spawnResult.timedOut
-            ? `claude --print timed out after ${this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms`
+            ? `claude --print timed out after ${currentTimeoutMs}ms` +
+              (timeoutRetries > 0
+                ? ` (after ${timeoutRetries} F3 timeout retry × ${TIMEOUT_RETRY_MULTIPLIER})`
+                : "")
             : (burstRetries > 0
                 ? `[burst-limited, ${burstRetries} retries exhausted] `
                 : "") + spawnResult.stderr.slice(0, 500),

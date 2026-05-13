@@ -108,6 +108,24 @@ A `question` fence HALTS the implement stage. The runner will mark the
 stage failed and surface the question. Use sparingly; default to making
 a conservative choice and noting it in the diff comment.
 
+## Time budget pacing (F4, Phase 2.F)
+
+You have a hard wall-clock budget per attempt (default 10min, ratcheted
+to 15min on F3 retry, 30min absolute ceiling). If you sense the patch
+will exceed ~50 KB or you're approaching the wall, **render the 3 most
+load-bearing files completely first** (manifest + full diff for each),
+then for the remaining files emit them in the same diff fence in
+descending priority order until the budget is exhausted. Do NOT split
+the output across multiple fences and do NOT emit a partial diff for
+any single file — a per-file diff is atomic (fully present or absent
+from the manifest).
+
+This is soft pacing, not a contract change: the manifest still lists
+every file you actually committed to the patch. A future implement
+stage iteration (v2 fan-in / cycle) will drive incremental render
+explicitly; for now, prefer "3 complete files + manifest entry
+for what was dropped" over "10 partial files".
+
 ## Hard limits
 
 - ≤ 400 LOC in the patch (SmartBear code-review threshold from Pilot-02

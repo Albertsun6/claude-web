@@ -88,6 +88,9 @@ describe("PromptCompiler", () => {
     expect(promptText).toContain("400 LOC");
     expect(promptText).toContain("contracts/stage.ts");   // ref rendered via inline-content section
     expect(promptText).toContain("question");             // mandatory question-fence form
+    // F4 (Phase 2.F): time-budget pacing hint must be present
+    expect(promptText).toContain("Time budget pacing");
+    expect(promptText).toContain("load-bearing files completely first");
   });
 
   it("renders review template with logic-only focus", async () => {
