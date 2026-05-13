@@ -121,6 +121,10 @@ final class VoiceSession {
             )
             try s.setActive(true, options: [])
         } catch {
+            if isInsufficientPriority(error) {
+                NSLog("[VoiceSession] enter() preempted by higher-priority audio: \(error)")
+                return
+            }
             lastError = "音频会话激活失败: \(error.localizedDescription)"
             return
         }
@@ -167,7 +171,11 @@ final class VoiceSession {
                 try s.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
                 try s.setActive(true)
             } catch {
-                lastError = "切回保活会话失败: \(error.localizedDescription)"
+                if isInsufficientPriority(error) {
+                    NSLog("[VoiceSession] exit-keepalive preempted: \(error)")
+                } else {
+                    lastError = "切回保活会话失败: \(error.localizedDescription)"
+                }
             }
             // Defensive: category switch can occasionally interrupt the
             // looping player. Ensure it's still going.
@@ -222,7 +230,11 @@ final class VoiceSession {
             try s.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
             try s.setActive(true)
         } catch {
-            lastError = "保活会话激活失败: \(error.localizedDescription)"
+            if isInsufficientPriority(error) {
+                NSLog("[VoiceSession] keepalive activation preempted: \(error)")
+            } else {
+                lastError = "保活会话激活失败: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -280,6 +292,20 @@ final class VoiceSession {
     private static func le<T: FixedWidthInteger>(_ v: T) -> Data {
         var le = v.littleEndian
         return withUnsafeBytes(of: &le) { Data($0) }
+    }
+
+    /// Returns true if the given error is AVAudioSession.ErrorCode `.insufficientPriority`
+    /// (OSStatus 561017449, 4-char code `!pri`) — meaning iOS is holding the
+    /// audio session for a higher-priority owner (Siri, an in-progress call,
+    /// or another audio app that's actively recording/playing). This is
+    /// expected iOS arbitration, not an app bug: the user sees their app
+    /// load fine, just without the voice session — surfacing a red banner
+    /// would be misleading. Caller should silently log + skip setting
+    /// `lastError`. iOS will re-deliver an interruption notification when
+    /// the higher-priority owner releases, at which point the next user
+    /// interaction (e.g. tapping the mic) can retry setActive cleanly.
+    private func isInsufficientPriority(_ error: Error) -> Bool {
+        (error as NSError).code == 561017449
     }
 
     /// Recover from any .error state without restarting the app.

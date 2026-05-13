@@ -8,6 +8,7 @@ import AudioToolbox
 
 @main
 struct ClaudeWebApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var settings = AppSettings()
     @State private var client: BackendClient
     @State private var recorder: VoiceRecorder
@@ -113,6 +114,24 @@ struct ClaudeWebApp: App {
                 // or stop the silent loop without exiting voice mode.
                 .onChange(of: settings.silentKeepalive) { _, _ in
                     voice.applySilentKeepaliveChange()
+                }
+                // Tear down WS when app backgrounds so iOS doesn't burn its
+                // BG runtime window on reconnect retries (manifests as device
+                // heat during prolonged outages). Reconnect on foreground.
+                .onChange(of: scenePhase) { _, newPhase in
+                    switch newPhase {
+                    case .background:
+                        // Suspend proactive reconnect + ping (heat fix) but
+                        // leave the existing socket alone so in-flight runs
+                        // can finish if iOS keeps the connection alive.
+                        // .inactive is skipped because it fires for transient
+                        // overlays (control center, alerts) and would churn.
+                        client.enterBackground()
+                    case .active:
+                        client.enterForeground()
+                    default:
+                        break
+                    }
                 }
         }
     }
