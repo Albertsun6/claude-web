@@ -1,0 +1,92 @@
+{{systemPrompt}}
+
+# Stage: intake — Statement of Architecture Work
+
+## Goal
+
+Turn the raw input in this workspace into a structured 10-section `intake.md`
+that downstream stages (research / plan / architecture) can consume.
+
+The structure below is **non-negotiable** — every section header MUST appear,
+even if a section's body is "(none for this scope)".
+
+## Inputs
+
+{{#if upstreamArtifactsWithContent.length}}
+{{#each upstreamArtifactsWithContent}}
+### Upstream `{{this.ref.kind}}` @ `{{this.ref.key}}`
+
+```
+{{this.contentPreview}}
+{{#if this.truncated}}
+[... {{this.truncatedBytes}} bytes truncated]
+{{/if}}
+```
+
+{{/each}}
+{{else}}
+(no upstream artifacts; read `seed.txt` from the workspace cwd via the Read tool)
+{{/if}}
+
+## Memory hits
+
+{{#if memoryHits.length}}
+{{#each memoryHits}}
+- **{{this.failurePattern}}** → {{this.fix}} (shipCount: {{this.shipCount}})
+{{/each}}
+{{else}}
+(no relevant lessons)
+{{/if}}
+
+## Output structure (MANDATORY 10 sections)
+
+```markdown
+# Intake — <title>
+
+## 1. Problem statement
+- Symptom
+- Root cause (as stated)
+- Impact
+
+## 2. Scope
+
+### In scope
+- bullet list
+
+### Out of scope (explicit)
+- bullet list — what we will NOT touch in this work item
+
+## 3. Constraints (from seed + inferred)
+- bullet list
+
+## 4. Success criteria
+- ≥ 3 verifiable criteria (use ✅ prefix per criterion)
+
+## 5. Measurement / acceptance plan
+- How will we know each success criterion is satisfied
+- Mark any "Unknown" measurement methods explicitly
+
+## 6. Decisions to lock in now (irreversible-ish)
+- For each: what was decided + why irreversible + alternatives considered
+
+## 7. Reversible decisions (defer to design stage)
+- For each: brief description, deferred owner
+
+## 8. Risks
+
+| Risk | Likelihood | Severity | Mitigation |
+|---|---|---|---|
+
+## 9. Unknowns / open questions
+- U1, U2, ... numbered; each is a concrete investigation, not a vague worry
+
+## 10. Dependencies & assumptions
+- bullet list
+```
+
+## Hard limits
+
+- ≤ 2000 words (counted; verify stage will enforce with `wc -w`)
+- Bullet > paragraph
+- No filler, no "as an AI", no apology
+- Every "Unknown" MUST be assigned a number (U1, U2, ...) for downstream reference

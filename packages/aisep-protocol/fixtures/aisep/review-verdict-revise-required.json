@@ -1,0 +1,22 @@
+{
+  "id": "rv-01HJK5XM0CDEF13C",
+  "stageRunId": "sr-01HJK5XH0CDEF09B",
+  "reviewer": "reviewer-cross",
+  "verdict": "revise_required",
+  "comments": [
+    {
+      "target": { "kind": "risks", "key": "architecture/risks.yaml" },
+      "traceId": "RISK-Q7",
+      "severity": "critical",
+      "comment": "Q7 Rollback path is empty. Phase A anchor gate requires non-empty rollback for AISEP self-host risk.",
+      "suggestedAction": "revise"
+    }
+  ],
+  "suggestedPatches": [
+    {
+      "target": { "kind": "risks", "key": "architecture/risks.yaml" },
+      "diff": "--- a/architecture/risks.yaml\n+++ b/architecture/risks.yaml\n@@ -10,0 +11,3 @@\n+  - id: RISK-Q7\n+    description: AISEP self-host crash needs LKG snapshot rollback\n+    mitigation: aisep --bypass + git tag aisep-lkg-<ts>\n"
+    }
+  ],
+  "reviewedAt": 1747930600000
+}

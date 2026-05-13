@@ -1,0 +1,15 @@
+{
+  "id": "art-01HJK5XH0PATCHSET",
+  "workspaceId": "ws-01HJK5XF0CDEF07A",
+  "stageRunId": "sr-01HJK5XH0PARENT00",
+  "ref": {
+    "kind": "patch_set",
+    "key": "patch_set/implement.json"
+  },
+  "contentHash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "sizeBytes": 512,
+  "producedAt": 1747929000000,
+  "storage": "inline",
+  "contentUri": "sqlite://artifact_blob/art-01HJK5XH0PATCHSET",
+  "contentInline": "{\"patches\":[{\"subStageId\":\"sr-01HJK5XH0CHILD0BE\",\"subStageName\":\"backend\",\"patchFile\":\"patches/backend.diff\",\"contentHash\":\"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"byteCount\":1234},{\"subStageId\":\"sr-01HJK5XH0CHILD0FE\",\"subStageName\":\"frontend\",\"patchFile\":\"patches/frontend.diff\",\"contentHash\":\"sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210\",\"byteCount\":5678}]}"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "mr-01HJK5XL0CDEF12B",
+  "stage": "contract",
+  "failurePattern": "Odoo ORM field type string vs char hallucination",
+  "fix": "Use zod enum FieldType { char, text, integer, ... } — never accept bare 'string'",
+  "source": "global-verified",
+  "verifiedBy": "human",
+  "verifiedAt": 1715459000000,
+  "appliesTo": {
+    "domain": ["erp"],
+    "stage": ["contract", "architecture"],
+    "techStack": ["odoo", "python"]
+  },
+  "shipCount": 7,
+  "promoteCount": 1,
+  "sourceWorkspaceId": "ws-newaisep-parking-final"
+}
