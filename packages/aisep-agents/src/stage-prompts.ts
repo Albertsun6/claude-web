@@ -7,7 +7,7 @@ import type {
   AisepAgentProfile,
   AisepStage,
   AisepStagePhase,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
 /** Default profile for each stage. */
 const STAGE_TO_PROFILE: Record<AisepStage, AisepAgentProfile> = {

@@ -1,7 +1,7 @@
 // Stage-run status state machine.
 // M1 invariant from aisep-protocol: pending → running → {succeeded | failed | cancelled | skipped}
 
-import type { AisepStageStatus } from "@claude-web/aisep-protocol";
+import type { AisepStageStatus } from "@vessel/aisep-protocol";
 
 /**
  * Allowed transitions per source status. Empty arrays mean terminal.

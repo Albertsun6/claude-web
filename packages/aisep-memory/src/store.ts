@@ -1,7 +1,7 @@
 // AisepMemoryStore — file-backed AlphaEvolve 2-tier memory.
 //
 // Ported & generalized from newaisep `alphavolve.py` + `evolution_memory.py`.
-// Schema lives in @claude-web/aisep-protocol.
+// Schema lives in @vessel/aisep-protocol.
 //
 // Two tiers (R11 red line: physically isolated):
 //   - workspace layer:  <cwd>/.aisep/evolution_log.json  (pending, per-project)
@@ -20,7 +20,7 @@ import {
   type AisepEvolutionLogV1,
   type AisepMemoryRecord,
   type AisepStage,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
 import { defaultGlobalLogPath, workspaceLogPath } from "./paths.js";
 

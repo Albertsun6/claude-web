@@ -12,17 +12,17 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
-import { hashString } from "@claude-web/aisep-core";
+import { hashString } from "@vessel/aisep-core";
 import type {
   StageExecutor,
   StageExecutorArgs,
   StageExecutorResult,
-} from "@claude-web/aisep-core";
+} from "@vessel/aisep-core";
 import type {
   AisepArtifact,
   AisepArtifactKind,
   AisepStage,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
 import type {
   PromptCompiler,

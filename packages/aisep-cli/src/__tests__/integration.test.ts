@@ -5,10 +5,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AisepRunner, AisepStore, ids } from "@claude-web/aisep-core";
-import { AisepMemoryStore } from "@claude-web/aisep-memory";
-import { AisepStageSchema, type AisepStage } from "@claude-web/aisep-protocol";
-import { NodeWorkspace } from "@claude-web/aisep-workspace";
+import { AisepRunner, AisepStore, ids } from "@vessel/aisep-core";
+import { AisepMemoryStore } from "@vessel/aisep-memory";
+import { AisepStageSchema, type AisepStage } from "@vessel/aisep-protocol";
+import { NodeWorkspace } from "@vessel/aisep-workspace";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { memoryCommand } from "../commands/memory.js";

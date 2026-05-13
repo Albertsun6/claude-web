@@ -13,7 +13,7 @@
 // scheduler). Composes with M5 cap (m5-cap.ts) — each child stage_run
 // gets its own counter.
 
-import type { AisepStageStatus } from "@claude-web/aisep-protocol";
+import type { AisepStageStatus } from "@vessel/aisep-protocol";
 
 /** Minimal stage_run shape the scheduler needs. Caller projects this
  *  from `AisepStageRun` (full schema). Decoupling avoids store coupling. */

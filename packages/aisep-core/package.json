@@ -1,5 +1,5 @@
 {
-  "name": "@claude-web/aisep-core",
+  "name": "@vessel/aisep-core",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@claude-web/aisep-protocol": "workspace:*"
+    "@vessel/aisep-protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

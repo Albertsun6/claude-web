@@ -1,5 +1,5 @@
 {
-  "name": "@claude-web/aisep-cli",
+  "name": "@vessel/aisep-cli",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -12,11 +12,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@claude-web/aisep-agents": "workspace:*",
-    "@claude-web/aisep-core": "workspace:*",
-    "@claude-web/aisep-memory": "workspace:*",
-    "@claude-web/aisep-protocol": "workspace:*",
-    "@claude-web/aisep-workspace": "workspace:*",
+    "@vessel/aisep-agents": "workspace:*",
+    "@vessel/aisep-core": "workspace:*",
+    "@vessel/aisep-memory": "workspace:*",
+    "@vessel/aisep-protocol": "workspace:*",
+    "@vessel/aisep-workspace": "workspace:*",
     "ejs": "^5.0.2",
     "js-yaml": "^4.1.1"
   },

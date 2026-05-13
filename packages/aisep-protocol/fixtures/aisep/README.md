@@ -1,6 +1,6 @@
 # AISEP protocol fixtures
 
-JSON fixtures for `@claude-web/aisep-protocol` round-trip + enum coverage tests.
+JSON fixtures for `@vessel/aisep-protocol` round-trip + enum coverage tests.
 
 ## File naming
 

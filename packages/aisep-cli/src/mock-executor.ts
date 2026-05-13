@@ -8,14 +8,14 @@
 // The real executor (spawn-based, Handlebars-rendered) lives in
 // `aisep-agents` and will be wired in Phase 2.5.
 
-import { hashString } from "@claude-web/aisep-core";
+import { hashString } from "@vessel/aisep-core";
 import type {
   AisepArtifact,
   AisepArtifactKind,
   AisepStage,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
-import type { StageExecutor, StageExecutorResult } from "@claude-web/aisep-core";
+import type { StageExecutor, StageExecutorResult } from "@vessel/aisep-core";
 
 const STAGE_OUTPUT_KIND: Record<AisepStage, AisepArtifactKind> = {
   intake: "intake",

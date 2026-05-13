@@ -95,7 +95,7 @@ export type AisepAgentInvocation = z.infer<typeof AisepAgentInvocationSchema>;
  * runtime enforcement keyed on `stage === "review"`, NOT schema.
  *
  * **Phase 2.E #1 status**: the M5 counter logic exists as a pure
- * function at `@claude-web/aisep-core` `checkM5Cap()` (file
+ * function at `@vessel/aisep-core` `checkM5Cap()` (file
  * `aisep-core/src/m5-cap.ts`, 9 unit tests). It accepts a list of
  * prior review verdicts on a single `stageRunId` and returns whether
  * the cap (2 blocking verdicts) is exceeded.

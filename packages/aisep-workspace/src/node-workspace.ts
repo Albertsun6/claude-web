@@ -22,7 +22,7 @@ import type {
   AisepExecResult,
   AisepWorkspace,
   AisepWorkspaceMeta,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
 const KILL_GRACE_MS = 5_000;
 

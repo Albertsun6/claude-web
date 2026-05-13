@@ -1,5 +1,5 @@
 {
-  "name": "@claude-web/aisep-protocol",
+  "name": "@vessel/aisep-protocol",
   "version": "0.3.0",
   "private": true,
   "type": "module",

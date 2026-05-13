@@ -18,7 +18,7 @@ import type {
   AisepStage,
   AisepStageRun,
   AisepStageStatus,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
 import { ids, type IdClock } from "./ids.js";
 import { assertTransition, isTerminal } from "./state-machine.js";

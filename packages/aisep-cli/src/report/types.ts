@@ -16,7 +16,7 @@ import type {
   AisepStageRun,
   AisepStageStatus,
   AisepWorkspaceMeta,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
 /** A single row in the timeline. */
 export interface AisepReportStage {

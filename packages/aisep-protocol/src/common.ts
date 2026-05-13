@@ -1,6 +1,6 @@
 // Common helpers used across all aisep protocol schemas.
 //
-// Independent from @claude-web/shared by design (R1 red line, v0): even
+// Independent from @vessel/shared by design (R1 red line, v0): even
 // though semantically similar to harness-protocol's helpers, AISEP keeps
 // its own to avoid coupling. Phase 2+ may evaluate sharing.
 

@@ -6,22 +6,22 @@
 import { mkdirSync, readFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 
-import { ClaudeExecutor, PromptCompiler } from "@claude-web/aisep-agents";
+import { ClaudeExecutor, PromptCompiler } from "@vessel/aisep-agents";
 import {
   AisepRunner,
   AisepStore,
   ids,
   type MemoryProvider,
   type StageExecutor,
-} from "@claude-web/aisep-core";
-import { AisepMemoryStore } from "@claude-web/aisep-memory";
+} from "@vessel/aisep-core";
+import { AisepMemoryStore } from "@vessel/aisep-memory";
 import {
   AisepStagePhaseSchema,
   AisepStageSchema,
   type AisepStage,
   type AisepStagePhase,
-} from "@claude-web/aisep-protocol";
-import { NodeWorkspace } from "@claude-web/aisep-workspace";
+} from "@vessel/aisep-protocol";
+import { NodeWorkspace } from "@vessel/aisep-workspace";
 
 import { MockStageExecutor } from "../mock-executor.js";
 import { parsePlanParallel } from "../parse-plan-parallel.js";

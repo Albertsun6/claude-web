@@ -1,4 +1,4 @@
-# @claude-web/aisep-protocol
+# @vessel/aisep-protocol
 
 AISEP v0.1 protocol contracts — wire-format DTOs shared across `aisep-core` /
 `aisep-workspace` / `aisep-agents` / `aisep-memory` / `aisep-context` /
@@ -17,7 +17,7 @@ AISEP v0.1 protocol contracts — wire-format DTOs shared across `aisep-core` /
 - 可选字段在 wire 上 **完全省略**（不发 `null`）→ Zod `.optional()`
 - nullable 字段用显式 `null` → Zod `.nullable()`
 - AISEP 专属类型名加 `Aisep` 前缀（如 `AisepRun` / `AisepArtifact`）避免与
-  `@claude-web/shared` 的 `harness-protocol.ts` 命名冲突
+  `@vessel/shared` 的 `harness-protocol.ts` 命名冲突
 
 ## 跨端 round-trip 不变量
 
@@ -31,9 +31,9 @@ v1+ 加 Swift / Python round-trip 时再扩展）
 - 每个枚举值至少出现 1 次（`enum-coverage.test.ts`）
 - nullable / optional 字段各覆盖正负 1 例
 
-## 与 `@claude-web/shared` 的关系
+## 与 `@vessel/shared` 的关系
 
-AISEP 协议**独立**于 `@claude-web/shared/harness-protocol`：
+AISEP 协议**独立**于 `@vessel/shared/harness-protocol`：
 - 不复用 `EpochMsSchema` / `ContentHashSchema` 等 helper（v0 阶段红线 R1）
 - 不复用枚举（即使有重叠语义，AISEP 用 `Aisep*` 前缀独立定义）
 - Phase 2 评估是否抽出共享 base，**v0 接受重复**

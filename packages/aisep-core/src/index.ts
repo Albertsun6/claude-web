@@ -1,4 +1,4 @@
-// Barrel export for @claude-web/aisep-core.
+// Barrel export for @vessel/aisep-core.
 
 export * from "./ids.js";
 export * from "./hash.js";

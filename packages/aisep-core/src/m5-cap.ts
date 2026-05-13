@@ -18,7 +18,7 @@
 // is exercised only via unit tests; runner.runStage does NOT call it
 // (avoids regression risk on the single-pass path).
 
-import type { AisepReviewVerdictKind } from "@claude-web/aisep-protocol";
+import type { AisepReviewVerdictKind } from "@vessel/aisep-protocol";
 
 /** M5 cap threshold — 2 blocking verdicts per stageRunId is the limit. */
 export const M5_CAP_THRESHOLD = 2;

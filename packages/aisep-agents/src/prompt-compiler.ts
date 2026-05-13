@@ -15,14 +15,14 @@ import { fileURLToPath } from "node:url";
 
 import Handlebars from "handlebars";
 
-import { hashString } from "@claude-web/aisep-core";
+import { hashString } from "@vessel/aisep-core";
 import type {
   AisepArtifactRef,
   AisepAgentProfile,
   AisepMemoryRecord,
   AisepStage,
   AisepStagePhase,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
 import { stageToProfile, SYSTEM_PROMPTS } from "./stage-prompts.js";
 

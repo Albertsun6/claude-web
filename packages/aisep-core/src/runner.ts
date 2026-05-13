@@ -16,7 +16,7 @@ import type {
   AisepStagePhase,
   AisepStageRun,
   AisepWorkspace,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
 import { ids } from "./ids.js";
 import { nextReady, type SchedulerInputStageRun } from "./scheduler.js";

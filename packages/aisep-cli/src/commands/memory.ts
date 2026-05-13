@@ -2,13 +2,13 @@
 
 import { resolve } from "node:path";
 
-import { AisepMemoryStore } from "@claude-web/aisep-memory";
+import { AisepMemoryStore } from "@vessel/aisep-memory";
 import {
   AisepMemoryVerifiedBySchema,
   AisepStageSchema,
   type AisepMemoryVerifiedBy,
   type AisepStage,
-} from "@claude-web/aisep-protocol";
+} from "@vessel/aisep-protocol";
 
 interface MemoryGlobalArgs {
   workspace: string;

@@ -13,8 +13,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AisepRunner, AisepStore, ids } from "@claude-web/aisep-core";
-import { NodeWorkspace } from "@claude-web/aisep-workspace";
+import { AisepRunner, AisepStore, ids } from "@vessel/aisep-core";
+import { NodeWorkspace } from "@vessel/aisep-workspace";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { MockStageExecutor } from "../mock-executor.js";

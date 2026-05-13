@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { AisepStore } from "@claude-web/aisep-core";
+import { AisepStore } from "@vessel/aisep-core";
 
 import { buildReport } from "../report/builder.js";
 import { renderReport } from "../report/render.js";

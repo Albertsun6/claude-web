@@ -1,4 +1,4 @@
-// Barrel export for @claude-web/aisep-protocol.
+// Barrel export for @vessel/aisep-protocol.
 // All AISEP wire-format DTOs + runtime interfaces are surfaced here.
 
 export * from "./version.js";
