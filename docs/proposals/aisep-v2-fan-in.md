@@ -89,7 +89,7 @@ Three rough edges surfaced under Pilot-09 retrospective + the介绍-v6 §16 v2 r
 
 ### Q1 — Schema bump scope: 0.3.x → 0.4.0
 
-Adding required `affects: string[]` to `fanOutRole === "child"` rows (when `protocolVersion >= 0.4.0`) + role-semantic extension on downstream stages = MAJOR-class change per ADR-0015 row #1 ("删字段 / 改字段语义 / 改 enum 已有值"). ADR-0015 grants a "1 minor 窗口" compat window for MAJOR bumps.
+Adding required `affects: string[]` to `fanOutRole === "child"` rows (when `protocolVersion >= 0.4.0`) + role-semantic extension on downstream stages = MAJOR-class change per ADR-0015 row #1 ("删字段 / 改字段语义 / 改外键关系 / 改 enum 已有值"). ADR-0015 grants a "1 minor 窗口" compat window for MAJOR bumps.
 
 In v0.x stabilization (pre-1.0), ADR-006 §5 "breaking change 仅跨 major (v1.x → v2.0)" is **superseded** for AISEP per Decision 5 below: AISEP v0.x can take MAJOR-class wire changes with MINOR-level version label (0.3 → 0.4) provided a `aisep migrate` utility is shipped in the same release. Post-1.0 returns to ADR-006 §5 rule.
 
@@ -225,7 +225,7 @@ Per CLAUDE.md §"Layered Spiral Delivery" — each milestone must clear 7 anchor
 
 **Decision 4**: `--retry-child <id>` flag, id-stable + explicit state-machine amendment (option C). Rationale: preserves audit trail on one row; F3 timeout retry remains transparent within-attempt. Two independent code paths.
 
-**Decision 5 (NEW from F1)**: **AISEP protocol stabilization period supersede**. In the AISEP v0.x phase (pre-1.0), MAJOR-class wire changes per ADR-0015 row #1 (删字段 / 改字段语义 / 改 enum 已有值) MAY be packaged as MINOR-level version bumps (e.g. 0.3 → 0.4) provided a `aisep migrate --to X.Y` utility ships in the same release and a cross-version round-trip dogfood gate validates both directions (see Dogfood gate condition 7/8). Post-1.0, ADR-006 §5 "breaking change 仅跨 major" applies in full; ADR-0015 row #1 MAJOR bumps cross 1.0 → 2.0 etc. The v0.4 release is the first invocation of this supersede.
+**Decision 5 (NEW from F1)**: **AISEP protocol stabilization period supersede**. In the AISEP v0.x phase (pre-1.0), MAJOR-class wire changes per ADR-0015 row #1 (删字段 / 改字段语义 / 改外键关系 / 改 enum 已有值) MAY be packaged as MINOR-level version bumps (e.g. 0.3 → 0.4) provided a `aisep migrate --to X.Y` utility ships in the same release and a cross-version round-trip dogfood gate validates both directions (see Dogfood gate condition 7/8). Post-1.0, ADR-006 §5 "breaking change 仅跨 major" applies in full; ADR-0015 row #1 MAJOR bumps cross 1.0 → 2.0 etc. The v0.4 release is the first invocation of this supersede.
 
 **Non-decisions** (out of scope for v2, captured for v3 sibling proposals):
 - Cross-child memory sharing during execution.
