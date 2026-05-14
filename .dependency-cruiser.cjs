@@ -58,6 +58,18 @@ module.exports = {
     doNotFollow: {
       path: "node_modules",
     },
+    // Skip generated build artifacts that ship inside source-tree paths
+    // (Vite output + Capacitor copies). These contain content-hashed
+    // bundles that legitimately re-import each other; dep-cruiser flags
+    // them as `no-circular` violations because the bundler is allowed
+    // to produce cyclic-looking module graphs that the browser still
+    // executes correctly.
+    exclude: {
+      path: [
+        "^packages/frontend/dist/",
+        "^packages/frontend/ios/App/App/public/",
+      ],
+    },
     tsConfig: {
       fileName: "tsconfig.base.json",
     },
