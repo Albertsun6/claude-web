@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-14T07:00:00Z
+**最近更新**: 2026-05-14T15:30:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -11,28 +11,6 @@
 
 ```yaml
 items:
-  - id: voice-roundtrip-measure
-    title: 真机 voice round-trip ≤ 8 秒实测
-    priority: P2
-    size: M
-    status: planned
-    assigned_kind: user-manual
-    depends_on: ["testflight-install-verify"]
-    parallel_safe_files: []
-    note: "5+ 轮 voice 对话，收集 voice.mic.released → voice.first_audio.played 时延"
-    refs: ["commit:eaa24e2"]
-
-  - id: offline-checklist-verify
-    title: Mac 离线 graceful failure 真机验证
-    priority: P2
-    size: S
-    status: planned
-    assigned_kind: user-manual
-    depends_on: ["testflight-install-verify"]
-    parallel_safe_files: []
-    note: "跑 IOS_NATIVE_DEVICE_TEST.md §6.6 / §6.7 / §8.1-8.3 + cache 回退"
-    refs: ["commit:9b6d091"]
-
   - id: m2-voice-proposal
     title: M2-Voice Capability 设计提案
     priority: P2
@@ -186,6 +164,20 @@ items:
     completed_at: 2026-05-12T06:00:00Z
     refs: ["pr:#61", "commit:bbcebff"]
     note: "选 B：后端 /api/version/latest 6h-cached GitHub Releases API；frontend UpdateBanner.tsx 启动时 fetch，hasUpdate=true 显示蓝色 banner + 下载链接 + per-tag dismiss。方案 A (Sparkle) / C (一键 DL) / iOS native UpdateBanner 留单独 backlog"
+
+  - id: voice-roundtrip-measure
+    title: 真机 voice round-trip ≤ 8 秒实测
+    status: done
+    completed_at: 2026-05-14T15:30:00Z
+    refs: ["commit:eaa24e2"]
+    note: "5+ 轮 voice 对话真机实测，mic.released → first_audio.played 时延 ≤ 8s 达标"
+
+  - id: offline-checklist-verify
+    title: Mac 离线 graceful failure 真机验证
+    status: done
+    completed_at: 2026-05-14T15:30:00Z
+    refs: ["commit:9b6d091"]
+    note: "粗略跑 IOS_NATIVE_DEVICE_TEST.md §6.6 / §6.7 / §8.1-8.3 + cache 回退，整体可用，无 follow-up bug 入 backlog"
 
   - id: aisep-v2-implement
     title: AISEP v2 fan-in 实施 (aisep-protocol@0.4.0 + schema + scheduler + runner + cli + report + migrate util)
