@@ -371,6 +371,197 @@ export class AisepRunner {
   }
 
   /**
+   * v0.4 (v2 fan-in, ADR-022 Decision 1 β stage-pair fan-in): given an
+   * upstream fan-out parent whose children are all terminal=succeeded,
+   * create a downstream fan-out parent + N mirror child stage_runs (one
+   * per upstream child), each linked via `predecessorId` to its upstream
+   * counterpart (per Q3). Mirror children inherit the upstream's
+   * `affects` (so verify / review tasks know what was touched).
+   *
+   * Behavior:
+   * - If `scheduler.nextReadyFanInDispatch` blocks, returns `{ blocked }`
+   *   without side-effects (idempotent retry call possible).
+   * - If ready, acquires the workspace lock (R7) under mode
+   *   "fan-in-dispatch", creates the mirror rows, dispatches them, and
+   *   releases the lock.
+   * - Stage whitelist enforced (Q1b): `downstreamStage` must be in
+   *   FAN_OUT_ALLOWED_STAGES.
+   *
+   * Idempotency: if some downstream mirrors already exist (e.g. partial
+   * earlier dispatch), they are NOT re-created; the call dispatches
+   * only the missing ones. (`alreadyMirrored` from the scheduler
+   * decision is honored.)
+   */
+  async runFanInChildren(args: {
+    upstreamParentId: string;
+    downstreamStage: AisepStage;
+    concurrencyCap?: number;
+  }): Promise<
+    | { kind: "ready"; parent: AisepStageRun; children: AisepStageRun[] }
+    | { kind: "blocked"; decision: FanInDispatchDecision }
+  > {
+    const { store, workspace, executor: _executor } = this.opts;
+
+    if (!FAN_OUT_ALLOWED_STAGES.has(args.downstreamStage)) {
+      throw new Error(
+        `runFanInChildren: downstreamStage='${args.downstreamStage}' is not in FAN_OUT_ALLOWED_STAGES`,
+      );
+    }
+    const upstreamParent = store.getStageRun(args.upstreamParentId);
+    if (!upstreamParent || upstreamParent.fanOutRole !== "parent") {
+      throw new Error(
+        `runFanInChildren: upstream ${args.upstreamParentId} is not a fan-out parent`,
+      );
+    }
+    const upstreamChildren = store.listChildStageRuns(args.upstreamParentId);
+
+    // Probe for existing downstream mirrors of any of these upstream children.
+    const existingDownstream = store
+      .listStageRuns({ stage: args.downstreamStage })
+      .filter(
+        (r) =>
+          r.fanOutRole === "child" &&
+          r.predecessorId !== undefined &&
+          upstreamChildren.some((u) => u.id === r.predecessorId),
+      );
+
+    const decision = nextReadyFanInDispatch({
+      parentRun: {
+        id: upstreamParent.id,
+        status: upstreamParent.status,
+        fanOutRole: "parent",
+      },
+      upstreamChildren: upstreamChildren.map((c) => ({
+        id: c.id,
+        status: c.status,
+        fanOutRole: "child" as const,
+        parentStageRunId: upstreamParent.id,
+        migratedFromV03: c.migratedFromV03,
+      })),
+      existingDownstream: existingDownstream.map((c) => ({
+        id: c.id,
+        status: c.status,
+        fanOutRole: "child" as const,
+        parentStageRunId: c.parentStageRunId,
+        predecessorId: c.predecessorId,
+      })),
+    });
+
+    if (decision.kind !== "ready") {
+      return { kind: "blocked", decision };
+    }
+    if (decision.toCreate.length === 0) {
+      // All mirrors already exist; nothing to do. Caller should pick up
+      // the existing downstream parent + children themselves.
+      return { kind: "blocked", decision };
+    }
+
+    const lock = acquireWorkspaceLock(workspace.cwd, "fan-in-dispatch" as LockMode);
+    try {
+      // 1. Pre-mint mirror child ids so the downstream parent's subStages
+      //    can be wired atomically.
+      const mirrorChildIds = decision.toCreate.map(() =>
+        ids.stageRun((this.opts as { clock?: import("./ids.js").IdClock }).clock),
+      );
+
+      // 2. Create downstream parent.
+      const downstreamParent = store.createStageRun({
+        workspaceId: workspace.meta.id,
+        stage: args.downstreamStage,
+        phase: "none",
+        fanOutRole: "parent",
+        subStages: mirrorChildIds,
+        predecessorId: upstreamParent.id,
+      } as Omit<AisepStageRun, "id" | "status">);
+
+      // 3. Create mirror children — each linked to its upstream counterpart.
+      const mirrorChildren: AisepStageRun[] = [];
+      for (let i = 0; i < decision.toCreate.length; i += 1) {
+        const upstreamChildId = decision.toCreate[i]!;
+        const upstreamChild = upstreamChildren.find((c) => c.id === upstreamChildId);
+        if (!upstreamChild) {
+          throw new Error(
+            `runFanInChildren: upstream child not found: ${upstreamChildId}`,
+          );
+        }
+        const mirror = store.createStageRun({
+          id: mirrorChildIds[i],
+          workspaceId: workspace.meta.id,
+          stage: args.downstreamStage,
+          phase: "none",
+          fanOutRole: "child",
+          parentStageRunId: downstreamParent.id,
+          predecessorId: upstreamChild.id, // Q3 stage-pair linkage
+          affects: upstreamChild.affects, // mirror affects (verify/review knows what to check)
+        } as Omit<AisepStageRun, "id" | "status"> & { id?: string });
+        mirrorChildren.push(mirror);
+      }
+
+      // 4. Transition parent to running + dispatch via the same scheduler-
+      //    driven batch loop as runFanOutParent. Reuse executeStageRunBody
+      //    per child.
+      store.updateStageRunStatus(downstreamParent.id, "running");
+
+      const cap = Math.max(1, args.concurrencyCap ?? 1);
+      const cancelController = new AbortController();
+      const schedulerInput: SchedulerInputStageRun[] = mirrorChildren.map((c) => ({
+        id: c.id,
+        status: c.status,
+        fanOutRole: "child" as const,
+        parentStageRunId: downstreamParent.id,
+      }));
+      const finishedById = new Map<string, AisepStageRun>();
+
+      for (let iteration = 0; iteration < mirrorChildren.length; iteration += 1) {
+        const dispatch = nextReady(downstreamParent.id, schedulerInput, cap);
+        if (dispatch.allChildrenTerminal) break;
+        if (dispatch.readyToDispatch.length === 0) break;
+
+        for (const id of dispatch.readyToDispatch) {
+          const slot = schedulerInput.find((s) => s.id === id);
+          if (slot) slot.status = "running";
+        }
+
+        const finished = await Promise.all(
+          dispatch.readyToDispatch.map((id) =>
+            this.executeStageRunBody(
+              id,
+              args.downstreamStage,
+              "none",
+              undefined,
+              cancelController.signal,
+            ),
+          ),
+        );
+        for (const f of finished) {
+          finishedById.set(f.id, f);
+          const slot = schedulerInput.find((s) => s.id === f.id);
+          if (slot) slot.status = f.status;
+        }
+        if (
+          !cancelController.signal.aborted &&
+          finished.some((f) => f.status === "failed")
+        ) {
+          cancelController.abort();
+        }
+      }
+
+      const finishedMirrors = mirrorChildren.map((c) => finishedById.get(c.id) ?? c);
+
+      // 5. Settle parent: succeeded iff every mirror succeeded.
+      const allSucceeded = finishedMirrors.every((c) => c.status === "succeeded");
+      const finalParent = store.updateStageRunStatus(
+        downstreamParent.id,
+        allSucceeded ? "succeeded" : "failed",
+      );
+
+      return { kind: "ready", parent: finalParent, children: finishedMirrors };
+    } finally {
+      lock.release();
+    }
+  }
+
+  /**
    * v0.4 (v2 fan-in, ADR-022 Decision 4): retry a single failed fan-out
    * child id-stably. Adds a new attempt log entry; the child id is NOT
    * regenerated. Parent's `patch_set` manifest is re-aggregated on success.

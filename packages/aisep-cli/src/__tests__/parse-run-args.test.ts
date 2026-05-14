@@ -50,3 +50,43 @@ describe("parseRunArgs --claude-timeout-ms (F2)", () => {
     expect(args!.claudeTimeoutMs).toBeUndefined();
   });
 });
+
+describe("parseRunArgs --retry-child / --bump-timeout (ADR-022 Decision 4)", () => {
+  it("accepts --retry-child <id> and sets retryChild", () => {
+    const args = parseRunArgs(["--dry", "--retry-child", "sr-01HJK5XH0CHILD0BE"]);
+    expect(args).toBeDefined();
+    expect(args!.retryChild).toBe("sr-01HJK5XH0CHILD0BE");
+    expect(args!.bumpTimeout).toBeUndefined();
+  });
+
+  it("accepts --retry-child + --bump-timeout combined", () => {
+    const args = parseRunArgs([
+      "--dry",
+      "--retry-child",
+      "sr-X",
+      "--bump-timeout",
+    ]);
+    expect(args!.retryChild).toBe("sr-X");
+    expect(args!.bumpTimeout).toBe(true);
+  });
+
+  it("rejects --bump-timeout WITHOUT --retry-child", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const args = parseRunArgs(["--dry", "--bump-timeout"]);
+    expect(args).toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("--bump-timeout requires --retry-child"),
+    );
+    spy.mockRestore();
+  });
+
+  it("rejects --retry-child without an id value", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const args = parseRunArgs(["--dry", "--retry-child"]);
+    expect(args).toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("--retry-child requires a stage_run id"),
+    );
+    spy.mockRestore();
+  });
+});

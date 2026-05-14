@@ -54,6 +54,19 @@ interface RunArgs {
    * for heavy implement stages or ratchet down for quick smoke runs.
    */
   claudeTimeoutMs?: number;
+  /**
+   * v0.4 (ADR-022 Decision 4): id-stable retry of a single failed
+   * fan-out child. When set, the stage chain is bypassed entirely and
+   * the cli calls runner.runRetryChild for the named id.
+   */
+  retryChild?: string;
+  /**
+   * v0.4 (ADR-022 Decision 4 + F3): use F3-style 1.5× timeout multiplier
+   * for the retry attempt. Recorded on the attempt log for forensic
+   * traceability; full executor integration (real ClaudeExecutor)
+   * threads this through to spawnClaude in a follow-up.
+   */
+  bumpTimeout?: boolean;
 }
 
 /**
@@ -133,6 +146,29 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
     executor,
     memoryProvider,
   });
+
+  // v0.4 (ADR-022 Decision 4): retry-child fast path — bypass the stage
+  // chain and call runner.runRetryChild for the named id. Acquires the
+  // R7 workspace lock inside the runner; refuses if held.
+  if (args.retryChild !== undefined) {
+    console.log(
+      `[aisep run] retry-child ${args.retryChild}${args.bumpTimeout ? " (--bump-timeout)" : ""}`,
+    );
+    try {
+      const retried = await runner.runRetryChild({
+        childId: args.retryChild,
+        ...(args.bumpTimeout ? { bumpTimeout: true } : {}),
+      });
+      console.log(
+        `[aisep run] retry-child ${retried.id.slice(0, 12)}… → ${retried.status}`,
+      );
+      if (retried.status !== "succeeded") return 3;
+      return 0;
+    } catch (err) {
+      console.error(`[aisep run] retry-child failed: ${(err as Error).message}`);
+      return 5;
+    }
+  }
 
   const stages: AisepStage[] = args.stages
     ? args.stages
@@ -321,6 +357,15 @@ export function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
         return undefined;
       }
       args.claudeTimeoutMs = n;
+    } else if (arg === "--retry-child") {
+      const next = rawArgs[++i];
+      if (!next || next.length === 0) {
+        console.error(`[aisep run] --retry-child requires a stage_run id (e.g. sr-01HJK...)`);
+        return undefined;
+      }
+      args.retryChild = next;
+    } else if (arg === "--bump-timeout") {
+      args.bumpTimeout = true;
     } else {
       console.error(`[aisep run] Unknown arg: ${arg}`);
       return undefined;
@@ -330,6 +375,11 @@ export function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
   // Cross-flag validation: --parallel requires --children
   if (args.parallel && (!args.parallelChildren || args.parallelChildren.length < 2)) {
     console.error(`[aisep run] --parallel requires --children name1,name2[,...] (>= 2)`);
+    return undefined;
+  }
+  // v0.4: --bump-timeout only meaningful with --retry-child
+  if (args.bumpTimeout && !args.retryChild) {
+    console.error(`[aisep run] --bump-timeout requires --retry-child <id> (ADR-022 Decision 4)`);
     return undefined;
   }
   return args;

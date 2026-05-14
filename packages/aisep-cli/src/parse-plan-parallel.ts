@@ -16,9 +16,18 @@
 // validated entry list, OR undefined if no block found, OR throws on
 // malformed YAML / invalid entries.
 //
+// v0.4 (ADR-022 Q4 R2 mitigation): the plan-validator rejects catch-all
+// patterns (`.*`, `(?:.*)`, etc.) that have no ≥3-char literal anchor.
+// Such patterns trivially overlap with everything and defeat the point
+// of declared `affects` (overlap detector would flag everything paired
+// with them). Migrated rows (migratedFromV03=true, affects=[".*"]) are
+// the ONE legal exception and are not generated through this parser
+// (they come from `aisep migrate`, Slice 5).
+//
 // Pure function (R6-clean): string in → parsed list out. Caller
 // (aisep-cli/run.ts) handles fs read.
 
+import { literalAnchors } from "@vessel/aisep-core";
 import yaml from "js-yaml";
 
 export interface PlanParallelEntry {
@@ -144,6 +153,16 @@ export function parsePlanParallel(
         throw new Error(
           `parsePlanParallel: entry #${i} 'affects' must be a string or string[] (got ${typeof affects})`,
         );
+      }
+      // v0.4 Q4 R2: reject catch-all patterns (no ≥3-char literal anchor)
+      // at parse time so users get an actionable error before runtime.
+      for (let j = 0; j < affectsArr.length; j += 1) {
+        const p = affectsArr[j]!;
+        if (literalAnchors(p).length === 0) {
+          throw new Error(
+            `parsePlanParallel: entry #${i} 'affects[${j}]' = "${p}" is a catch-all pattern with no ≥3-char literal anchor (refine to a specific path prefix; ADR-022 Q4 R2 plan-validator)`,
+          );
+        }
       }
       if (seenNames.has(name)) {
         throw new Error(`parsePlanParallel: duplicate name "${name}" at entry #${i}`);
