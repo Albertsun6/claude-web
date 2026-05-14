@@ -7,6 +7,7 @@
 //   aisep --help
 
 import { memoryCommand } from "./commands/memory.js";
+import { migrateCommand } from "./commands/migrate.js";
 import { reportCommand } from "./commands/report.js";
 import { runCommand } from "./commands/run.js";
 import { verifyCommand } from "./commands/verify.js";
@@ -61,6 +62,14 @@ Commands:
       contract_grep drill-down. Self-contained for client demo + audit
       evidence (Option E, v0.3+).
 
+  aisep migrate --to 0.4 [--workspace <path>] [--dry-run]
+      v0.4 (ADR-022 Decision 5): migrate state.json from v0.3 → v0.4.
+      Adds affects=[".*"] + migratedFromV03=true to fan-out child rows
+      that lack the affects field; normalizes parent/normal rows.
+      Acquires the R7 workspace lock (mode='migrate'). Atomic-rename
+      write with .bak snapshot. Idempotent: a no-op if state already
+      conforms. --dry-run prints the report without touching disk.
+
   aisep --help / -h
       Show this message.
 `;
@@ -83,6 +92,8 @@ async function main(): Promise<number> {
       return verifyCommand(argv.slice(1));
     case "report":
       return reportCommand(argv.slice(1));
+    case "migrate":
+      return migrateCommand(argv.slice(1));
     default:
       console.error(`[aisep] Unknown command: ${command}\n`);
       console.error(HELP);

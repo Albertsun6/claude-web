@@ -26,6 +26,36 @@ import { NodeWorkspace } from "@vessel/aisep-workspace";
 import { MockStageExecutor } from "../mock-executor.js";
 import { parsePlanParallel } from "../parse-plan-parallel.js";
 
+/**
+ * v0.4 (ADR-022 dogfood gate 7): scan state.json for v0.3-shape child rows
+ * (fanOutRole='child' with no `affects` field). Returns `needsMigrate` true
+ * + count when migration is required. Read-only: never mutates the file.
+ */
+function detectV03ShapeStateJson(cwd: string): {
+  needsMigrate: boolean;
+  childRowsMissingAffects: number;
+} {
+  const statePath = join(cwd, ".aisep", "state.json");
+  if (!existsSync(statePath)) {
+    return { needsMigrate: false, childRowsMissingAffects: 0 };
+  }
+  let parsed: { stageRuns?: Array<Record<string, unknown>> };
+  try {
+    parsed = JSON.parse(readFileSync(statePath, "utf-8"));
+  } catch {
+    return { needsMigrate: false, childRowsMissingAffects: 0 };
+  }
+  const rows = Array.isArray(parsed.stageRuns) ? parsed.stageRuns : [];
+  let count = 0;
+  for (const r of rows) {
+    if (r.fanOutRole === "child") {
+      const hasAffects = Array.isArray(r.affects) && (r.affects as unknown[]).length > 0;
+      if (!hasAffects) count += 1;
+    }
+  }
+  return { needsMigrate: count > 0, childRowsMissingAffects: count };
+}
+
 interface RunArgs {
   workspace: string;
   dry: boolean;
@@ -140,6 +170,31 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
         ...(args.claudeTimeoutMs !== undefined ? { timeoutMs: args.claudeTimeoutMs } : {}),
       })
     : new MockStageExecutor();
+  // v0.4 (ADR-022 dogfood gate 7): pre-flight detect v0.3-shape state.json
+  // (fan-out child rows missing affects) and refuse to dispatch with a
+  // clear migrate-suggestion error. This is the binary-level guarantee
+  // that "v0.3 state.json fed to v0.4 binary, first `aisep run` exits
+  // with clear migrate-suggestion error (not crash, not silent re-write)".
+  // The check is read-only; --retry-child bypasses it because retry
+  // operates on a single id (caller has presumably already migrated, or
+  // explicitly knows what they're doing — runner.runRetryChild will
+  // surface its own pre-condition errors).
+  if (args.retryChild === undefined) {
+    const v03Check = detectV03ShapeStateJson(cwd);
+    if (v03Check.needsMigrate) {
+      console.error(
+        `[aisep run] state.json contains ${v03Check.childRowsMissingAffects} v0.3-shape fan-out child row(s) missing 'affects'.`,
+      );
+      console.error(
+        `[aisep run] Refusing to dispatch on un-migrated state.json (ADR-022 Decision 2).`,
+      );
+      console.error(
+        `[aisep run] Run \`aisep migrate --to 0.4 --workspace ${cwd}\` to migrate, then re-run.`,
+      );
+      return 6;
+    }
+  }
+
   const runner = new AisepRunner({
     store,
     workspace: ws,
