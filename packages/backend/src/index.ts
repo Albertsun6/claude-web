@@ -32,6 +32,7 @@ import {
 import { inboxRouter } from "./routes/inbox.js";
 import { setPimDbForInbox } from "./inbox-store.js";
 import { pimRouter, setPimDbForRoutes } from "./routes/pim.js";
+import { pimCapturePageHandler } from "./routes/pim-page.js";
 import { updateCheckRouter } from "./routes/update-check.js";
 import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
@@ -132,6 +133,12 @@ app.route("/api/permission", permissionRouter);
 app.route("/api/inbox", inboxRouter);
 // M0-PIM (ADR-020) — PimItem CRUD + sanity-report + attach-issue
 app.route("/api/pim", pimRouter);
+// M0-PIM Day 4c — self-contained capture page (no React, cross-device).
+// Mount BEFORE Eva SPA `/*` fallback (which routes everything to index.html).
+app.get("/pim", pimCapturePageHandler() as never);
+app.get("/pim/", pimCapturePageHandler() as never);
+app.get("/pim/capture", pimCapturePageHandler() as never);
+app.get("/pim/capture/", pimCapturePageHandler() as never);
 app.route("/api/version", updateCheckRouter);
 app.route("/api/runs", runsRouter);
 app.route("/api/help", helpRouter);

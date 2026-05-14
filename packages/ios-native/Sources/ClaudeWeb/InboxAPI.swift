@@ -37,9 +37,23 @@ struct InboxListResponse: Codable {
 @Observable
 final class InboxAPI {
     private let baseURL: () -> URL
+    private let authToken: () -> String
 
-    init(baseURL: @escaping () -> URL) {
+    /// Day 4 (ADR-020 PIM PR #87): authToken closure injected.
+    /// Defaults to `{ "" }` to preserve callers that haven't migrated yet.
+    /// Empty token → no Authorization header (backend single-user dev mode is OK with this).
+    /// Non-empty token → `Authorization: Bearer <t>` per backend auth.ts.
+    init(baseURL: @escaping () -> URL, authToken: @escaping () -> String = { "" }) {
         self.baseURL = baseURL
+        self.authToken = authToken
+    }
+
+    /// Attach Authorization Bearer header if token is non-empty.
+    private func authorize(_ req: inout URLRequest) {
+        let token = authToken()
+        if !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
     }
 
     /// Submit a new Idea. Returns immediately on success.
@@ -48,6 +62,7 @@ final class InboxAPI {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        authorize(&req)
         var payload: [String: String] = ["body": body, "source": source]
         if let cwd { payload["cwd"] = cwd }
         req.httpBody = try JSONEncoder().encode(payload)
@@ -82,6 +97,7 @@ final class InboxAPI {
         if let cwd { queryItems.append(URLQueryItem(name: "cwd", value: cwd)) }
         comps.queryItems = queryItems
         var req = URLRequest(url: comps.url!)
+        authorize(&req)
         req.timeoutInterval = 6
         let (data, _) = try await URLSession.shared.data(for: req)
         return try JSONDecoder().decode(InboxListResponse.self, from: data)
@@ -92,6 +108,7 @@ final class InboxAPI {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        authorize(&req)
         req.httpBody = try JSONEncoder().encode(["conversationId": conversationId])
         req.timeoutInterval = 6
         let (data, _) = try await URLSession.shared.data(for: req)
@@ -109,6 +126,7 @@ final class InboxAPI {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        authorize(&req)
         var payload: [String: String] = ["destination": destination]
         if let note { payload["note"] = note }
         req.httpBody = try JSONEncoder().encode(payload)
