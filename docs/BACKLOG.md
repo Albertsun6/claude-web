@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-14T00:00:00Z
+**最近更新**: 2026-05-14T07:00:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -42,18 +42,6 @@ items:
     parallel_safe_files: ["docs/proposals/"]
     depends_on: []
     note: "调研 whisper-large > 500MB 走 worker subprocess (ADR-012)；写到 docs/proposals/M2-VOICE-CAPABILITY.md；可并行候选"
-
-  - id: aisep-v2-implement
-    title: AISEP v2 fan-in 实施 (aisep-protocol@0.4.0 + schema + scheduler + runner + cli + report + migrate util)
-    priority: P2
-    size: XL
-    status: in_progress
-    assigned_kind: main
-    since: 2026-05-14T00:00:00Z
-    parallel_safe_files: ["packages/aisep-protocol/", "packages/aisep-core/", "packages/aisep-cli/"]
-    depends_on: ["pr:#75-merge"]
-    note: "实施 ADR-022 5 个 decision；Pilot-12 dogfood 9 条 ship 条件；目标 ship 2026-06-30。Review trail Phase 1+2+3+R2 都 CLEAR-TO-SHIP。主窗口自做 (2026-05-14 用户决策 spawn→stay)；按螺旋 7 切片推进。"
-    refs: ["adr:022", "pr:#75", "proposal:aisep-v2-fan-in.md"]
 
 ```
 
@@ -198,6 +186,13 @@ items:
     completed_at: 2026-05-12T06:00:00Z
     refs: ["pr:#61", "commit:bbcebff"]
     note: "选 B：后端 /api/version/latest 6h-cached GitHub Releases API；frontend UpdateBanner.tsx 启动时 fetch，hasUpdate=true 显示蓝色 banner + 下载链接 + per-tag dismiss。方案 A (Sparkle) / C (一键 DL) / iOS native UpdateBanner 留单独 backlog"
+
+  - id: aisep-v2-implement
+    title: AISEP v2 fan-in 实施 (aisep-protocol@0.4.0 + schema + scheduler + runner + cli + report + migrate util)
+    status: done
+    completed_at: 2026-05-14T06:45:02Z
+    refs: ["pr:#78", "pr:#79", "adr:022", "retro:docs/aisep/retrospectives/pilot-12-fan-in-2026-05-14.md"]
+    note: "ADR-022 Decisions 1-5 + Q1b/Q3/Q4/Q6 全部落地。7 个 slice commits squash-merged via PR #78 (37a9aa1)；dep-cruiser hygiene PR #79 (2c133fa) unblock gate 6。Pilot-12 dogfood 9/9 ship gates PASS (gate 8 binary-level 在 v0.3 worktree 验证：v0.3 schema 拒绝 v0.4 fixture，Unrecognized key(s) 'affects', 'migratedFromV03')。Monorepo 366 → 478 tests。"
 
   - id: aisep-bootstrap-v0-v1
     title: AISEP bootstrap — v0 线性 10 阶段链路 + v1 静态 fan-out + Option E HTML 报告
