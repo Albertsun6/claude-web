@@ -13,6 +13,9 @@
 
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
+import { appendPimAudit, auditFields, type PimAuditContext } from "./pim-audit.js";
+
+export type { PimAuditContext } from "./pim-audit.js";
 
 // ============================================================================
 // Row types (snake_case, mirrors DB schema)
@@ -120,7 +123,11 @@ export interface CreatePimItemInput {
   peopleRefs?: Array<{ personRef: string; confidence?: number }>;
 }
 
-export function createPimItem(db: Database.Database, input: CreatePimItemInput): PimItemRow {
+export function createPimItem(
+  db: Database.Database,
+  input: CreatePimItemInput,
+  ctx?: PimAuditContext,
+): PimItemRow {
   const id = input.id ?? `pim-${randomUUID()}`;
   const now = Date.now();
   const commitment = normalize(input.commitmentState) ?? "inbox";
@@ -179,6 +186,21 @@ export function createPimItem(db: Database.Database, input: CreatePimItemInput):
     }
   });
   tx();
+
+  // Audit: create entry
+  const af = auditFields(ctx);
+  appendPimAudit({
+    op: "create",
+    pim_item_id: id,
+    actor: af.actor,
+    source_device: af.source_device,
+    after: {
+      commitment_state: commitment,
+      modality,
+      source: input.source,
+      visibility,
+    },
+  });
 
   return getPimItem(db, id)!;
 }
@@ -253,7 +275,22 @@ export function updatePimItem(
   db: Database.Database,
   id: string,
   patch: UpdatePimItemPatch,
+  ctx?: PimAuditContext,
 ): boolean {
+  // Capture before-state for audit (only fields being modified to minimize JSONL bloat)
+  const beforeFields: string[] = [];
+  if (patch.content !== undefined) beforeFields.push("content");
+  if (patch.modality !== undefined) beforeFields.push("modality");
+  if (patch.visibility !== undefined) beforeFields.push("visibility");
+  if (patch.aiStatus !== undefined) beforeFields.push("ai_status");
+  if (patch.deletedAt !== undefined) beforeFields.push("deleted_at");
+  let beforeSnapshot: Record<string, unknown> | undefined;
+  if (beforeFields.length > 0) {
+    beforeSnapshot = db
+      .prepare(`SELECT ${beforeFields.join(", ")} FROM pim_item WHERE id = ?`)
+      .get(id) as Record<string, unknown> | undefined;
+  }
+
   const fields: string[] = [];
   const params: Record<string, unknown> = { id };
   if (patch.content !== undefined) {
@@ -290,6 +327,32 @@ export function updatePimItem(
   const result = db
     .prepare(`UPDATE pim_item SET ${fields.join(", ")} WHERE id = @id`)
     .run(params);
+
+  if (result.changes > 0) {
+    const af = auditFields(ctx);
+    // Detect undelete (deletedAt set to null)
+    let op: "update" | "delete" | "undelete" = "update";
+    if (patch.deletedAt === null) op = "undelete";
+    else if (patch.deletedAt != null) op = "delete";
+
+    // after-snapshot: only fields that were patched
+    const afterSnapshot: Record<string, unknown> = {};
+    if (patch.content !== undefined) afterSnapshot.content = params.content;
+    if (patch.modality !== undefined) afterSnapshot.modality = params.modality;
+    if (patch.visibility !== undefined) afterSnapshot.visibility = params.visibility;
+    if (patch.aiStatus !== undefined) afterSnapshot.ai_status = params.aiStatus;
+    if (patch.deletedAt !== undefined) afterSnapshot.deleted_at = patch.deletedAt;
+
+    appendPimAudit({
+      op,
+      pim_item_id: id,
+      actor: af.actor,
+      source_device: af.source_device,
+      before: beforeSnapshot,
+      after: afterSnapshot,
+    });
+  }
+
   return result.changes > 0;
 }
 
@@ -307,16 +370,19 @@ export function setCommitmentState(
   db: Database.Database,
   id: string,
   input: SetCommitmentStateInput,
+  ctx?: PimAuditContext,
 ): boolean {
   const newState = normalize(input.newState)!;
   warnIfUnknown("commitment_state", newState, KNOWN_COMMITMENT_STATES);
 
+  let oldState: string | null = null;
   const tx = db.transaction(() => {
     const current = db
       .prepare(`SELECT commitment_state FROM pim_item WHERE id = ?`)
       .get(id) as { commitment_state: string } | undefined;
     if (!current) return false;
     if (current.commitment_state === newState) return false;
+    oldState = current.commitment_state;
 
     const now = Date.now();
     db.prepare(
@@ -337,7 +403,21 @@ export function setCommitmentState(
     ).run(newState, now, id);
     return true;
   });
-  return tx() as boolean;
+  const ok = tx() as boolean;
+
+  if (ok) {
+    const af = auditFields(ctx);
+    appendPimAudit({
+      op: "set_commitment",
+      pim_item_id: id,
+      actor: input.changedBy || af.actor,
+      source_device: af.source_device,
+      before: { commitment_state: oldState },
+      after: { commitment_state: newState },
+      reason: input.reason,
+    });
+  }
+  return ok;
 }
 
 // ============================================================================
@@ -348,6 +428,7 @@ export function attachIssueRef(
   db: Database.Database,
   pimItemId: string,
   issueId: string,
+  ctx?: PimAuditContext,
 ): boolean {
   // Verify pim_item exists
   const item = db.prepare(`SELECT id FROM pim_item WHERE id = ?`).get(pimItemId);
@@ -355,6 +436,16 @@ export function attachIssueRef(
   const result = db
     .prepare(`UPDATE issue SET pim_item_id = ? WHERE id = ?`)
     .run(pimItemId, issueId);
+  if (result.changes > 0) {
+    const af = auditFields(ctx);
+    appendPimAudit({
+      op: "attach_issue",
+      pim_item_id: pimItemId,
+      actor: af.actor,
+      source_device: af.source_device,
+      issue_id: issueId,
+    });
+  }
   return result.changes > 0;
 }
 
@@ -432,6 +523,11 @@ export function sanityReport(db: Database.Database): SanityReport {
 // 10. softDeletePimItem
 // ============================================================================
 
-export function softDeletePimItem(db: Database.Database, id: string): boolean {
-  return updatePimItem(db, id, { deletedAt: Date.now() });
+export function softDeletePimItem(
+  db: Database.Database,
+  id: string,
+  ctx?: PimAuditContext,
+): boolean {
+  // updatePimItem will emit op='delete' audit because patch.deletedAt != null
+  return updatePimItem(db, id, { deletedAt: Date.now() }, ctx);
 }

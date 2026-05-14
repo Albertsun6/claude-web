@@ -29,6 +29,8 @@
     "test:inbox-dual-write": "tsx src/test-inbox-dual-write.ts",
     "test:pim-routes": "tsx src/test-pim-routes.ts",
     "test:rollback-drill": "tsx src/test-rollback-drill.ts",
+    "test:pim-audit": "tsx src/test-pim-audit-log.ts",
+    "test:pim-ai-suggester": "tsx src/test-pim-ai-suggester.ts",
     "migrate:inbox-to-pim": "tsx scripts/migrate-inbox-to-pim.ts",
     "test:workflow": "tsx src/test-workflow.ts",
     "test:m1bplus": "tsx src/test-m1bplus.ts",

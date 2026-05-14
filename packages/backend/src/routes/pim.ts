@@ -10,6 +10,7 @@
 // (避免 router signature 改 + 与 inbox-store.ts dual-write 一致的注入模式)。
 
 import { Hono } from "hono";
+import type { Context } from "hono";
 import type { HarnessDb } from "../harness-store.js";
 import {
   createPimItem,
@@ -21,7 +22,9 @@ import {
   sanityReport,
   softDeletePimItem,
   type PimItemRow,
+  type PimAuditContext,
 } from "../pim-queries.js";
+import { suggestForPimItem, isPimAiEnabled } from "../pim-ai-suggester.js";
 
 // ============================================================================
 // DB instance injection (mirrors inbox-store.setPimDbForInbox pattern)
@@ -38,6 +41,19 @@ function requireDb(): HarnessDb {
     throw new Error("[pim routes] no harness DB injected — call setPimDbForRoutes() first");
   }
   return _db;
+}
+
+/**
+ * Build audit context from request headers (X-Device-Id) + optional actor.
+ * Read on every mutation handler so audit log has source_device for
+ * multi-device tracing (ADR-020 §D Day 8 R5 mitigation).
+ */
+function buildAuditCtx(c: Context, actor?: string): PimAuditContext {
+  const deviceId = c.req.header("x-device-id") || c.req.header("X-Device-Id");
+  return {
+    actor: actor ?? "user",
+    sourceDevice: deviceId && deviceId.trim().length > 0 ? deviceId.trim() : undefined,
+  };
 }
 
 // ============================================================================
@@ -123,17 +139,31 @@ pimRouter.post("/", async (c) => {
         .filter((p): p is { personRef: string } => typeof p.personRef === "string")
     : undefined;
 
-  const row = createPimItem(requireDb().db, {
-    content: payload.content,
-    source: inferredSource,
-    commitmentState: typeof payload.commitmentState === "string" ? payload.commitmentState : undefined,
-    modality: typeof payload.modality === "string" ? payload.modality : undefined,
-    visibility: typeof payload.visibility === "string" ? payload.visibility : undefined,
-    domainTags: Array.isArray(payload.domainTags)
-      ? (payload.domainTags as string[]).filter((d) => typeof d === "string")
-      : undefined,
-    peopleRefs,
-  });
+  const db = requireDb();
+  const row = createPimItem(
+    db.db,
+    {
+      content: payload.content,
+      source: inferredSource,
+      commitmentState: typeof payload.commitmentState === "string" ? payload.commitmentState : undefined,
+      modality: typeof payload.modality === "string" ? payload.modality : undefined,
+      visibility: typeof payload.visibility === "string" ? payload.visibility : undefined,
+      domainTags: Array.isArray(payload.domainTags)
+        ? (payload.domainTags as string[]).filter((d) => typeof d === "string")
+        : undefined,
+      peopleRefs,
+    },
+    buildAuditCtx(c),
+  );
+
+  // ADR-020 §D9 — fire-and-forget AI Level 1 suggestion.
+  // No await: POST returns 201 immediately, AI runs in background.
+  // suggestForPimItem swallows all errors into ai_status updates.
+  if (isPimAiEnabled()) {
+    suggestForPimItem(db.db, row.id).catch((err) => {
+      console.warn(`[pim routes] suggestForPimItem ${row.id} failed: ${err.message}`);
+    });
+  }
 
   return c.json({ item: rowToWire(row) }, 201);
 });
@@ -207,15 +237,22 @@ pimRouter.patch("/:id", async (c) => {
   const existing = getPimItem(db, id);
   if (!existing) return c.json({ error: "not found" }, 404);
 
-  // commitmentState change → 走专门 helper（写 history）
+  const auditCtx = buildAuditCtx(c);
+
+  // commitmentState change → 走专门 helper（写 history + audit op='set_commitment'）
   if (typeof payload.commitmentState === "string") {
-    const deviceId = c.req.header("x-device-id") || "unknown";
+    const deviceId = auditCtx.sourceDevice ?? "unknown";
     const changedBy = typeof payload.changedBy === "string" ? payload.changedBy : `user:${deviceId}`;
-    setCommitmentState(db, id, {
-      newState: payload.commitmentState,
-      changedBy,
-      reason: typeof payload.reason === "string" ? payload.reason : undefined,
-    });
+    setCommitmentState(
+      db,
+      id,
+      {
+        newState: payload.commitmentState,
+        changedBy,
+        reason: typeof payload.reason === "string" ? payload.reason : undefined,
+      },
+      auditCtx,
+    );
   }
 
   // 其他字段 partial update
@@ -226,7 +263,7 @@ pimRouter.patch("/:id", async (c) => {
   if (typeof payload.aiStatus === "string") otherPatch.aiStatus = payload.aiStatus;
   if (payload.deletedAt === null) otherPatch.deletedAt = null;
   else if (typeof payload.deletedAt === "number") otherPatch.deletedAt = payload.deletedAt;
-  if (Object.keys(otherPatch).length > 0) updatePimItem(db, id, otherPatch);
+  if (Object.keys(otherPatch).length > 0) updatePimItem(db, id, otherPatch, auditCtx);
 
   const updated = getPimItem(db, id);
   return c.json({ item: rowToWire(updated!) });
@@ -239,7 +276,7 @@ pimRouter.patch("/:id", async (c) => {
 pimRouter.delete("/:id", (c) => {
   const id = c.req.param("id");
   const db = requireDb().db;
-  const ok = softDeletePimItem(db, id);
+  const ok = softDeletePimItem(db, id, buildAuditCtx(c));
   if (!ok) return c.json({ error: "not found" }, 404);
   return c.json({ ok: true });
 });
@@ -260,7 +297,7 @@ pimRouter.post("/:id/attach-issue", async (c) => {
   if (!body.issueId || typeof body.issueId !== "string") {
     return c.json({ error: "field 'issueId' is required" }, 400);
   }
-  const ok = attachIssueRef(requireDb().db, id, body.issueId);
+  const ok = attachIssueRef(requireDb().db, id, body.issueId, buildAuditCtx(c));
   if (!ok) return c.json({ error: "pim_item not found or issue update failed" }, 404);
   return c.json({ ok: true });
 });
