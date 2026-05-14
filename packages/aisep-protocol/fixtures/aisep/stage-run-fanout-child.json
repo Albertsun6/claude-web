@@ -5,5 +5,6 @@
   "phase": "none",
   "status": "pending",
   "fanOutRole": "child",
-  "parentStageRunId": "sr-01HJK5XH0PARENT00"
+  "parentStageRunId": "sr-01HJK5XH0PARENT00",
+  "affects": ["packages/backend/.*"]
 }

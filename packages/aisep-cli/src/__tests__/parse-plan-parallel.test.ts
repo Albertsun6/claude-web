@@ -33,7 +33,9 @@ describe("parsePlanParallel", () => {
     expect(result).toHaveLength(2);
     expect(result![0]!.name).toBe("backend");
     expect(result![1]!.name).toBe("frontend");
-    expect(result![0]!.affects).toBe("^packages/backend/");
+    // v0.4: affects normalized to string[] (Decision 2). A YAML scalar
+    // string in plan.md still works for backward compat; parser wraps it.
+    expect(result![0]!.affects).toEqual(["^packages/backend/"]);
   });
 
   it("parses 3-entry valid block", () => {
@@ -74,19 +76,19 @@ parallel:
 parallel:
   - id: T1
     name: a
-    affects: ^a/
+    affects: ^pkg-a/
   - id: T2
     name: b
-    affects: ^b/
+    affects: ^pkg-b/
   - id: T3
     name: c
-    affects: ^c/
+    affects: ^pkg-c/
   - id: T4
     name: d
-    affects: ^d/
+    affects: ^pkg-d/
   - id: T5
     name: e
-    affects: ^e/
+    affects: ^pkg-e/
 \`\`\`
 `;
     expect(() => parsePlanParallel(md)).toThrow(/exceeds plan-roadmap cap of 4/);
@@ -98,10 +100,10 @@ parallel:
 parallel:
   - id: T1
     name: "evil; rm -rf /"
-    affects: ^a/
+    affects: ^pkg-a/
   - id: T2
     name: ok
-    affects: ^b/
+    affects: ^pkg-b/
 \`\`\`
 `;
     expect(() => parsePlanParallel(md)).toThrow(/shell-safe/);
@@ -113,10 +115,10 @@ parallel:
 parallel:
   - id: T1
     name: backend
-    affects: ^a/
+    affects: ^pkg-a/
   - id: T2
     name: backend
-    affects: ^b/
+    affects: ^pkg-b/
 \`\`\`
 `;
     expect(() => parsePlanParallel(md)).toThrow(/duplicate name "backend"/);
@@ -127,10 +129,10 @@ parallel:
 \`\`\`yaml
 parallel:
   - name: backend
-    affects: ^a/
+    affects: ^pkg-a/
   - id: T2
     name: frontend
-    affects: ^b/
+    affects: ^pkg-b/
 \`\`\`
 `;
     expect(() => parsePlanParallel(md)).toThrow(/'id' missing or empty/);
@@ -144,10 +146,78 @@ parallel:
     name: backend
   - id: T2
     name: frontend
-    affects: ^b/
+    affects: ^pkg-b/
 \`\`\`
 `;
-    expect(() => parsePlanParallel(md)).toThrow(/'affects' missing or empty/);
+    expect(() => parsePlanParallel(md)).toThrow(/'affects' must be a string or string\[\]/);
+  });
+
+  it("v0.4: accepts affects as YAML array (Decision 2 array form)", () => {
+    const md = `
+\`\`\`yaml
+parallel:
+  - id: T1
+    name: backend
+    affects:
+      - ^packages/backend/.*\\.ts
+      - ^packages/shared/types/.*
+  - id: T2
+    name: frontend
+    affects: [^packages/frontend/.*]
+\`\`\`
+`;
+    const result = parsePlanParallel(md);
+    expect(result).toHaveLength(2);
+    expect(result![0]!.affects).toEqual([
+      "^packages/backend/.*\\.ts",
+      "^packages/shared/types/.*",
+    ]);
+    expect(result![1]!.affects).toEqual(["^packages/frontend/.*"]);
+  });
+
+  it("v0.4 Q4 R2: rejects catch-all affects pattern (no ≥3-char literal anchor)", () => {
+    const md = `
+\`\`\`yaml
+parallel:
+  - id: T1
+    name: backend
+    affects: ^.*
+  - id: T2
+    name: frontend
+    affects: ^packages/frontend/
+\`\`\`
+`;
+    expect(() => parsePlanParallel(md)).toThrow(/catch-all pattern with no/);
+  });
+
+  it("v0.4 Q4 R2: rejects short literal anchor (< 3 chars)", () => {
+    const md = `
+\`\`\`yaml
+parallel:
+  - id: T1
+    name: backend
+    affects: ^a/
+  - id: T2
+    name: frontend
+    affects: ^packages/frontend/
+\`\`\`
+`;
+    expect(() => parsePlanParallel(md)).toThrow(/catch-all pattern with no/);
+  });
+
+  it("v0.4: rejects empty affects array", () => {
+    const md = `
+\`\`\`yaml
+parallel:
+  - id: T1
+    name: backend
+    affects: []
+  - id: T2
+    name: frontend
+    affects: ^pkg-b/
+\`\`\`
+`;
+    expect(() => parsePlanParallel(md)).toThrow(/'affects' is an empty array/);
   });
 
   it("throws on malformed YAML", () => {

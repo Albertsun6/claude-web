@@ -50,7 +50,11 @@ describe("runFanOutParent (Stage 2.runner)", () => {
 
     const { parent, children } = await runner.runFanOutParent({
       stage: "implement",
-      children: [{ name: "backend" }, { name: "frontend" }, { name: "tests" }],
+      children: [
+        { name: "backend", affects: ["packages/backend/.*"] },
+        { name: "frontend", affects: ["packages/frontend/.*"] },
+        { name: "tests", affects: ["packages/shared/__tests__/.*"] },
+      ],
     });
 
     expect(parent.fanOutRole).toBe("parent");
@@ -111,7 +115,10 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     const { parent, children } = await runner.runFanOutParent({
       stage: "implement",
       concurrencyCap: 2,
-      children: [{ name: "backend" }, { name: "frontend" }],
+      children: [
+        { name: "backend", affects: ["packages/backend/.*"] },
+        { name: "frontend", affects: ["packages/frontend/.*"] },
+      ],
     });
 
     expect(parent.status).toBe("failed");
@@ -131,7 +138,11 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     // should be cancelled (not even run).
     const { parent, children } = await runner.runFanOutParent({
       stage: "implement",
-      children: [{ name: "backend" }, { name: "frontend" }, { name: "tests" }],
+      children: [
+        { name: "backend", affects: ["packages/backend/.*"] },
+        { name: "frontend", affects: ["packages/frontend/.*"] },
+        { name: "tests", affects: ["packages/shared/__tests__/.*"] },
+      ],
     });
     expect(parent.status).toBe("failed");
     const byName = new Map(children.map((c, i) => [["backend", "frontend", "tests"][i]!, c]));
@@ -153,7 +164,11 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     const { parent, children } = await runner.runFanOutParent({
       stage: "implement",
       concurrencyCap: 3,
-      children: [{ name: "backend" }, { name: "frontend" }, { name: "tests" }],
+      children: [
+        { name: "backend", affects: ["packages/backend/.*"] },
+        { name: "frontend", affects: ["packages/frontend/.*"] },
+        { name: "tests", affects: ["packages/shared/__tests__/.*"] },
+      ],
     });
 
     // Parent fails because not all children succeeded.
@@ -177,17 +192,21 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     expect(parentArts.filter((a) => a.ref.kind === "patch_set")).toHaveLength(1);
   });
 
-  it("rejects fan-out on non-implement stage (v1 scope limit)", async () => {
+  it("rejects fan-out on stage outside FAN_OUT_ALLOWED_STAGES (v0.4 Q1b whitelist)", async () => {
     const ws = newWorkspace();
     const store = new AisepStore(cwd, ws.meta.id);
     const runner = new AisepRunner({ store, workspace: ws, executor: new MockStageExecutor() });
 
+    // intake / integrate / retrospect etc. are not fan-out-able per Q1b.
     await expect(
       runner.runFanOutParent({
-        stage: "verify" as never, // type assertion for the test
-        children: [{ name: "a" }, { name: "b" }],
+        stage: "intake" as never, // type assertion for the test
+        children: [
+          { name: "a", affects: ["a/.*"] },
+          { name: "b", affects: ["b/.*"] },
+        ],
       }),
-    ).rejects.toThrow(/limits fan-out to stage="implement"/);
+    ).rejects.toThrow(/FAN_OUT_ALLOWED_STAGES/);
   });
 
   it("rejects fan-out with < 2 children (a 1-patch parent isn't a fan-out)", async () => {
@@ -198,9 +217,58 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     await expect(
       runner.runFanOutParent({
         stage: "implement",
-        children: [{ name: "only" }],
+        children: [{ name: "only", affects: ["packages/only/.*"] }],
       }),
     ).rejects.toThrow(/requires >= 2 children/);
+  });
+
+  it("v0.4 Q4: rejects fan-out with overlapping affects (declared-overlap heuristic)", async () => {
+    const ws = newWorkspace();
+    const store = new AisepStore(cwd, ws.meta.id);
+    const runner = new AisepRunner({ store, workspace: ws, executor: new MockStageExecutor() });
+
+    await expect(
+      runner.runFanOutParent({
+        stage: "implement",
+        children: [
+          { name: "broad", affects: ["packages/.*"] },
+          { name: "narrow", affects: ["packages/backend/.*"] },
+        ],
+      }),
+    ).rejects.toThrow(/declared affects overlap/);
+  });
+
+  it("v0.4 Q1b: fan-out on stage='verify' accepted (v2 whitelist extension)", async () => {
+    const ws = newWorkspace();
+    const store = new AisepStore(cwd, ws.meta.id);
+    const runner = new AisepRunner({ store, workspace: ws, executor: new MockStageExecutor() });
+
+    const { parent } = await runner.runFanOutParent({
+      stage: "verify",
+      children: [
+        { name: "lint", affects: ["packages/backend/.*\\.ts"] },
+        { name: "tests", affects: ["packages/shared/test/.*"] },
+      ],
+    });
+    expect(parent.stage).toBe("verify");
+    expect(parent.fanOutRole).toBe("parent");
+  });
+
+  it("v0.4 Decision 2: child rows persist affects field", async () => {
+    const ws = newWorkspace();
+    const store = new AisepStore(cwd, ws.meta.id);
+    const runner = new AisepRunner({ store, workspace: ws, executor: new MockStageExecutor() });
+
+    const { children } = await runner.runFanOutParent({
+      stage: "implement",
+      children: [
+        { name: "backend", affects: ["packages/backend/.*"] },
+        { name: "frontend", affects: ["packages/frontend/.*"] },
+      ],
+    });
+
+    expect(children[0]!.affects).toEqual(["packages/backend/.*"]);
+    expect(children[1]!.affects).toEqual(["packages/frontend/.*"]);
   });
 
   it("concurrencyCap=2 with 3 children: all complete, parent succeeds (batched dispatch)", async () => {
@@ -211,7 +279,11 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     const { parent, children } = await runner.runFanOutParent({
       stage: "implement",
       concurrencyCap: 2,
-      children: [{ name: "a" }, { name: "b" }, { name: "c" }],
+      children: [
+        { name: "a", affects: ["packages/a/.*"] },
+        { name: "b", affects: ["packages/b/.*"] },
+        { name: "c", affects: ["packages/c/.*"] },
+      ],
     });
 
     expect(parent.status).toBe("succeeded");
@@ -231,7 +303,10 @@ describe("runFanOutParent (Stage 2.runner)", () => {
     // No concurrencyCap passed → cap = 1 (serial)
     const { parent, children } = await runner.runFanOutParent({
       stage: "implement",
-      children: [{ name: "a" }, { name: "b" }],
+      children: [
+        { name: "a", affects: ["packages/a/.*"] },
+        { name: "b", affects: ["packages/b/.*"] },
+      ],
     });
     expect(parent.status).toBe("succeeded");
     expect(children).toHaveLength(2);

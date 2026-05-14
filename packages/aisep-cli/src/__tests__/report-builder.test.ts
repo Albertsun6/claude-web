@@ -74,7 +74,7 @@ describe("buildReport (Option E Stage E.1)", () => {
     expect(r.stages).toHaveLength(3);
     expect(r.stages[0]!.outputKey).toBe("intake.md");
     expect(r.stages[1]!.outputKey).toBe("implement.md");
-    expect(r.fanOuts).toHaveLength(0);
+    expect(r.parallelGroups).toHaveLength(0);
     expect(r.workspace.name).toBe("test");
     expect(r.generatedAt).toBe(1747929999999);
   });
@@ -100,9 +100,10 @@ describe("buildReport (Option E Stage E.1)", () => {
       ],
     };
     const r = buildReport(input);
-    expect(r.fanOuts).toHaveLength(1);
-    const fanOut = r.fanOuts[0]!;
+    expect(r.parallelGroups).toHaveLength(1);
+    const fanOut = r.parallelGroups[0]!;
     expect(fanOut.parentId).toBe("sr-parent");
+    expect(fanOut.direction).toBe("out");
     expect(fanOut.childIds).toEqual(["sr-be", "sr-fe", "sr-tests"]);
     expect(fanOut.childNames).toEqual({
       "sr-be": "backend",
@@ -187,5 +188,88 @@ describe("buildReport (Option E Stage E.1)", () => {
     expect(r.traceMatrix).toEqual([]);
     expect(r.contractGrepChecks).toEqual([]);
     expect(r.memoryHits).toEqual([]); // v0.3 MVP always empty
+  });
+
+  // v0.4 (ADR-022 Q6 F10): per-child contract_grep + direction discriminator.
+  it("v0.4: detects direction='in' when parent.predecessorId points to another fan-out parent", () => {
+    const implParent = mkRun("sr-impl-parent", "implement", "parent", undefined, [
+      "sr-impl-be",
+      "sr-impl-fe",
+    ]);
+    const implBE = {
+      ...mkRun("sr-impl-be", "implement", "child", "sr-impl-parent"),
+      affects: ["packages/backend/.*"],
+    };
+    const implFE = {
+      ...mkRun("sr-impl-fe", "implement", "child", "sr-impl-parent"),
+      affects: ["packages/frontend/.*"],
+    };
+    const verifyParent = {
+      ...mkRun("sr-verify-parent", "verify", "parent", undefined, [
+        "sr-verify-be",
+        "sr-verify-fe",
+      ]),
+      predecessorId: "sr-impl-parent",
+    };
+    const verifyBE = {
+      ...mkRun("sr-verify-be", "verify", "child", "sr-verify-parent"),
+      predecessorId: "sr-impl-be",
+      affects: ["packages/backend/.*"],
+    };
+    const verifyFE = {
+      ...mkRun("sr-verify-fe", "verify", "child", "sr-verify-parent"),
+      predecessorId: "sr-impl-fe",
+      affects: ["packages/frontend/.*"],
+    };
+    const r = buildReport({
+      workspace: WS,
+      stageRuns: [implParent, implBE, implFE, verifyParent, verifyBE, verifyFE],
+      artifacts: [],
+    });
+    expect(r.parallelGroups).toHaveLength(2);
+    const fanOut = r.parallelGroups.find((g) => g.parentStage === "implement")!;
+    const fanIn = r.parallelGroups.find((g) => g.parentStage === "verify")!;
+    expect(fanOut.direction).toBe("out");
+    expect(fanIn.direction).toBe("in");
+    expect(fanIn.upstreamPredecessorByChildId).toEqual({
+      "sr-verify-be": "sr-impl-be",
+      "sr-verify-fe": "sr-impl-fe",
+    });
+  });
+
+  it("v0.4: populates affectsByChildId from each child's affects regex array", () => {
+    const parent = mkRun("sr-parent", "implement", "parent", undefined, [
+      "sr-c1",
+      "sr-c2",
+    ]);
+    const c1 = { ...mkRun("sr-c1", "implement", "child", "sr-parent"), affects: ["packages/backend/.*"] };
+    const c2 = {
+      ...mkRun("sr-c2", "implement", "child", "sr-parent"),
+      affects: ["packages/frontend/.*", "packages/shared/types/.*"],
+    };
+    const r = buildReport({
+      workspace: WS,
+      stageRuns: [parent, c1, c2],
+      artifacts: [],
+    });
+    const group = r.parallelGroups[0]!;
+    expect(group.affectsByChildId).toEqual({
+      "sr-c1": ["packages/backend/.*"],
+      "sr-c2": ["packages/frontend/.*", "packages/shared/types/.*"],
+    });
+  });
+
+  it("v0.4: upstreamPredecessorByChildId empty for fan-out (direction='out')", () => {
+    const parent = mkRun("sr-parent", "implement", "parent", undefined, ["sr-c1", "sr-c2"]);
+    const c1 = { ...mkRun("sr-c1", "implement", "child", "sr-parent"), affects: ["a/.*"] };
+    const c2 = { ...mkRun("sr-c2", "implement", "child", "sr-parent"), affects: ["b/.*"] };
+    const r = buildReport({
+      workspace: WS,
+      stageRuns: [parent, c1, c2],
+      artifacts: [],
+    });
+    const group = r.parallelGroups[0]!;
+    expect(group.direction).toBe("out");
+    expect(group.upstreamPredecessorByChildId).toEqual({});
   });
 });

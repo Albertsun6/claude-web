@@ -26,6 +26,36 @@ import { NodeWorkspace } from "@vessel/aisep-workspace";
 import { MockStageExecutor } from "../mock-executor.js";
 import { parsePlanParallel } from "../parse-plan-parallel.js";
 
+/**
+ * v0.4 (ADR-022 dogfood gate 7): scan state.json for v0.3-shape child rows
+ * (fanOutRole='child' with no `affects` field). Returns `needsMigrate` true
+ * + count when migration is required. Read-only: never mutates the file.
+ */
+function detectV03ShapeStateJson(cwd: string): {
+  needsMigrate: boolean;
+  childRowsMissingAffects: number;
+} {
+  const statePath = join(cwd, ".aisep", "state.json");
+  if (!existsSync(statePath)) {
+    return { needsMigrate: false, childRowsMissingAffects: 0 };
+  }
+  let parsed: { stageRuns?: Array<Record<string, unknown>> };
+  try {
+    parsed = JSON.parse(readFileSync(statePath, "utf-8"));
+  } catch {
+    return { needsMigrate: false, childRowsMissingAffects: 0 };
+  }
+  const rows = Array.isArray(parsed.stageRuns) ? parsed.stageRuns : [];
+  let count = 0;
+  for (const r of rows) {
+    if (r.fanOutRole === "child") {
+      const hasAffects = Array.isArray(r.affects) && (r.affects as unknown[]).length > 0;
+      if (!hasAffects) count += 1;
+    }
+  }
+  return { needsMigrate: count > 0, childRowsMissingAffects: count };
+}
+
 interface RunArgs {
   workspace: string;
   dry: boolean;
@@ -54,6 +84,19 @@ interface RunArgs {
    * for heavy implement stages or ratchet down for quick smoke runs.
    */
   claudeTimeoutMs?: number;
+  /**
+   * v0.4 (ADR-022 Decision 4): id-stable retry of a single failed
+   * fan-out child. When set, the stage chain is bypassed entirely and
+   * the cli calls runner.runRetryChild for the named id.
+   */
+  retryChild?: string;
+  /**
+   * v0.4 (ADR-022 Decision 4 + F3): use F3-style 1.5× timeout multiplier
+   * for the retry attempt. Recorded on the attempt log for forensic
+   * traceability; full executor integration (real ClaudeExecutor)
+   * threads this through to spawnClaude in a follow-up.
+   */
+  bumpTimeout?: boolean;
 }
 
 /**
@@ -127,12 +170,60 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
         ...(args.claudeTimeoutMs !== undefined ? { timeoutMs: args.claudeTimeoutMs } : {}),
       })
     : new MockStageExecutor();
+  // v0.4 (ADR-022 dogfood gate 7): pre-flight detect v0.3-shape state.json
+  // (fan-out child rows missing affects) and refuse to dispatch with a
+  // clear migrate-suggestion error. This is the binary-level guarantee
+  // that "v0.3 state.json fed to v0.4 binary, first `aisep run` exits
+  // with clear migrate-suggestion error (not crash, not silent re-write)".
+  // The check is read-only; --retry-child bypasses it because retry
+  // operates on a single id (caller has presumably already migrated, or
+  // explicitly knows what they're doing — runner.runRetryChild will
+  // surface its own pre-condition errors).
+  if (args.retryChild === undefined) {
+    const v03Check = detectV03ShapeStateJson(cwd);
+    if (v03Check.needsMigrate) {
+      console.error(
+        `[aisep run] state.json contains ${v03Check.childRowsMissingAffects} v0.3-shape fan-out child row(s) missing 'affects'.`,
+      );
+      console.error(
+        `[aisep run] Refusing to dispatch on un-migrated state.json (ADR-022 Decision 2).`,
+      );
+      console.error(
+        `[aisep run] Run \`aisep migrate --to 0.4 --workspace ${cwd}\` to migrate, then re-run.`,
+      );
+      return 6;
+    }
+  }
+
   const runner = new AisepRunner({
     store,
     workspace: ws,
     executor,
     memoryProvider,
   });
+
+  // v0.4 (ADR-022 Decision 4): retry-child fast path — bypass the stage
+  // chain and call runner.runRetryChild for the named id. Acquires the
+  // R7 workspace lock inside the runner; refuses if held.
+  if (args.retryChild !== undefined) {
+    console.log(
+      `[aisep run] retry-child ${args.retryChild}${args.bumpTimeout ? " (--bump-timeout)" : ""}`,
+    );
+    try {
+      const retried = await runner.runRetryChild({
+        childId: args.retryChild,
+        ...(args.bumpTimeout ? { bumpTimeout: true } : {}),
+      });
+      console.log(
+        `[aisep run] retry-child ${retried.id.slice(0, 12)}… → ${retried.status}`,
+      );
+      if (retried.status !== "succeeded") return 3;
+      return 0;
+    } catch (err) {
+      console.error(`[aisep run] retry-child failed: ${(err as Error).message}`);
+      return 5;
+    }
+  }
 
   const stages: AisepStage[] = args.stages
     ? args.stages
@@ -152,6 +243,7 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
     // manually. Manual flags always win (explicit > auto).
     let effectiveParallel = args.parallel === true;
     let effectiveChildren = args.parallelChildren;
+    let effectiveAffectsByName: Map<string, string[]> | undefined;
     if (stage === "implement" && !effectiveParallel) {
       const planPath = join(cwd, "plan.md");
       if (existsSync(planPath)) {
@@ -168,6 +260,10 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
         if (autoEntries) {
           effectiveParallel = true;
           effectiveChildren = autoEntries.map((e) => e.name);
+          // v0.4: thread affects through to runFanOutParent (Decision 2).
+          effectiveAffectsByName = new Map(
+            autoEntries.map((e) => [e.name, e.affects]),
+          );
           console.log(
             `[aisep run] auto-detected fan-out from plan.md: parallel=${effectiveChildren.join(",")}`,
           );
@@ -192,7 +288,15 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
         stage: "implement",
         predecessorId: lastRunId,
         concurrencyCap: cap,
-        children: effectiveChildren.map((name) => ({ name })),
+        children: effectiveChildren.map((name) => ({
+          name,
+          // v0.4 Decision 2: prefer plan.md-declared affects; fall back to
+          // `packages/<name>/.*` heuristic when the child comes from
+          // `--children <name>` CLI flag without a plan.md backing it.
+          affects: effectiveAffectsByName?.get(name) ?? [
+            `packages/${name}/.*`,
+          ],
+        })),
       });
       for (const c of children) {
         console.log(
@@ -308,6 +412,15 @@ export function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
         return undefined;
       }
       args.claudeTimeoutMs = n;
+    } else if (arg === "--retry-child") {
+      const next = rawArgs[++i];
+      if (!next || next.length === 0) {
+        console.error(`[aisep run] --retry-child requires a stage_run id (e.g. sr-01HJK...)`);
+        return undefined;
+      }
+      args.retryChild = next;
+    } else if (arg === "--bump-timeout") {
+      args.bumpTimeout = true;
     } else {
       console.error(`[aisep run] Unknown arg: ${arg}`);
       return undefined;
@@ -317,6 +430,11 @@ export function parseRunArgs(rawArgs: string[]): RunArgs | undefined {
   // Cross-flag validation: --parallel requires --children
   if (args.parallel && (!args.parallelChildren || args.parallelChildren.length < 2)) {
     console.error(`[aisep run] --parallel requires --children name1,name2[,...] (>= 2)`);
+    return undefined;
+  }
+  // v0.4: --bump-timeout only meaningful with --retry-child
+  if (args.bumpTimeout && !args.retryChild) {
+    console.error(`[aisep run] --bump-timeout requires --retry-child <id> (ADR-022 Decision 4)`);
     return undefined;
   }
   return args;

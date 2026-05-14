@@ -45,8 +45,13 @@ export interface AisepReport {
   generatedAt: number;
   /** All stage_runs in execution order (root → leaf for fan-out). */
   stages: AisepReportStage[];
-  /** Fan-out parent → children adjacency lists. */
-  fanOuts: AisepReportFanOutGroup[];
+  /**
+   * v0.4 (ADR-022 Q6 + F10): fan-out AND fan-in groups, discriminated
+   * by `direction`. Each fan-in group records the per-child upstream
+   * predecessor mapping so the timeline can stack mirrors under their
+   * upstream counterparts.
+   */
+  parallelGroups: AisepReportParallelGroup[];
   /** Trace rows: REQ → ADR → ZOD → RISK → PATCH → VERIFY. */
   traceMatrix: AisepReportTraceRow[];
   /** contract_grep check drill-down (per verify stage_run). */
@@ -57,13 +62,34 @@ export interface AisepReport {
   memoryHits: AisepReportMemoryHit[];
 }
 
-export interface AisepReportFanOutGroup {
+export interface AisepReportParallelGroup {
   parentId: string;
   parentStage: AisepStage;
+  /**
+   * v0.4 (ADR-022 Q6 F10): "out" = fresh fan-out (no upstream parent
+   * dependency); "in" = fan-in mirror (parent.predecessorId points to
+   * another fan-out parent stage_run, mirror children inherit upstream's
+   * predecessorId + affects). Renderer uses this to flip the flowchart
+   * direction + show upstream-child linkage in stacked timelines.
+   */
+  direction: "out" | "in";
   childIds: string[];
   /** Map child id → declared subStageName (matches `implement-<subName>.md`). */
   childNames: Record<string, string>;
+  /**
+   * v0.4: when direction='in', maps mirror child id → upstream child
+   * predecessor id. Empty for direction='out'.
+   */
+  upstreamPredecessorByChildId: Record<string, string>;
+  /**
+   * v0.4 (ADR-022 Decision 2): per-child affects regex patterns.
+   * Populated from AisepStageRun.affects on each child run.
+   */
+  affectsByChildId: Record<string, string[]>;
 }
+
+/** Deprecated v0.3 alias retained for downstream consumers; prefer ParallelGroup. */
+export type AisepReportFanOutGroup = AisepReportParallelGroup;
 
 export interface AisepReportTraceRow {
   /** Requirement / risk anchor id, e.g. "REQ-001" or "RISK-Q4". */

@@ -7,3 +7,5 @@ export * from "./store.js";
 export * from "./runner.js";
 export * from "./m5-cap.js";
 export * from "./scheduler.js";
+export * from "./workspace-lock.js";
+export * from "./affects-overlap.js";

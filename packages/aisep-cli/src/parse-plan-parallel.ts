@@ -16,15 +16,30 @@
 // validated entry list, OR undefined if no block found, OR throws on
 // malformed YAML / invalid entries.
 //
+// v0.4 (ADR-022 Q4 R2 mitigation): the plan-validator rejects catch-all
+// patterns (`.*`, `(?:.*)`, etc.) that have no ≥3-char literal anchor.
+// Such patterns trivially overlap with everything and defeat the point
+// of declared `affects` (overlap detector would flag everything paired
+// with them). Migrated rows (migratedFromV03=true, affects=[".*"]) are
+// the ONE legal exception and are not generated through this parser
+// (they come from `aisep migrate`, Slice 5).
+//
 // Pure function (R6-clean): string in → parsed list out. Caller
 // (aisep-cli/run.ts) handles fs read.
 
+import { literalAnchors } from "@vessel/aisep-core";
 import yaml from "js-yaml";
 
 export interface PlanParallelEntry {
   id: string;
   name: string;
-  affects: string;
+  /**
+   * v0.4 (ADR-022 Decision 2): regex patterns declaring which paths the
+   * child plans to touch. Accepts string or string[] in plan.md YAML; the
+   * parser normalizes to string[] internally. v0.4 protocol requires
+   * non-empty array on the resulting AisepStageRun.
+   */
+  affects: string[];
 }
 
 const SUB_NAME_RE = /^[A-Za-z0-9_.:-]+$/;
@@ -110,16 +125,50 @@ export function parsePlanParallel(
           `parsePlanParallel: entry #${i} 'name' must match ${SUB_NAME_RE} (shell-safe per RISK-Q4-c); got "${String(name)}"`,
         );
       }
-      if (typeof affects !== "string" || affects.length === 0) {
+      // v0.4: accept string OR string[]; normalize to non-empty string[].
+      let affectsArr: string[];
+      if (typeof affects === "string") {
+        if (affects.length === 0) {
+          throw new Error(
+            `parsePlanParallel: entry #${i} 'affects' missing or empty (must be a path regex literal or array)`,
+          );
+        }
+        affectsArr = [affects];
+      } else if (Array.isArray(affects)) {
+        if (affects.length === 0) {
+          throw new Error(
+            `parsePlanParallel: entry #${i} 'affects' is an empty array (must declare ≥ 1 regex pattern)`,
+          );
+        }
+        for (let j = 0; j < affects.length; j += 1) {
+          const a = affects[j];
+          if (typeof a !== "string" || a.length === 0) {
+            throw new Error(
+              `parsePlanParallel: entry #${i} 'affects[${j}]' must be a non-empty string`,
+            );
+          }
+        }
+        affectsArr = affects.slice();
+      } else {
         throw new Error(
-          `parsePlanParallel: entry #${i} 'affects' missing or empty (must be a path regex literal)`,
+          `parsePlanParallel: entry #${i} 'affects' must be a string or string[] (got ${typeof affects})`,
         );
+      }
+      // v0.4 Q4 R2: reject catch-all patterns (no ≥3-char literal anchor)
+      // at parse time so users get an actionable error before runtime.
+      for (let j = 0; j < affectsArr.length; j += 1) {
+        const p = affectsArr[j]!;
+        if (literalAnchors(p).length === 0) {
+          throw new Error(
+            `parsePlanParallel: entry #${i} 'affects[${j}]' = "${p}" is a catch-all pattern with no ≥3-char literal anchor (refine to a specific path prefix; ADR-022 Q4 R2 plan-validator)`,
+          );
+        }
       }
       if (seenNames.has(name)) {
         throw new Error(`parsePlanParallel: duplicate name "${name}" at entry #${i}`);
       }
       seenNames.add(name);
-      entries.push({ id, name, affects });
+      entries.push({ id, name, affects: affectsArr });
     }
     return entries;
   }

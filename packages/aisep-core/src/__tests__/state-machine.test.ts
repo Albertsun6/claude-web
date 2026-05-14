@@ -44,3 +44,34 @@ describe("state-machine: status transitions", () => {
     expect(() => assertTransition("pending", "succeeded")).toThrow(IllegalStateTransitionError);
   });
 });
+
+describe("state-machine: retry-child marker (ADR-022 Decision 4)", () => {
+  it("failed → running is allowed WITH retryChild marker", () => {
+    expect(canTransition("failed", "running", { retryChild: true })).toBe(true);
+  });
+
+  it("failed → running is rejected WITHOUT retryChild marker (default)", () => {
+    expect(canTransition("failed", "running")).toBe(false);
+    expect(canTransition("failed", "running", {})).toBe(false);
+    expect(canTransition("failed", "running", { retryChild: false })).toBe(false);
+  });
+
+  it("retryChild marker does NOT widen other terminal transitions", () => {
+    // succeeded/cancelled/skipped stay terminal regardless of marker.
+    expect(canTransition("succeeded", "running", { retryChild: true })).toBe(false);
+    expect(canTransition("cancelled", "running", { retryChild: true })).toBe(false);
+    expect(canTransition("skipped", "running", { retryChild: true })).toBe(false);
+    // failed → succeeded (skip the retry) also stays rejected.
+    expect(canTransition("failed", "succeeded", { retryChild: true })).toBe(false);
+  });
+
+  it("assertTransition with retryChild marker does NOT throw for failed → running", () => {
+    expect(() => assertTransition("failed", "running", { retryChild: true })).not.toThrow();
+  });
+
+  it("assertTransition still throws for retryChild marker on other illegal transitions", () => {
+    expect(() => assertTransition("succeeded", "running", { retryChild: true })).toThrow(
+      IllegalStateTransitionError,
+    );
+  });
+});

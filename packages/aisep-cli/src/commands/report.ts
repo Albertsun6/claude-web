@@ -93,7 +93,7 @@ export async function reportCommand(rawArgs: string[]): Promise<number> {
   const html = renderReport(report);
   const outPath = args.out ? resolve(args.out) : join(cwd, "report.html");
   writeFileSync(outPath, html, "utf-8");
-  console.log(`[aisep report] wrote ${outPath} (${html.length} bytes; ${stageRuns.length} stages, ${report.fanOuts.length} fan-out group(s), ${report.contractGrepChecks.length} contract_grep checks)`);
+  console.log(`[aisep report] wrote ${outPath} (${html.length} bytes; ${stageRuns.length} stages, ${report.parallelGroups.length} parallel group(s), ${report.contractGrepChecks.length} contract_grep checks)`);
 
   if (args.open) {
     // Spawn macOS `open` / Linux `xdg-open`. Best-effort; ignore failure.

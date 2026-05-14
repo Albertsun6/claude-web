@@ -21,7 +21,7 @@ function mkReport(over: Partial<AisepReport> = {}): AisepReport {
     workspace: WS,
     generatedAt: 1747929999999,
     stages: [],
-    fanOuts: [],
+    parallelGroups: [],
     traceMatrix: [],
     contractGrepChecks: [],
     memoryHits: [],
@@ -41,7 +41,7 @@ describe("renderReport (Option E Stage E.2)", () => {
     expect(html).toContain('id="aisep-report-data"');
     // Empty-section placeholders
     expect(html).toContain("No stage_runs.");
-    expect(html).toContain("No fan-out (linear chain).");
+    expect(html).toContain("No parallel groups (linear chain).");
     expect(html).toContain("No trace anchors found");
     expect(html).toContain("No contract_grep checks found");
   });
@@ -136,12 +136,19 @@ describe("renderReport (Option E Stage E.2)", () => {
             subStageName: "tests",
           },
         ],
-        fanOuts: [
+        parallelGroups: [
           {
             parentId: "sr-parent",
             parentStage: "implement",
+            direction: "out",
             childIds: ["sr-be", "sr-fe", "sr-tests"],
             childNames: { "sr-be": "backend", "sr-fe": "frontend", "sr-tests": "tests" },
+            upstreamPredecessorByChildId: {},
+            affectsByChildId: {
+              "sr-be": ["packages/backend/.*"],
+              "sr-fe": ["packages/frontend/.*"],
+              "sr-tests": ["packages/shared/test/.*"],
+            },
           },
         ],
       }),
@@ -156,6 +163,41 @@ describe("renderReport (Option E Stage E.2)", () => {
     // Child rows show subStageName
     expect(html).toContain("implement · backend");
     expect(html).toContain("implement · tests");
+    // v0.4: direction tag visible + affects table rendered
+    expect(html).toContain("direction=out");
+    expect(html).toContain("packages/backend/.*");
+    expect(html).toContain("packages/frontend/.*");
+  });
+
+  it("v0.4: renders fan-in mirror with direction='in' + upstream linkage", () => {
+    const html = renderReport(
+      mkReport({
+        stages: [],
+        parallelGroups: [
+          {
+            parentId: "sr-verify-parent",
+            parentStage: "verify",
+            direction: "in",
+            childIds: ["sr-v-be", "sr-v-fe"],
+            childNames: { "sr-v-be": "backend", "sr-v-fe": "frontend" },
+            upstreamPredecessorByChildId: {
+              "sr-v-be": "sr-impl-be-1234",
+              "sr-v-fe": "sr-impl-fe-5678",
+            },
+            affectsByChildId: {
+              "sr-v-be": ["packages/backend/.*"],
+              "sr-v-fe": ["packages/frontend/.*"],
+            },
+          },
+        ],
+      }),
+    );
+    // Direction discriminator surfaces in HTML
+    expect(html).toContain("direction=in");
+    // Flowchart flips bottom-to-top to show fan-in semantics
+    expect(html).toContain("flowchart BT");
+    // Mirror linkage rendered with upstream node + dotted arrow
+    expect(html).toContain(".mirrors.->");
   });
 
   it("renders trace matrix rows", () => {

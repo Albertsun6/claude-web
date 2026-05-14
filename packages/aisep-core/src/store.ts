@@ -150,16 +150,24 @@ export class AisepStore {
     );
   }
 
+  /**
+   * @param opts.retryChild — v0.4 (ADR-022 Decision 4): authorize the
+   *   `failed → running` retry transition for this single call. Pass
+   *   ONLY from `runner.runRetryChild` after acquiring the workspace
+   *   lock + verifying parent.status terminal. All other callers must
+   *   omit this marker; the strict terminal-status invariant remains
+   *   in force for them.
+   */
   updateStageRunStatus(
     id: string,
     nextStatus: AisepStageStatus,
-    opts: { startedAt?: number; endedAt?: number } = {},
+    opts: { startedAt?: number; endedAt?: number; retryChild?: boolean } = {},
   ): AisepStageRun {
     const idx = this.state.stageRuns.findIndex((r) => r.id === id);
     if (idx < 0) throw new Error(`stage_run not found: ${id}`);
 
     const current = this.state.stageRuns[idx]!;
-    assertTransition(current.status, nextStatus);
+    assertTransition(current.status, nextStatus, { retryChild: opts.retryChild });
 
     const updated: AisepStageRun = {
       ...current,

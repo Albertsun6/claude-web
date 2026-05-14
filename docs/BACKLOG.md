@@ -1,6 +1,6 @@
 # Vessel Backlog
 
-**最近更新**: 2026-05-13T10:25:00Z
+**最近更新**: 2026-05-14T00:00:00Z
 **Steward 启动仪式**: 见 [`docs/STEWARD_PROMPTS.md`](STEWARD_PROMPTS.md) 或 [`docs/STEWARD_USAGE.md`](STEWARD_USAGE.md)
 **Schema 契约**: [`docs/adr/vessel/ADR-019-steward-v0-contract.md`](adr/vessel/ADR-019-steward-v0-contract.md)
 **Source-of-truth**: 本文件是唯一写入点（I1）；`status` 字段是状态唯一权威（I10）；section header 仅人眼导航
@@ -47,11 +47,12 @@ items:
     title: AISEP v2 fan-in 实施 (aisep-protocol@0.4.0 + schema + scheduler + runner + cli + report + migrate util)
     priority: P2
     size: XL
-    status: planned
+    status: in_progress
     assigned_kind: main
+    since: 2026-05-14T00:00:00Z
     parallel_safe_files: ["packages/aisep-protocol/", "packages/aisep-core/", "packages/aisep-cli/"]
     depends_on: ["pr:#75-merge"]
-    note: "实施 ADR-022 5 个 decision；Pilot-12 dogfood 9 条 ship 条件；目标 ship 2026-06-30。Review trail Phase 1+2+3+R2 都 CLEAR-TO-SHIP。"
+    note: "实施 ADR-022 5 个 decision；Pilot-12 dogfood 9 条 ship 条件；目标 ship 2026-06-30。Review trail Phase 1+2+3+R2 都 CLEAR-TO-SHIP。主窗口自做 (2026-05-14 用户决策 spawn→stay)；按螺旋 7 切片推进。"
     refs: ["adr:022", "pr:#75", "proposal:aisep-v2-fan-in.md"]
 
 ```
