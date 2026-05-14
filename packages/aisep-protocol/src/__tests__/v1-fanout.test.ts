@@ -28,6 +28,8 @@ const CHILD_BASE = {
   stage: "implement" as const,
   status: "pending" as const,
   phase: "none" as const,
+  // v0.4: child rows require non-empty affects (ADR-022 Decision 2).
+  affects: ["packages/backend/.*"],
 };
 
 describe("v1 fan-out: AisepFanOutRoleSchema enum", () => {
@@ -106,15 +108,17 @@ describe("v1 fan-out: parent role invariants", () => {
     ).toThrow(/parent.*must NOT have parentStageRunId/);
   });
 
-  it("rejects parent on non-implement stage (v1 scope limit)", () => {
+  it("rejects parent on stage outside FAN_OUT_ALLOWED_STAGES (v0.4 whitelist)", () => {
+    // v0.4 (ADR-022 Q1b): whitelist = {implement, verify, review}. `integrate` is
+    // the fan-in terminal aggregation, NOT a fan-out source.
     expect(() =>
       AisepStageRunSchema.parse({
         ...PARENT_BASE,
-        stage: "verify",
+        stage: "integrate",
         fanOutRole: "parent",
         subStages: ["sr-1"],
       }),
-    ).toThrow(/parent.*only allowed for stage='implement' in v1/);
+    ).toThrow(/parent.*only allowed for stages in FAN_OUT_ALLOWED_STAGES/);
   });
 });
 
@@ -150,15 +154,15 @@ describe("v1 fan-out: child role invariants", () => {
     ).toThrow(/child.*must NOT have subStages/);
   });
 
-  it("rejects child on non-implement stage", () => {
+  it("rejects child on stage outside FAN_OUT_ALLOWED_STAGES (v0.4 whitelist)", () => {
     expect(() =>
       AisepStageRunSchema.parse({
         ...CHILD_BASE,
-        stage: "verify",
+        stage: "integrate",
         fanOutRole: "child",
         parentStageRunId: "sr-parent",
       }),
-    ).toThrow(/child.*only allowed for stage='implement' in v1/);
+    ).toThrow(/child.*only allowed for stages in FAN_OUT_ALLOWED_STAGES/);
   });
 });
 

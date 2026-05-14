@@ -11,8 +11,23 @@
 // - StageRunCommonShape gains `fanOutRole` / `subStages` / `parentStageRunId`
 // - .superRefine on outer schema enforces the parent/child invariants
 //   (parent ⟺ subStages non-empty + no parent ref + stage="implement"; etc.)
-// - v1 limits parent/child to `stage === "implement"`. Future v2+ may
-//   widen the host stages.
+// - v1 limits parent/child to `stage === "implement"`.
+//
+// v0.4 (v2 fan-in, ADR-022):
+// - StageRunCommonShape gains `affects: string[]` (regex patterns declaring
+//   which paths a child plans to touch; required non-empty for child rows
+//   per Decision 2). Used by runner's `assertNoAffectsOverlap()` pre-dispatch
+//   check (Q4 declared-overlap conflict detection).
+// - StageRunCommonShape gains `migratedFromV03?: boolean` audit marker
+//   (Decision 2): rows imported by `aisep migrate --to 0.4` carry
+//   `affects: [".*"]` + `migratedFromV03: true`; scheduler treats marker
+//   as read-only forensic — does NOT trigger fresh fan-in dispatch.
+// - FAN_OUT_ALLOWED_STAGES whitelist widens parent/child to
+//   {implement, verify, review} per Q1b (stage-pair fan-in only — verify
+//   and review fan-in on top of an upstream fan-out, NOT independent
+//   fan-out sources for stage_pair purposes).
+// - `integrate` is the fan-in terminal aggregation stage and is NEVER
+//   a fan-out parent/child (per §Scope: "integrate (parent, 1 aggregation)").
 
 import { z } from "zod";
 import { ContentHashSchema, EpochMsSchema, OpaqueIdSchema } from "./common.js";
@@ -72,11 +87,34 @@ export type AisepStageStatus = z.infer<typeof AisepStageStatusSchema>;
 export const AisepFanOutRoleSchema = z.enum(["normal", "parent", "child"]);
 export type AisepFanOutRole = z.infer<typeof AisepFanOutRoleSchema>;
 
+/**
+ * v0.4 (v2 fan-in, ADR-022 Q1b): stages where fanOutRole='parent' or
+ * 'child' is legal. `integrate` is excluded — it's the fan-in terminal
+ * aggregation, not a fan-out source. Non-fan-out stages (intake /
+ * research / plan / architecture / contract / retrospect) have semantic
+ * reasons not to parallelize (single seed context, single planning
+ * decision, single retrospective).
+ *
+ * Widening this set is a MINOR bump (backward-compatible).
+ */
+export const FAN_OUT_ALLOWED_STAGES = new Set<AisepStage>([
+  "implement",
+  "verify",
+  "review",
+]);
+
 const StageRunCommonShape = {
   id: OpaqueIdSchema,
   workspaceId: OpaqueIdSchema,
   stage: AisepStageSchema,
-  /** v0: single predecessor; v2+: lift to array (separate field). */
+  /**
+   * v0: single predecessor (linear). v2 fan-in uses subStages mirroring on
+   * both sides; predecessorIds[] is NOT introduced (revoked from v0 plan,
+   * see docs/proposals/aisep-v2-fan-in.md §Q3 Implicit revocation).
+   * Cross-stage linkage uses this single predecessorId chain (each
+   * downstream child's predecessorId points to its corresponding upstream
+   * child's id).
+   */
   predecessorId: OpaqueIdSchema.optional(),
   successorId: OpaqueIdSchema.optional(),
   status: AisepStageStatusSchema,
@@ -90,6 +128,21 @@ const StageRunCommonShape = {
   subStages: z.array(OpaqueIdSchema).default([]),
   /** v0.3 (v1 fan-out): parent stage_run id when fanOutRole === "child". MUST be unset for "normal" / "parent". */
   parentStageRunId: OpaqueIdSchema.optional(),
+  /**
+   * v0.4 (v2 fan-in, ADR-022 Decision 2): regex patterns declaring which
+   * paths this child plans to touch. Required non-empty when
+   * fanOutRole === 'child'. Used by runner's pre-dispatch
+   * `assertNoAffectsOverlap()` (Q4 declared-overlap conflict detection).
+   * For "normal" / "parent" roles, defaults to [] and SHOULD remain so.
+   */
+  affects: z.array(z.string().min(1)).default([]),
+  /**
+   * v0.4 (v2 fan-in, ADR-022 Decision 2): audit marker set by
+   * `aisep migrate --to 0.4` on v0.3-imported child rows. Migrated rows
+   * carry `affects: [".*"]` + this flag; scheduler treats marker as
+   * read-only forensic — does NOT trigger fresh fan-in dispatch.
+   */
+  migratedFromV03: z.boolean().default(false),
 };
 
 const AisepStageRunNoneSchema = z.object({
@@ -127,6 +180,8 @@ export const AisepStageRunSchema = z
     AisepStageRunSliceSchema,
   ])
   // v0.3 (v1 fan-out Stage 1): enforce fanOutRole invariants.
+  // v0.4 (v2 fan-in, ADR-022): widen stage whitelist (Q1b) + require
+  // non-empty `affects` on child rows (Decision 2).
   .superRefine((run, ctx) => {
     if (run.fanOutRole === "parent") {
       if (run.subStages.length === 0) {
@@ -143,11 +198,11 @@ export const AisepStageRunSchema = z
           message: "fanOutRole='parent' must NOT have parentStageRunId",
         });
       }
-      if (run.stage !== "implement") {
+      if (!FAN_OUT_ALLOWED_STAGES.has(run.stage)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["stage"],
-          message: "fanOutRole='parent' is only allowed for stage='implement' in v1",
+          message: `fanOutRole='parent' only allowed for stages in FAN_OUT_ALLOWED_STAGES (got '${run.stage}')`,
         });
       }
     } else if (run.fanOutRole === "child") {
@@ -162,14 +217,23 @@ export const AisepStageRunSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["subStages"],
-          message: "fanOutRole='child' must NOT have subStages (no nested fan-out in v1)",
+          message: "fanOutRole='child' must NOT have subStages (no nested fan-out)",
         });
       }
-      if (run.stage !== "implement") {
+      if (!FAN_OUT_ALLOWED_STAGES.has(run.stage)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["stage"],
-          message: "fanOutRole='child' is only allowed for stage='implement' in v1",
+          message: `fanOutRole='child' only allowed for stages in FAN_OUT_ALLOWED_STAGES (got '${run.stage}')`,
+        });
+      }
+      // v0.4 Decision 2: child rows must declare what they touch.
+      if (run.affects.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["affects"],
+          message:
+            "fanOutRole='child' requires non-empty affects: string[] (regex patterns declaring touched paths)",
         });
       }
     } else {
