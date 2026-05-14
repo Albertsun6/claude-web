@@ -1,0 +1,14 @@
+{
+  "profile": "coder",
+  "model": "claude-sonnet-4-6",
+  "prompt": "Implement the intake stage CLI command per contracts-seed.ts AisepStageRun schema. Output patch.diff.",
+  "contextBundle": {
+    "files": [],
+    "history": [],
+    "memoryHits": [],
+    "adrs": ["decisions/0002-stage-dag.md"],
+    "artifacts": [
+      { "kind": "contract_frozen", "key": "contracts/stage.ts" }
+    ]
+  }
+}

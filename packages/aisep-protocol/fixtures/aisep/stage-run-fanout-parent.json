@@ -1,0 +1,13 @@
+{
+  "id": "sr-01HJK5XH0PARENT00",
+  "workspaceId": "ws-01HJK5XF0CDEF07A",
+  "stage": "implement",
+  "phase": "none",
+  "status": "running",
+  "fanOutRole": "parent",
+  "subStages": [
+    "sr-01HJK5XH0CHILD0BE",
+    "sr-01HJK5XH0CHILD0FE",
+    "sr-01HJK5XH0CHILD0TS"
+  ]
+}

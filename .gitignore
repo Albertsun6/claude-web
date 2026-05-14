@@ -5,6 +5,13 @@ dist
 # Vessel macOS .pkg build artifacts (scripts/build-pkg.sh)
 build/
 installer/cache/
+
+# iCloud Drive sync conflict duplicates — files like "BACKLOG 2.md" or
+# "config 3.xml" produced when two devices race the same file. Always
+# stale snapshots; the original (without " N" suffix) is canonical.
+# (Cleaned up wholesale in v0.8.7; pattern blocks future ones.)
+* [2-9].*
+* [2-9]
 .DS_Store
 *.log
 .vite

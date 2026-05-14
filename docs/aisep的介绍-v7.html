@@ -1,0 +1,1366 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AISEP 介绍 v7</title>
+  <style>
+    :root {
+      --navy: #0b1330;
+      --blue: #2563eb;
+      --blue-2: #1d4ed8;
+      --cyan: #0891b2;
+      --green: #15803d;
+      --green-2: #16a34a;
+      --amber: #b45309;
+      --amber-2: #d97706;
+      --purple: #6d28d9;
+      --purple-2: #7c3aed;
+      --red: #b91c1c;
+      --ink: #0f172a;
+      --ink-2: #1e293b;
+      --muted: #475569;
+      --muted-2: #64748b;
+      --line: #d8e1ed;
+      --line-2: #e2e8f0;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --soft-blue: #eff6ff;
+      --soft-green: #ecfdf5;
+      --soft-amber: #fffbeb;
+      --soft-purple: #f3e8ff;
+      --soft-red: #fef2f2;
+      --soft-cyan: #ecfeff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #dde3ee 0%, #e5e9f0 100%);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+      font-feature-settings: "tnum" 1, "ss01" 1;
+    }
+    .deck { display: grid; gap: 32px; padding: 32px; justify-content: center; }
+    .slide {
+      position: relative;
+      width: 1440px;
+      min-height: 820px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 95% 8%, rgba(37, 99, 235, .085), transparent 28%),
+        radial-gradient(circle at 5% 95%, rgba(124, 58, 237, .055), transparent 22%),
+        linear-gradient(180deg, #ffffff 0%, var(--bg) 100%);
+      border-radius: 30px;
+      box-shadow: 0 36px 84px rgba(15, 23, 42, .16), 0 4px 12px rgba(15, 23, 42, .04);
+      padding: 72px 88px 88px;
+    }
+    .slide.dark {
+      color: white;
+      background:
+        radial-gradient(circle at 80% 18%, rgba(8, 145, 178, .55), transparent 28%),
+        radial-gradient(circle at 18% 92%, rgba(124, 58, 237, .45), transparent 28%),
+        radial-gradient(circle at 50% 50%, rgba(37, 99, 235, .12), transparent 60%),
+        linear-gradient(135deg, #020617 0%, #0b1330 60%, #111827 100%);
+    }
+    .eyebrow {
+      margin: 0 0 22px;
+      color: var(--blue);
+      font-size: 19px;
+      font-weight: 750;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .dark .eyebrow { color: #67e8f9; }
+    .eyebrow.gold { color: var(--amber-2); }
+    .dark .eyebrow.gold { color: #fbbf24; }
+    .eyebrow.green { color: var(--green); }
+    .dark .eyebrow.green { color: #6ee7b7; }
+    .eyebrow.purple { color: var(--purple); }
+    .dark .eyebrow.purple { color: #c4b5fd; }
+    h1, h2, h3, h4, p { margin: 0; }
+    h1 { max-width: 1100px; font-size: 80px; line-height: 1.0; letter-spacing: -0.05em; font-weight: 870; }
+    h2 { max-width: 1200px; font-size: 50px; line-height: 1.12; letter-spacing: -0.035em; font-weight: 830; }
+    h3 { font-size: 28px; letter-spacing: -.02em; font-weight: 800; }
+    .subtitle { max-width: 1100px; margin-top: 28px; color: var(--muted); font-size: 26px; line-height: 1.5; }
+    .dark .subtitle { color: #cbd5e1; }
+    .footer {
+      position: absolute;
+      left: 88px; right: 88px; bottom: 36px;
+      display: flex; justify-content: space-between; align-items: center;
+      color: #94a3b8;
+      font-size: 15px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      border-top: 1px solid rgba(148, 163, 184, .28);
+      padding-top: 16px;
+    }
+    .dark .footer { border-top-color: rgba(255, 255, 255, .14); color: #94a3b8; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 10px;
+      margin-top: 36px; padding: 14px 22px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .22);
+      color: #e0f2fe;
+      font-size: 17px;
+      letter-spacing: .02em;
+      flex-wrap: wrap;
+    }
+    .tag b { color: white; font-weight: 700; }
+    .tag .mit, .tag .paradigm {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 7px;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+    .tag .mit { background: #16a34a; color: white; }
+    .tag .paradigm { background: rgba(37, 99, 235, .35); color: white; }
+    .orb {
+      position: absolute; right: 100px; top: 100px;
+      width: 320px; height: 320px; border-radius: 50px;
+      background:
+        linear-gradient(135deg, rgba(34, 211, 238, .22), rgba(37, 99, 235, .52)),
+        linear-gradient(45deg, transparent 48%, rgba(255,255,255,.18) 49%, rgba(255,255,255,.18) 51%, transparent 52%);
+      transform: rotate(10deg);
+      border: 1px solid rgba(255,255,255,.22);
+    }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px; margin-top: 44px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin-top: 44px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 40px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 32px 32px 28px;
+      box-shadow: 0 10px 26px rgba(15, 23, 42, .05);
+    }
+    .card h3 { display: flex; align-items: center; gap: 14px; font-size: 27px; line-height: 1.18; margin-bottom: 16px; }
+    .card p { color: var(--muted); font-size: 21px; line-height: 1.5; }
+    .card p code, .card p b code {
+      background: var(--soft-blue);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 18px;
+      color: var(--blue-2);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .icon {
+      width: 46px; height: 46px;
+      border-radius: 13px;
+      display: inline-grid; place-items: center;
+      color: white; font-size: 22px; font-weight: 800; flex: 0 0 auto;
+      letter-spacing: -.01em;
+    }
+    .blue { background: var(--blue); }
+    .cyan { background: var(--cyan); }
+    .green { background: var(--green-2); }
+    .amber { background: var(--amber-2); }
+    .purple { background: var(--purple-2); }
+    .red { background: var(--red); }
+    .navy-bg { background: var(--navy); }
+    .statement {
+      margin-top: 36px;
+      padding: 28px 32px;
+      background: var(--navy);
+      color: white;
+      border-radius: 24px;
+      font-size: 22px;
+      line-height: 1.5;
+      letter-spacing: -0.01em;
+    }
+    .statement b { color: #93c5fd; font-weight: 800; }
+    .statement em { color: #fbbf24; font-style: normal; font-weight: 800; }
+    .cols { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; margin-top: 44px; }
+    .bullets { display: grid; gap: 20px; margin-top: 30px; }
+    .bullet {
+      display: grid; grid-template-columns: 20px 1fr; gap: 18px;
+      color: var(--ink); font-size: 22px; line-height: 1.45; align-items: start;
+    }
+    .bullet code {
+      background: var(--soft-blue);
+      padding: 2px 10px; border-radius: 7px;
+      font-size: 18px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: var(--blue-2);
+    }
+    .dot { width: 13px; height: 13px; border-radius: 99px; margin-top: 11px; background: var(--blue); }
+    .dot.gold { background: var(--amber-2); }
+    .dot.green { background: var(--green-2); }
+    .dot.purple { background: var(--purple-2); }
+    .diagram { width: 100%; height: auto; display: block; }
+
+    .stage-row-10 { display: grid; grid-template-columns: repeat(10, 1fr); gap: 11px; margin-top: 44px; }
+    .stage10 {
+      min-height: 148px;
+      border-radius: 18px;
+      padding: 18px 12px;
+      color: white;
+      display: flex; flex-direction: column; justify-content: space-between;
+      box-shadow: 0 10px 22px rgba(15,23,42,.10);
+    }
+    .stage10 strong { font-size: 18px; letter-spacing: -.01em; display: block; }
+    .stage10 span { font-size: 13.5px; opacity: .92; line-height: 1.35; display: block; margin-top: 6px; }
+
+    .crossbar {
+      margin-top: 28px;
+      padding: 22px 28px;
+      border-radius: 20px;
+      background: var(--navy);
+      color: white;
+      font-size: 20px; line-height: 1.5;
+    }
+    .crossbar code {
+      background: rgba(255,255,255,.14);
+      padding: 2px 10px;
+      border-radius: 7px;
+      font-size: 17px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #e0f2fe;
+    }
+    .crossbar b { color: #fbbf24; font-weight: 800; }
+
+    .metric-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 32px; }
+    .metric {
+      background: white; border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 26px 26px 24px;
+      min-height: 150px;
+    }
+    .metric .num {
+      font-size: 46px; font-weight: 870;
+      letter-spacing: -.035em; line-height: 1;
+      background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .metric.green .num { background: linear-gradient(135deg, var(--green) 0%, #4ade80 100%); -webkit-background-clip: text; background-clip: text; }
+    .metric.purple .num { background: linear-gradient(135deg, var(--purple) 0%, #c084fc 100%); -webkit-background-clip: text; background-clip: text; }
+    .metric.amber .num { background: linear-gradient(135deg, var(--amber-2) 0%, #fde047 100%); -webkit-background-clip: text; background-clip: text; }
+    .metric .label { margin-top: 16px; color: var(--muted); font-size: 17.5px; line-height: 1.4; }
+
+    .roadmap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 76px; position: relative; }
+    .roadmap::before {
+      content: ""; position: absolute; left: 100px; right: 100px; top: 44px;
+      height: 4px; border-radius: 4px;
+      background: linear-gradient(90deg, var(--green-2) 0%, var(--green-2) 50%, var(--amber-2) 75%, var(--blue) 100%);
+    }
+    .mile { position: relative; text-align: center; z-index: 1; }
+    .mile .circle {
+      width: 88px; height: 88px;
+      margin: 0 auto 24px;
+      display: grid; place-items: center;
+      border-radius: 50%; color: white;
+      font-size: 28px; font-weight: 870;
+      box-shadow: 0 14px 28px rgba(15,23,42,.14);
+    }
+    .mile .when { color: var(--muted); font-size: 15px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+    .mile h3 { font-size: 25px; margin-bottom: 8px; }
+    .mile p { color: var(--muted); font-size: 17px; line-height: 1.4; }
+
+    .report-mock {
+      background: linear-gradient(160deg, #0b1330 0%, #111827 100%);
+      border-radius: 26px; padding: 28px;
+      color: white; min-height: 380px;
+      box-shadow: 0 22px 46px rgba(15,23,42,.22);
+    }
+    .mock-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; color: #cbd5e1; font-size: 18px; }
+    .mock-head b { color: white; }
+    .bar { height: 16px; border-radius: 999px; margin: 14px 0; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+    .bar.short { width: 68%; background: linear-gradient(90deg, var(--green-2), #84cc16); }
+    .bar.mid { width: 82%; background: linear-gradient(90deg, var(--purple-2), #c084fc); }
+    .bar.tiny { width: 54%; background: linear-gradient(90deg, var(--amber-2), #fde047); }
+    .trace-example {
+      margin-top: 18px; padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.06);
+      color: #cbd5e1; font-size: 15px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      line-height: 1.7;
+    }
+    .trace-example .req { color: #93c5fd; }
+    .trace-example .adr { color: #c4b5fd; }
+    .trace-example .zod { color: #67e8f9; }
+    .trace-example .risk { color: #fca5a5; }
+    .trace-example .patch { color: #86efac; }
+    .trace-example .verify { color: #fde047; }
+    .trace-example .ok { color: #4ade80; font-weight: 700; }
+    .mock-section-label { color: #94a3b8; font-size: 16px; margin-top: 6px; }
+    .quote { margin-top: 56px; max-width: 1180px; color: white; font-size: 46px; line-height: 1.2; letter-spacing: -.035em; font-weight: 830; }
+    .next-step { margin-top: 42px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .next-step .card { min-height: 220px; background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.18); }
+    .next-step .card h3 { color: white; }
+    .next-step .card p { color: #cbd5e1; }
+
+    .lineage { margin-top: 32px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .lineage .src {
+      display: grid; grid-template-columns: 72px 1fr;
+      gap: 18px; padding: 22px 24px;
+      border-radius: 18px; background: white; border: 1px solid var(--line);
+      align-items: center;
+    }
+    .lineage .src .yr {
+      grid-row: span 2;
+      display: grid; place-items: center;
+      width: 68px; height: 68px;
+      border-radius: 16px; background: var(--navy);
+      color: white; font-weight: 870; font-size: 14px;
+      line-height: 1.15; text-align: center;
+    }
+    .lineage .src b { font-size: 20px; letter-spacing: -.01em; }
+    .lineage .src p {
+      grid-column: 2; color: var(--muted);
+      font-size: 17px; line-height: 1.45; margin-top: 2px;
+    }
+
+    /* Three Defense Lines */
+    .defenses { margin-top: 36px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+    .defense {
+      padding: 28px 26px 26px;
+      border-radius: 24px;
+      background: white;
+      border: 1px solid var(--line);
+      box-shadow: 0 12px 28px rgba(15,23,42,.06);
+      display: flex; flex-direction: column; position: relative;
+    }
+    .defense::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0;
+      height: 7px; border-radius: 24px 24px 0 0;
+    }
+    .defense.engineer::before { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+    .defense.human::before    { background: linear-gradient(90deg, var(--green-2), #4ade80); }
+    .defense.glass::before    { background: linear-gradient(90deg, var(--purple-2), #c084fc); }
+    .defense .layer-tag {
+      font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+      font-weight: 800; color: var(--muted); margin-bottom: 10px;
+    }
+    .defense.engineer .layer-tag { color: var(--blue-2); }
+    .defense.human .layer-tag { color: var(--green); }
+    .defense.glass .layer-tag { color: var(--purple); }
+    .defense h4 { font-size: 26px; letter-spacing: -.02em; line-height: 1.2; margin-bottom: 6px; }
+    .defense .tagline { color: var(--muted); font-size: 17.5px; margin-bottom: 18px; line-height: 1.4; }
+    .defense .mech {
+      flex-grow: 1; padding: 16px 18px;
+      border-radius: 14px; background: var(--bg);
+      font-size: 16.5px; line-height: 1.65; color: var(--ink-2);
+    }
+    .defense .mech b { display: block; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    .defense .mech ul { margin: 0; padding-left: 20px; }
+    .defense .mech ul li { margin-bottom: 5px; }
+    .defense .mech code {
+      background: white; padding: 1.5px 7px;
+      border-radius: 5px; font-size: 14.5px;
+      color: var(--blue-2);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .defense .defends {
+      margin-top: 14px; padding: 12px 16px;
+      border-radius: 12px; background: var(--soft-red);
+      color: var(--red); font-size: 16px; font-weight: 700;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .defense .defends::before { content: "✕"; font-size: 17px; font-weight: 900; }
+    .defense-summary {
+      margin-top: 26px; padding: 20px 28px;
+      background: var(--navy); color: white;
+      border-radius: 18px; font-size: 20px; line-height: 1.5; text-align: center;
+    }
+    .defense-summary b { color: #fbbf24; font-weight: 800; }
+
+    /* Landscape */
+    .landscape { margin-top: 36px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+    .landscape .cat {
+      padding: 22px 18px 22px;
+      border-radius: 18px;
+      background: white;
+      border: 1px solid var(--line);
+      min-height: 270px;
+      display: flex; flex-direction: column; position: relative;
+    }
+    .landscape .cat h4 {
+      font-size: 17px; letter-spacing: .04em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 10px;
+    }
+    .landscape .cat b {
+      font-size: 19px; letter-spacing: -.01em; color: var(--ink);
+      display: block; margin-bottom: 14px;
+    }
+    .landscape .cat ul {
+      margin: 0; padding-left: 20px;
+      color: var(--muted); font-size: 16.5px; line-height: 1.6;
+    }
+    .landscape .cat ul li { margin-bottom: 5px; }
+
+    /* AISEP positioning card (above landscape) */
+    .aisep-banner {
+      margin-top: 28px;
+      padding: 26px 32px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, var(--blue) 0%, var(--purple-2) 100%);
+      color: white;
+      box-shadow: 0 18px 38px rgba(37, 99, 235, .25);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 24px;
+      align-items: center;
+    }
+    .aisep-banner .star {
+      width: 76px; height: 76px;
+      border-radius: 22px;
+      background: rgba(255,255,255,.18);
+      display: grid; place-items: center;
+      font-size: 38px; font-weight: 870;
+    }
+    .aisep-banner h4 { font-size: 24px; margin-bottom: 6px; letter-spacing: -.01em; }
+    .aisep-banner p { font-size: 17.5px; opacity: .95; line-height: 1.45; }
+    .aisep-banner code {
+      background: rgba(255,255,255,.18);
+      padding: 1px 8px; border-radius: 5px; font-size: 14.5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .landscape-note {
+      margin-top: 18px;
+      padding: 14px 20px;
+      border-left: 4px solid var(--muted);
+      background: var(--bg);
+      border-radius: 0 12px 12px 0;
+      color: var(--muted);
+      font-size: 16px; line-height: 1.55;
+    }
+    .landscape-note b { color: var(--ink); }
+
+    /* Comparison table */
+    .compare {
+      margin-top: 22px; width: 100%;
+      border-collapse: separate; border-spacing: 0;
+      font-size: 15.5px;
+      border-radius: 16px; overflow: hidden;
+      box-shadow: 0 12px 28px rgba(15,23,42,.07);
+      background: white;
+    }
+    .compare th, .compare td {
+      padding: 11px 13px; text-align: left; vertical-align: middle;
+      border-bottom: 1px solid var(--line-2);
+    }
+    .compare th {
+      background: var(--navy); color: white;
+      font-weight: 700; font-size: 14.5px;
+      letter-spacing: .02em; text-transform: uppercase;
+    }
+    .compare td:first-child {
+      font-weight: 800; color: var(--ink);
+      background: var(--soft-blue);
+      font-size: 15px;
+    }
+    .compare tr.us td:first-child { background: var(--blue); color: white; }
+    .compare tr.us td { background: rgba(37, 99, 235, .05); }
+    .compare tr.paradigm-row td:first-child {
+      background: var(--navy); color: white; font-size: 13.5px;
+    }
+    .compare tr.paradigm-row td {
+      background: var(--bg); color: var(--muted);
+      font-size: 13.5px; font-style: italic;
+    }
+    .compare tr.paradigm-row td.us-paradigm {
+      background: rgba(37, 99, 235, .12);
+      color: var(--blue-2);
+      font-weight: 800; font-style: normal;
+    }
+    .compare td.yes { color: var(--green); font-weight: 700; text-align: center; }
+    .compare td.no { color: var(--red); font-weight: 700; text-align: center; }
+    .compare td.partial { color: var(--amber); font-weight: 700; text-align: center; }
+    .compare td.note { color: var(--muted); font-size: 14.5px; }
+    .compare tr:last-child td { border-bottom: none; }
+    .compare-legend {
+      margin-top: 16px; display: flex; gap: 20px;
+      color: var(--muted); font-size: 15.5px;
+    }
+    .compare-legend span b { color: var(--green); }
+    .compare-legend .partial b { color: var(--amber); }
+    .compare-legend .no b { color: var(--red); }
+
+    /* Use cases */
+    .uc-grid { margin-top: 38px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .uc-card {
+      background: white; border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 32px 30px 28px;
+      box-shadow: 0 10px 26px rgba(15,23,42,.05);
+      display: flex; flex-direction: column;
+    }
+    .uc-card .uc-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+    .uc-card .uc-tag {
+      font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+      font-weight: 800; padding: 4px 12px; border-radius: 999px;
+    }
+    .uc-card.green .uc-tag { background: var(--soft-green); color: var(--green); }
+    .uc-card.purple .uc-tag { background: var(--soft-purple); color: var(--purple); }
+    .uc-card.amber .uc-tag { background: var(--soft-amber); color: var(--amber); }
+    .uc-card h3 { font-size: 28px; margin-bottom: 12px; line-height: 1.2; }
+    .uc-card .uc-desc { color: var(--muted); font-size: 20px; line-height: 1.5; flex-grow: 1; }
+    .uc-card .uc-meta {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line-2);
+      display: grid; gap: 10px;
+      color: var(--muted); font-size: 16px; line-height: 1.45;
+    }
+    .uc-card .uc-meta b { color: var(--ink); }
+    .uc-card .uc-meta code {
+      background: var(--soft-blue);
+      padding: 1.5px 7px;
+      border-radius: 6px; font-size: 14.5px;
+      color: var(--blue-2);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    /* 4 inputs (NEW v6) */
+    .inputs-grid {
+      margin-top: 38px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 22px;
+    }
+    .input-card {
+      padding: 26px 24px 26px;
+      border-radius: 22px;
+      background: white;
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 22px rgba(15,23,42,.05);
+      display: flex; flex-direction: column; position: relative;
+    }
+    .input-card .tier {
+      font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+      font-weight: 800; margin-bottom: 6px;
+    }
+    .input-card.s .tier { color: var(--blue-2); }
+    .input-card.d .tier { color: var(--green); }
+    .input-card.r .tier { color: var(--purple); }
+    .input-card.l .tier { color: var(--amber); }
+    .input-card h4 { font-size: 23px; margin-bottom: 14px; letter-spacing: -.02em; }
+    .input-card ul {
+      margin: 0; padding-left: 22px;
+      color: var(--muted); font-size: 16.5px; line-height: 1.6;
+      flex-grow: 1;
+    }
+    .input-card ul li { margin-bottom: 5px; }
+    .input-card .ratio {
+      margin-top: 16px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 14.5px; font-weight: 800;
+      letter-spacing: .04em;
+      align-self: flex-start;
+    }
+    .input-card.s .ratio { background: var(--soft-blue); color: var(--blue-2); }
+    .input-card.d .ratio { background: var(--soft-green); color: var(--green); }
+    .input-card.r .ratio { background: var(--soft-purple); color: var(--purple); }
+    .input-card.l .ratio { background: var(--soft-amber); color: var(--amber); }
+    .inputs-arrow {
+      margin-top: 28px;
+      padding: 22px 28px;
+      background: var(--navy);
+      color: white;
+      border-radius: 20px;
+      font-size: 19px;
+      text-align: center;
+      line-height: 1.55;
+    }
+    .inputs-arrow b { color: #fbbf24; }
+
+    /* Strategy */
+    .strategy-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 36px; }
+    .strategy-col {
+      padding: 30px; border-radius: 24px;
+      background: white; border: 1px solid var(--line);
+      box-shadow: 0 10px 22px rgba(15,23,42,.05);
+    }
+    .strategy-col h4 { font-size: 23px; letter-spacing: -.02em; margin-bottom: 18px; display: flex; align-items: center; gap: 12px; }
+    .strategy-col h4 .badge { font-size: 13px; padding: 4px 12px; border-radius: 999px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .strategy-col h4 .badge.archi { background: var(--soft-purple); color: var(--purple); }
+    .strategy-col h4 .badge.aisep { background: var(--soft-blue); color: var(--blue-2); }
+    .strategy-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; font-size: 17px; }
+    .strategy-table td { padding: 10px 14px; vertical-align: middle; }
+    .strategy-table td:first-child { width: 35%; color: var(--purple); font-weight: 700; background: var(--soft-purple); border-radius: 10px 0 0 10px; }
+    .strategy-table td:nth-child(2) { color: var(--ink); background: white; border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); }
+    .strategy-table td:last-child {
+      background: white; border-right: 1px solid var(--line-2);
+      border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2);
+      border-radius: 0 10px 10px 0; color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px;
+    }
+    .strategy-table tr td:nth-child(2) { border-left: 1px solid var(--line-2); }
+    .strategy-flow {
+      margin-top: 12px; padding: 14px 18px;
+      border-radius: 12px; background: var(--soft-blue);
+      color: var(--ink); font-size: 16.5px; line-height: 1.55;
+      border-left: 4px solid var(--blue);
+    }
+    .strategy-flow b { color: var(--blue-2); }
+    .strategy-flow code {
+      background: white;
+      padding: 1.5px 7px; border-radius: 6px;
+      font-size: 14.5px; color: var(--blue-2);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    /* Audit */
+    .audit-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 36px; }
+    .audit-col {
+      padding: 30px; border-radius: 24px;
+      background: white; border: 1px solid var(--line);
+      box-shadow: 0 10px 22px rgba(15,23,42,.05);
+    }
+    .audit-col h4 { font-size: 23px; letter-spacing: -.02em; margin-bottom: 18px; display: flex; align-items: center; gap: 12px; }
+    .audit-col h4 .badge { font-size: 13px; padding: 4px 12px; border-radius: 999px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .audit-col h4 .badge.req { background: var(--soft-red); color: var(--red); }
+    .audit-col h4 .badge.have { background: var(--soft-green); color: var(--green); }
+    .audit-col ul { margin: 0; padding-left: 26px; color: var(--muted); font-size: 18px; line-height: 1.55; }
+    .audit-col ul li { margin-bottom: 11px; }
+    .audit-col ul li b { color: var(--ink); }
+    .audit-col ul li code {
+      background: var(--soft-blue);
+      padding: 1.5px 7px; border-radius: 5px;
+      font-size: 14.5px; color: var(--blue-2);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    /* Memory + Report */
+    .mem-report { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 36px; }
+    .mem-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .mem-cell {
+      background: white; border: 1px solid var(--line);
+      border-radius: 16px; padding: 18px 20px; min-height: 130px;
+    }
+    .mem-cell.blue { background: var(--soft-blue); }
+    .mem-cell.green { background: var(--soft-green); }
+    .mem-cell.purple { background: var(--soft-purple); }
+    .mem-cell.amber { background: var(--soft-amber); }
+    .mem-cell h4 { display: flex; align-items: center; gap: 10px; font-size: 19px; margin-bottom: 8px; }
+    .mem-cell h4 .icon { width: 32px; height: 32px; font-size: 16px; border-radius: 9px; }
+    .mem-cell p { color: var(--muted); font-size: 15.5px; line-height: 1.45; }
+
+    /* Source citation strip */
+    .sources {
+      margin-top: 22px; padding: 14px 18px;
+      border-left: 4px solid var(--blue);
+      background: var(--soft-blue);
+      border-radius: 0 12px 12px 0;
+      color: var(--muted); font-size: 14.5px; line-height: 1.55;
+    }
+    .sources b { color: var(--ink); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main class="deck">
+
+    <!-- Slide 1: Cover -->
+    <section class="slide dark">
+      <div class="orb"></div>
+      <p class="eyebrow">AI Software Engineering Platform</p>
+      <h1>AISEP 介绍</h1>
+      <p class="subtitle">把企业<b style="color:white">数字化战略与业务需求</b>快速变成可交付、可重构、可审计的工程流水线。<b style="color:#fbbf24">Engineered AI Delivery Pipeline</b> —— 首次把 HITL + 记忆 + 逆向 + Spec + 工程纪律 MIT 开源整合。</p>
+      <div class="tag"><span class="mit">MIT</span> <span class="paradigm">EADP 新品类</span> <b>v0.3.0</b> &nbsp;·&nbsp; aisep-protocol@0.3.0 &nbsp;·&nbsp; TypeScript &nbsp;·&nbsp; 2026-05-13</div>
+      <div class="footer"><span>AISEP / Vessel</span><span>01 / 17</span></div>
+    </section>
+
+    <!-- Slide 2: One-liner positioning -->
+    <section class="slide">
+      <p class="eyebrow">一句话</p>
+      <h2>AISEP 是企业<em style="color:var(--blue-2); font-style:normal;">数字化战略与业务需求</em>到工程交付的纪律化流水线。</h2>
+      <div class="grid-3">
+        <div class="card">
+          <h3><span class="icon blue">快</span>快速交付</h3>
+          <p>10 阶段 SDLC 自动跑，从需求到 PR 落地约 17 分钟，每一步有明确产物。</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon green">证</span>可审计证据</h3>
+          <p>每阶段 artifact 可追踪，单文件 HTML 报告含 trace matrix 与机器检查证据。</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon purple">沉</span>跨项目沉淀</h3>
+          <p>已验证模式与失败修复进入跨项目记忆库，下个项目可直接复用。</p>
+        </div>
+      </div>
+      <div class="footer"><span>AISEP / 定位</span><span>02 / 17</span></div>
+    </section>
+
+    <!-- Slide 3: Problem -->
+    <section class="slide">
+      <p class="eyebrow">为什么需要</p>
+      <h2>AI 写代码已经很快，但企业级数字化交付还缺四件事。</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3><span class="icon red">!</span>会话无法沉淀</h3>
+          <p>新项目从零开始，前一个项目踩过的坑不会自然进入下一个项目。</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon amber">G</span>缺少阶段闸门</h3>
+          <p>一次性产出太多，reviewer 容易只看结论，风险被推迟到上线前。</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon purple">D</span>真实工程是 DAG</h3>
+          <p>企业系统常有并行实现、合并、返工和复验，不是线性对话。</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon blue">A</span>架构决策太隐蔽</h3>
+          <p>数据模型、协议、运行时这类高搬迁成本决策，必须在编码前被单独确认。</p>
+        </div>
+      </div>
+      <div class="footer"><span>AISEP / 问题背景</span><span>03 / 17</span></div>
+    </section>
+
+    <!-- ============ NEW v6 SLIDE 4: Four input tiers ============ -->
+    <section class="slide">
+      <p class="eyebrow gold">数字化交付的 4 类输入</p>
+      <h2>不止"企业战略" —— AISEP 同时吃 4 类数字化诉求，配比与现实一致。</h2>
+      <div class="inputs-grid">
+        <div class="input-card s">
+          <div class="tier">Tier S · Strategy</div>
+          <h4>战略层</h4>
+          <ul>
+            <li>CEO / CTO OKR</li>
+            <li>"降本 30%"</li>
+            <li>"Q3 ERP MVP"</li>
+            <li>合规驱动</li>
+          </ul>
+          <div class="ratio">~15%</div>
+        </div>
+        <div class="input-card d">
+          <div class="tier">Tier D · Demand</div>
+          <h4>需求层</h4>
+          <ul>
+            <li>业务部门具体功能</li>
+            <li>用户认证 / 报表增维度</li>
+            <li>新模块 / 新流程</li>
+            <li>UX 改进</li>
+          </ul>
+          <div class="ratio">~40%</div>
+        </div>
+        <div class="input-card r">
+          <div class="tier">Tier R · Refactor</div>
+          <h4>改造层</h4>
+          <ul>
+            <li>既有系统改造</li>
+            <li>微服务拆分</li>
+            <li>性能 / 安全升级</li>
+            <li>GDPR / 等保适配</li>
+          </ul>
+          <div class="ratio">~30%</div>
+        </div>
+        <div class="input-card l">
+          <div class="tier">Tier L · Legacy</div>
+          <h4>沉淀层</h4>
+          <ul>
+            <li>遗留代码逆向解构</li>
+            <li>离职交接 / 系统接管</li>
+            <li>技术债清理</li>
+            <li>无文档历史项目</li>
+          </ul>
+          <div class="ratio">~15%</div>
+        </div>
+      </div>
+      <div class="inputs-arrow">
+        4 类输入共通点 = 都是<b>数字化交付</b>，都需要<b>工程纪律 + 人在环 + 全程可视</b>。AISEP 一套流水线全吃。
+      </div>
+      <div class="footer"><span>AISEP / 数字化交付全输入</span><span>04 / 17</span></div>
+    </section>
+
+    <!-- Slide 5: 10-stage -->
+    <section class="slide">
+      <p class="eyebrow">10-stage</p>
+      <h2>每个阶段只解决一个问题，避免 AI 把所有事混在一起。</h2>
+      <div class="stage-row-10">
+        <div class="stage10 blue"><strong>intake</strong><span>明确需求边界</span></div>
+        <div class="stage10 blue"><strong>research</strong><span>调研与反证</span></div>
+        <div class="stage10 cyan"><strong>plan</strong><span>任务 DAG</span></div>
+        <div class="stage10 cyan"><strong>architecture</strong><span>高成本决策</span></div>
+        <div class="stage10 purple"><strong>contract</strong><span>协议冻结</span></div>
+        <div class="stage10 purple"><strong>implement</strong><span>小补丁实现</span></div>
+        <div class="stage10 green"><strong>verify</strong><span>机器验证</span></div>
+        <div class="stage10 green"><strong>review</strong><span>异构评审</span></div>
+        <div class="stage10 amber"><strong>integrate</strong><span>集成发布</span></div>
+        <div class="stage10 amber"><strong>retrospect</strong><span>复盘沉淀</span></div>
+      </div>
+      <div class="crossbar">
+        <b>requirements.yaml 横切贯穿</b> · 用 <code>REQ-001</code>/<code>ADR-002</code>/<code>RISK-Q5</code> 等 trace_id 串联所有阶段。
+        example：<code>REQ-001 用户认证</code> → <code>ADR-002 cookie-session</code> → <code>ZOD-LoginSchema</code> → <code>RISK-Q5 权限边界</code> → <code>patch.diff:42</code> → <code>verify:contract_grep:ok</code>。
+      </div>
+      <div class="footer"><span>AISEP / 工程流水线</span><span>05 / 17</span></div>
+    </section>
+
+    <!-- Slide 6: Methodology lineage -->
+    <section class="slide">
+      <p class="eyebrow purple">方法论传承</p>
+      <h2>AISEP 不是凭空发明，是 60 年软件工程沉淀的工程化整合。</h2>
+      <div class="lineage">
+        <div class="src">
+          <div class="yr">RUP<br/>1999</div>
+          <b>LCA Anchor Gate</b>
+          <p>架构是独立可执行 baseline；7 问 anchor gate（数据模型/协议/兼容/不可逆/权限/资源/rollback）必过。</p>
+        </div>
+        <div class="src">
+          <div class="yr">TOGAF<br/>9.2</div>
+          <b>Phase G Architecture Contract</b>
+          <p>架构产物可机器验证：zod schema + 自动 gate 替代 PDF 签字。</p>
+        </div>
+        <div class="src">
+          <div class="yr">Boehm<br/>1988</div>
+          <b>Risk-driven Spiral</b>
+          <p>风险驱动 4 象限，每圈最小切片 + 机器验证 + 复盘。</p>
+        </div>
+        <div class="src">
+          <div class="yr">Mastra<br/>Inngest</div>
+          <b>Builder DSL + durable step</b>
+          <p>抄思想自写约 1000 LOC TS engine，不绑定外部 daemon。</p>
+        </div>
+      </div>
+      <div class="statement">
+        和 <b>Cursor Plan / Devin / OpenHands</b> 区别：它们是 <em>black-box autonomous</em>（Devin 测出 15% 成功率）；AISEP 是 <em>Engineered AI Delivery Pipeline</em> —— 工程纪律框架 + 人在环锚点 + 全程可视 + 跨项目记忆 + spec 作为契约工件，五件套一起。
+      </div>
+      <div class="footer"><span>AISEP / 学术工业传承</span><span>06 / 17</span></div>
+    </section>
+
+    <!-- Slide 7: Three Defense Lines -->
+    <section class="slide">
+      <p class="eyebrow gold">三层防线</p>
+      <h2>Engineer-discipline · Human-Anchored · Glass-Box —— 三层任一失效，另两层兜住。</h2>
+      <div class="defenses">
+        <div class="defense engineer">
+          <div class="layer-tag">Layer 1 · 范式</div>
+          <h4>Engineer + Spec</h4>
+          <div class="tagline">工程纪律 + 规格驱动双驱</div>
+          <div class="mech">
+            <b>核心机制</b>
+            <ul>
+              <li>10-stage anchor gate</li>
+              <li>zod contract 编译期检查</li>
+              <li><code>requirements.yaml</code> 横切</li>
+              <li>trace_id 链 REQ→ADR→ZOD→RISK→PATCH</li>
+              <li>RUP/TOGAF/Boehm 学术传承</li>
+            </ul>
+          </div>
+          <div class="defends">防 spec 失焦 / 架构隐蔽</div>
+        </div>
+        <div class="defense human">
+          <div class="layer-tag">Layer 2 · 人在环</div>
+          <h4>Human-Anchored</h4>
+          <div class="tagline">6 个强制人工锚点</div>
+          <div class="mech">
+            <b>强制 HITL 点</b>
+            <ul>
+              <li>Architecture 7-问 anchor sign-off</li>
+              <li>Review final verdict 人工拍板</li>
+              <li>Memory promote 强制人工 verify</li>
+              <li>Retrospect ship/drop/defer 人工选</li>
+              <li>Dispatch I11 永不静默动手</li>
+              <li>AskUserQuestion 关键岔路</li>
+            </ul>
+          </div>
+          <div class="defends">防 AI 失控 / autonomous 黑盒</div>
+        </div>
+        <div class="defense glass">
+          <div class="layer-tag">Layer 3 · 透明可视</div>
+          <h4>Glass-Box</h4>
+          <div class="tagline">5 层 forensic 可见</div>
+          <div class="mech">
+            <b>透明产物</b>
+            <ul>
+              <li>每 stage 独立 <code>&lt;stage&gt;.md</code></li>
+              <li><code>state.json</code> 全字段 invocation+promptHash</li>
+              <li><code>.aisep/tmp/</code> 渲染后 prompt 留档可重放</li>
+              <li><code>report.html</code> 5 section + drill-down</li>
+              <li><code>attempt.error</code> burst/timeout 详情可见</li>
+            </ul>
+          </div>
+          <div class="defends">防黑盒事后审 / 不可追溯</div>
+        </div>
+      </div>
+      <div class="defense-summary">
+        AISEP 的可靠性不来自单个 LLM 调用质量，而来自 <b>三层串行加固</b>：规格写错有架构 gate 兜住，AI 失控有 HITL 锚点拦住，黑盒事后审有 Glass-Box 全程可见。
+      </div>
+      <div class="footer"><span>AISEP / 范式 + 人 + 透明</span><span>07 / 17</span></div>
+    </section>
+
+    <!-- Slide 8: Three enterprise use cases -->
+    <section class="slide">
+      <p class="eyebrow gold">三大企业用场</p>
+      <h2>覆盖<b style="color:var(--blue-2)">数字化交付</b>的 3 类典型工作：绿地、改造、逆向。</h2>
+      <div class="uc-grid">
+        <div class="uc-card green">
+          <div class="uc-head">
+            <span class="icon green">1</span>
+            <span class="uc-tag">快速交付</span>
+          </div>
+          <h3>绿地新需求</h3>
+          <p class="uc-desc">从 <b>需求文档 / OKR 任务</b> 启动，AISEP 一条龙跑 intake → integrate，产出可 PR 的 patch + 测试 + 评审 + 集成日志。</p>
+          <div class="uc-meta">
+            <div><b>输入：</b>seed.txt + requirements.yaml</div>
+            <div><b>输出：</b>10 stage artifacts + <code>patch.diff</code> + <code>report.html</code></div>
+            <div><b>实测：</b>~17 min wall（Pilot-10b 真业务 dogfood）</div>
+          </div>
+        </div>
+        <div class="uc-card purple">
+          <div class="uc-head">
+            <span class="icon purple">2</span>
+            <span class="uc-tag">快速重构</span>
+          </div>
+          <h3>既有系统改造</h3>
+          <p class="uc-desc">指向 <b>已有 codebase</b>，AISEP 跑 architecture 阶段产出当前结构图 + risks + 重构 ADR + 渐进迁移 plan。</p>
+          <div class="uc-meta">
+            <div><b>输入：</b>已有项目目录 + 改造目标</div>
+            <div><b>输出：</b><code>architecture/brief.md</code> + ADR-NNN + risks.yaml + 切片 plan</div>
+            <div><b>价值：</b>不动一行代码，先把方案锁住</div>
+          </div>
+        </div>
+        <div class="uc-card amber">
+          <div class="uc-head">
+            <span class="icon amber">3</span>
+            <span class="uc-tag">工程化逆向</span>
+          </div>
+          <h3>遗留代码解构</h3>
+          <p class="uc-desc">对着 <b>无文档遗留系统</b>，AISEP 反向产出 <code>requirements.yaml</code> + ADR + ZOD schema + RISK trace，把代码反推成可读的工程文档。</p>
+          <div class="uc-meta">
+            <div><b>输入：</b>遗留代码 + 关键路径目录</div>
+            <div><b>输出：</b>REQ → ADR → ZOD → RISK 反向 trace + audit 报告</div>
+            <div><b>场景：</b>合规审计 / 接管旧系统 / 离职交接（Gartner 2026 预测 40% 现代化项目用 AI 逆向，vs 2023 &lt;10%）</div>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>AISEP / 企业用场</span><span>08 / 17</span></div>
+    </section>
+
+    <!-- Slide 9: Strategy + requirement alignment -->
+    <section class="slide">
+      <p class="eyebrow gold">数字化诉求对接</p>
+      <h2>requirements.yaml 同时装战略与业务需求：进入 trace 链，可追到 commit。</h2>
+      <div class="strategy-cols">
+        <div class="strategy-col">
+          <h4><span class="badge archi">ArchiMate 启发</span> Motivation Layer 6 元素</h4>
+          <table class="strategy-table">
+            <tr><td>goals</td><td>战略目标</td><td>Q3 ERP MVP</td></tr>
+            <tr><td>drivers</td><td>业务驱动</td><td>降本 30% / 合规</td></tr>
+            <tr><td>requirements</td><td>具体需求</td><td>REQ-001..NNN</td></tr>
+            <tr><td>constraints</td><td>约束条件</td><td>预算 / 上线日期</td></tr>
+            <tr><td>principles</td><td>原则</td><td>开源优先 / API 优先</td></tr>
+            <tr><td>stakeholders</td><td>干系人</td><td>CEO / CTO / 合规</td></tr>
+          </table>
+        </div>
+        <div class="strategy-col">
+          <h4><span class="badge aisep">AISEP 落地</span> 业务 → 战略 → 代码全链路</h4>
+          <div class="strategy-flow">
+            <b>业务层：</b><code>业务需求 / 改造诉求 / 合规要求</code>
+          </div>
+          <div class="strategy-flow" style="margin-top:10px; border-left-color: var(--amber-2);">
+            <b>战略层：</b><code>driver:降本30%</code> → <code>goal:Q3-ERP-MVP</code>
+          </div>
+          <div class="strategy-flow" style="margin-top:10px; border-left-color: var(--purple);">
+            <b>需求层：</b>realizes goal → <code>REQ-001 用户认证</code>
+          </div>
+          <div class="strategy-flow" style="margin-top:10px; border-left-color: var(--cyan);">
+            <b>架构层：</b><code>ADR-002 cookie-session</code> + <code>ZOD-LoginSchema</code>
+          </div>
+          <div class="strategy-flow" style="margin-top:10px; border-left-color: var(--green-2);">
+            <b>交付层：</b><code>patch.diff:42</code> + <code>verify:contract_grep:ok</code>
+          </div>
+          <div class="strategy-flow" style="margin-top:10px; border-left-color: var(--red);">
+            <b>价值闭环：</b>每个 commit 可追到 driver，向 CEO / 董事会汇报 ROI 有据可查
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>AISEP / 数字化诉求到代码 trace</span><span>09 / 17</span></div>
+    </section>
+
+    <!-- ============ NEW v6 SLIDE 10: Landscape — AISEP 自创品类 ============ -->
+    <section class="slide">
+      <p class="eyebrow gold">2026 AI SWE 平台格局</p>
+      <h2>AISEP 不归属现有 5 大子品类，定义新品类：<b style="color:var(--blue-2)">Engineered AI Delivery Pipeline (EADP)</b>。</h2>
+      <div class="aisep-banner">
+        <div class="star">★</div>
+        <div>
+          <h4>AISEP — Engineered AI Delivery Pipeline（自定义新品类）</h4>
+          <p>5 大支柱 = <code>工程纪律</code> + <code>HITL 锚点</code> + <code>Glass-Box</code> + <code>跨项目记忆</code> + <code>spec-as-artifact</code>。
+          单个支柱有竞品，5 个一起 + MIT 开源 + 单人即可部署 —— 目前唯一。</p>
+        </div>
+      </div>
+      <div class="landscape">
+        <div class="cat">
+          <h4>IDE 扩展</h4>
+          <b>嵌入现有 IDE</b>
+          <ul>
+            <li>GitHub Copilot</li>
+            <li>Cline (5M 安装)</li>
+            <li>Continue</li>
+            <li>Amazon Q</li>
+          </ul>
+        </div>
+        <div class="cat">
+          <h4>专门 IDE</h4>
+          <b>替代 VS Code</b>
+          <ul>
+            <li>Cursor</li>
+            <li>Windsurf</li>
+            <li>Zed</li>
+            <li>Lovable / Bolt</li>
+          </ul>
+        </div>
+        <div class="cat">
+          <h4>CLI 工具</h4>
+          <b>终端 pair</b>
+          <ul>
+            <li>Claude Code</li>
+            <li>Aider (39K★)</li>
+            <li>Codex CLI</li>
+            <li>Goose</li>
+          </ul>
+        </div>
+        <div class="cat">
+          <h4>云端 Agent</h4>
+          <b>自主沙箱执行</b>
+          <ul>
+            <li>Devin (15% 成功率)</li>
+            <li>OpenHands (MIT)</li>
+            <li>Jules</li>
+            <li>SWE-Agent</li>
+          </ul>
+        </div>
+        <div class="cat">
+          <h4>Spec-driven</h4>
+          <b>规格为先</b>
+          <ul>
+            <li>GitHub Spec Kit (93K★)</li>
+            <li>BMAD-METHOD</li>
+            <li>Augment (SWE 70.6%)</li>
+            <li>Kiro</li>
+          </ul>
+        </div>
+      </div>
+      <div class="landscape-note">
+        <b>调研结论：</b>HITL SDLC（IBM Bob 闭源）/ 跨项目记忆（Mem0 / ReMe / CoPaw 仅做 memory）/ 逆向解构（Reversa / ART / Fujitsu 仅做逆向）/ Spec（Spec Kit 等仅做 spec）—— <b>单支柱都有竞品，5 大支柱 MIT 开源整合目前不存在</b>。AISEP 不挤旧赛道，开自己的。
+      </div>
+      <div class="footer"><span>AISEP / 自定义新品类</span><span>10 / 17</span></div>
+    </section>
+
+    <!-- Slide 11: Comparison table — includes IBM Bob / Reversa / Mem0 etc -->
+    <section class="slide">
+      <p class="eyebrow gold">AISEP vs 单支柱竞品</p>
+      <h2>每个支柱有专精对手，AISEP 优势是把 5 个支柱<b style="color:var(--blue-2)">同时</b>做满。</h2>
+      <table class="compare">
+        <thead>
+          <tr>
+            <th style="min-width: 180px;">维度</th>
+            <th>Spec Kit</th>
+            <th>IBM Bob</th>
+            <th>Reversa</th>
+            <th>Mem0/ReMe</th>
+            <th>Devin</th>
+            <th class="us">AISEP</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="paradigm-row">
+            <td>范式定位</td>
+            <td>spec-driven</td>
+            <td>HITL SDLC</td>
+            <td>逆向解构</td>
+            <td>memory layer</td>
+            <td>autonomous</td>
+            <td class="us-paradigm">EADP 整合</td>
+          </tr>
+          <tr>
+            <td>工程纪律 (10-stage gate)</td>
+            <td class="partial">部分</td>
+            <td class="yes">✓</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">折叠</td>
+            <td class="yes">✓ 7-问 anchor</td>
+          </tr>
+          <tr>
+            <td>HITL 强制锚点</td>
+            <td class="no">—</td>
+            <td class="yes">✓ approval</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">自主</td>
+            <td class="yes">✓ 6 锚点</td>
+          </tr>
+          <tr>
+            <td>跨项目记忆</td>
+            <td class="no">—</td>
+            <td class="partial">隐式</td>
+            <td class="no">—</td>
+            <td class="yes">✓ 专精</td>
+            <td class="partial">隐式</td>
+            <td class="yes">✓ R11 双层</td>
+          </tr>
+          <tr>
+            <td>逆向解构遗留代码</td>
+            <td class="no">—</td>
+            <td class="partial">部分</td>
+            <td class="yes">✓ 专精</td>
+            <td class="no">—</td>
+            <td class="partial">隐式</td>
+            <td class="yes">✓ 反向 intake</td>
+          </tr>
+          <tr>
+            <td>Spec 契约（zod/schema）</td>
+            <td class="yes">✓ 专精</td>
+            <td class="partial">部分</td>
+            <td class="yes">✓ 产 spec</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="yes">✓ 跨阶段</td>
+          </tr>
+          <tr>
+            <td>Glass-Box 全程可视</td>
+            <td class="no">—</td>
+            <td class="partial">部分</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="partial">云 UI</td>
+            <td class="yes">✓ 5 层 forensic</td>
+          </tr>
+          <tr>
+            <td>战略 → 代码 trace</td>
+            <td class="no">—</td>
+            <td class="partial">弱</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="yes">✓ ArchiMate</td>
+          </tr>
+          <tr>
+            <td>单文件 audit HTML 报告</td>
+            <td class="no">—</td>
+            <td class="partial">仪表板</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="partial">云 UI</td>
+            <td class="yes">✓ 28KB</td>
+          </tr>
+          <tr>
+            <td>License</td>
+            <td class="note">MIT</td>
+            <td class="no">闭源 / 商业</td>
+            <td class="note">MIT</td>
+            <td class="note">MIT</td>
+            <td class="no">闭源 / 商业</td>
+            <td class="yes">MIT</td>
+          </tr>
+          <tr class="us">
+            <td><b>5 支柱整合度</b></td>
+            <td class="note">1/5</td>
+            <td class="note">3/5 (闭源)</td>
+            <td class="note">1/5</td>
+            <td class="note">1/5</td>
+            <td class="note">1.5/5 (闭源)</td>
+            <td class="yes">5/5 (MIT)</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="sources">
+        <b>调研来源：</b>artificialanalysis.ai 编程 agent 对比 / morphllm 14 best AI coding agents 2026 / IBM Bob AI-first SDLC platform（artificialintelligence-news.com）/ Reversa GitHub spec extractor / Mem0 + ReMe + CoPaw 跨项目 memory / Augment SWE-Bench 70.6% / Devin 独立测试 15% 成功率 / Gartner 2026 预测 40% 遗留现代化用 AI 逆向。
+      </div>
+      <div class="footer"><span>AISEP / 单支柱竞品对比</span><span>11 / 17</span></div>
+    </section>
+
+    <!-- Slide 12: Enterprise audit value -->
+    <section class="slide">
+      <p class="eyebrow gold">企业 audit 价值</p>
+      <h2>2026 SOC2 + ISO/IEC 42001 + EU AI Act 把 AI 工具 audit trail 写进硬要求。</h2>
+      <div class="audit-cols">
+        <div class="audit-col">
+          <h4><span class="badge req">审计要求</span> 2026 标准要什么</h4>
+          <ul>
+            <li><b>Who/What/When/Where/Why</b>：每个 AI 动作都要可追溯</li>
+            <li><b>immutable log + 加密完整性</b>：日志不可篡改</li>
+            <li><b>artifact 与决策的双向 trace</b>：需求 ↔ 实现 ↔ 测试 ↔ 风险闭环</li>
+            <li><b>Human approval gate</b>：SOC2 CC1.4 要求关键决策有人工签字</li>
+            <li><b>Prompt-level replay</b>：NIST AI RMF GOVERN 1.5 要求 AI 输入可重放</li>
+            <li><b>EU AI Act Article 14</b>：高风险系统强制 audit trail（2026-08-02 deadline）</li>
+          </ul>
+        </div>
+        <div class="audit-col">
+          <h4><span class="badge have">AISEP 已有</span> 不用额外做的部分</h4>
+          <ul>
+            <li><b>每 attempt 全字段记录</b>：<code>state.json</code> 含 invocation / argv / promptHash / startedAt / endedAt</li>
+            <li><b>trace_id 链</b>：<code>REQ → ADR → ZOD → RISK → PATCH → verify_check</code></li>
+            <li><b>HITL 6 锚点</b>：architecture / review / memory-promote / retrospect / dispatch / ask-user 全留痕</li>
+            <li><b>Forensic prompt replay</b>：<code>.aisep/tmp/task-&lt;stage&gt;-&lt;ts&gt;.md</code> 渲染后 prompt 留档</li>
+            <li><b>R11 trust 边界</b>：防 MINJA 类 prompt injection (98.2% 成功率攻击)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="sources">
+        <b>来源：</b>Augment Code SOC2 enterprise security guide / Konfirmity SOC2 2026 changes / MintMCP AI agent security 2026 / NIST AI RMF GOVERN 1.5 / arxiv 2503.03704 (MINJA memory injection 98.2% 成功率) / EU AI Act Article 14 / IDC 2026 数字化转型 $3.4T 支出。
+      </div>
+      <div class="footer"><span>AISEP / 合规与信任</span><span>12 / 17</span></div>
+    </section>
+
+    <!-- Slide 13: Current capability -->
+    <section class="slide">
+      <p class="eyebrow green">当前能力</p>
+      <h2>v0 / v1 已交付证据：10 阶段链路、并行 fan-out、单文件 HTML 报告、2 个 domain 真业务 dogfood。</h2>
+      <div class="metric-row">
+        <div class="metric"><div class="num">10/10</div><div class="label">Pilot-10b（frontend）+ Pilot-11（backend）真业务 dogfood 阶段全过</div></div>
+        <div class="metric green"><div class="num">366</div><div class="label">monorepo 测试通过 · 0 依赖违规（post PR #74 F3/F4/F5）</div></div>
+        <div class="metric purple"><div class="num">0.3.0</div><div class="label">aisep-protocol 版本（支持静态 fan-out + SIGTERM cancel）</div></div>
+        <div class="metric amber"><div class="num">28.7&nbsp;KB</div><div class="label">单文件 HTML 报告，浏览器直接打开</div></div>
+      </div>
+      <div class="metric-row" style="margin-top:18px;">
+        <div class="metric"><div class="num">6</div><div class="label">@vessel/aisep-* TS 包（protocol / core / workspace / agents / memory / cli）</div></div>
+        <div class="metric green"><div class="num">2</div><div class="label">domain 已验证：frontend (Pilot-10b ready_to_integrate=true) · backend (Pilot-11 ready_to_integrate=false 诚实标 blocker)</div></div>
+        <div class="metric purple"><div class="num">F1-F6</div><div class="label">Phase 2.F 强韧性：10min timeout 默认 + 1.5× retry + burst-limit auto-retry</div></div>
+        <div class="metric amber"><div class="num">~15-17&nbsp;min</div><div class="label">10 stage 端到端 wall（serial；fan-out 后 N children 并行）</div></div>
+      </div>
+      <div class="footer"><span>AISEP / 量化现状（2026-05-13）</span><span>13 / 17</span></div>
+    </section>
+
+    <!-- Slide 14: Fan-out -->
+    <section class="slide">
+      <p class="eyebrow">Fan-out</p>
+      <h2>复杂功能可拆 2-4 个子任务并行实现，再统一 verify。</h2>
+      <div class="cols">
+        <svg class="diagram" viewBox="0 0 560 360" role="img" aria-label="fan-out 并行图">
+          <defs>
+            <marker id="arrow-v6" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L9,3 z" fill="#64748b" />
+            </marker>
+          </defs>
+          <rect x="24" y="143" width="110" height="58" rx="18" fill="#2563eb"/>
+          <text x="79" y="179" text-anchor="middle" font-size="20" font-weight="800" fill="white">plan</text>
+          <rect x="214" y="56" width="150" height="58" rx="18" fill="#7c3aed"/>
+          <text x="289" y="92" text-anchor="middle" font-size="18" font-weight="800" fill="white">implement</text>
+          <rect x="214" y="145" width="150" height="52" rx="18" fill="#0891b2"/>
+          <text x="289" y="178" text-anchor="middle" font-size="18" font-weight="800" fill="white">backend</text>
+          <rect x="214" y="215" width="150" height="52" rx="18" fill="#16a34a"/>
+          <text x="289" y="248" text-anchor="middle" font-size="18" font-weight="800" fill="white">frontend</text>
+          <rect x="214" y="285" width="150" height="52" rx="18" fill="#d97706"/>
+          <text x="289" y="318" text-anchor="middle" font-size="18" font-weight="800" fill="white">tests</text>
+          <rect x="438" y="145" width="108" height="58" rx="18" fill="#16a34a"/>
+          <text x="492" y="181" text-anchor="middle" font-size="20" font-weight="800" fill="white">verify</text>
+          <path d="M134 172 C170 172, 172 86, 214 86" stroke="#64748b" stroke-width="4" fill="none" marker-end="url(#arrow-v6)"/>
+          <path d="M134 172 C170 172, 172 172, 214 172" stroke="#64748b" stroke-width="4" fill="none" marker-end="url(#arrow-v6)"/>
+          <path d="M364 172 C400 172, 402 172, 438 172" stroke="#64748b" stroke-width="4" fill="none" marker-end="url(#arrow-v6)"/>
+          <path d="M364 241 C400 241, 402 188, 438 188" stroke="#64748b" stroke-width="4" fill="none" marker-end="url(#arrow-v6)"/>
+          <path d="M364 311 C400 311, 402 196, 438 196" stroke="#64748b" stroke-width="4" fill="none" marker-end="url(#arrow-v6)"/>
+        </svg>
+        <div>
+          <div class="bullets">
+            <div class="bullet"><span class="dot"></span><span>适合 backend / frontend / tests 这类天然能拆分的任务。</span></div>
+            <div class="bullet"><span class="dot"></span><span>并发上限保守 4（对齐 Anthropic 后端 burst limiter，自动 retry 30s/60s/120s backoff）。</span></div>
+            <div class="bullet"><span class="dot"></span><span>子补丁汇总成 <code>patch_set</code>，再统一进入 verify 阶段。</span></div>
+            <div class="bullet"><span class="dot"></span><span>SIGTERM → 5s → SIGKILL cancel：一个 child 失败立即终止其他 siblings。</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>AISEP / 并行交付能力</span><span>14 / 17</span></div>
+    </section>
+
+    <!-- Slide 15: Memory + Report -->
+    <section class="slide">
+      <p class="eyebrow">证据双产物</p>
+      <h2>跨项目记忆库 + 单文件 audit 报告，是 AISEP 长期资产的两条线。</h2>
+      <div class="mem-report">
+        <div>
+          <h3 style="margin-bottom:18px; color: var(--ink-2);">Memory · <span style="color:var(--muted); font-size:18px; font-weight:600;">~/.aisep/ 四区</span></h3>
+          <div class="mem-grid">
+            <div class="mem-cell blue">
+              <h4><span class="icon blue">L</span>landscape</h4>
+              <p>盘点活跃项目 / 技术栈 / 阶段进度。</p>
+            </div>
+            <div class="mem-cell green">
+              <h4><span class="icon green">R</span>reference-library</h4>
+              <p>架构方案库：Odoo ERP / TS monorepo / CLI tool 等模式。</p>
+            </div>
+            <div class="mem-cell purple">
+              <h4><span class="icon purple">S</span>standards</h4>
+              <p>跨项目共享的工程标准、安全检查清单。</p>
+            </div>
+            <div class="mem-cell amber">
+              <h4><span class="icon amber">G</span>governance-log</h4>
+              <p>仅人工验证后晋升的修复（防 prompt injection）。</p>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h3 style="margin-bottom:18px; color: var(--ink-2);">Report · <span style="color:var(--muted); font-size:18px; font-weight:600;">单文件 HTML 证据链</span></h3>
+          <div class="report-mock">
+            <div class="mock-head"><b>AISEP Report</b><span>pilot-10b</span></div>
+            <div class="mock-section-label">Stage timeline (10/10 succeeded)</div><div class="bar"></div>
+            <div class="mock-section-label">Trace matrix (REQ→ADR→ZOD→RISK→PATCH→verify)</div><div class="bar mid"></div>
+            <div class="mock-section-label">Contract grep (17 / 17 ok)</div><div class="bar short"></div>
+            <div class="trace-example">
+              <span class="req">REQ-001</span> →
+              <span class="adr">ADR-002</span> →
+              <span class="zod">ZOD-FoldSchema</span> →
+              <span class="risk">RISK-Q5</span> →
+              <span class="patch">patch.diff:42</span> →
+              <span class="verify">verify:8</span>
+              <span class="ok">ok</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>AISEP / 双产物</span><span>15 / 17</span></div>
+    </section>
+
+    <!-- Slide 16: Roadmap -->
+    <section class="slide">
+      <p class="eyebrow">Roadmap</p>
+      <h2>按 DAG 能力分阶段增强，不一次性堆复杂度。</h2>
+      <div class="roadmap">
+        <div class="mile">
+          <div class="circle green">v0</div>
+          <div class="when">2026-05-08 done</div>
+          <h3>线性链路</h3>
+          <p>10-stage 跑通 Pilot-01..07</p>
+        </div>
+        <div class="mile">
+          <div class="circle green">v1</div>
+          <div class="when">2026-05-12 done</div>
+          <h3>静态 fan-out</h3>
+          <p>并行实现 + Option E 报告 + 真业务 dogfood</p>
+        </div>
+        <div class="mile">
+          <div class="circle amber">v2</div>
+          <div class="when">proposal v0.2 converged 2026-05-13 · ship target 2026-06</div>
+          <h3>fan-in</h3>
+          <p>多源汇聚 + 失败分支局部恢复 + cross-process 锁。Phase 1+2+3 cross-review 已收敛（4 BLOCKER + 8 MAJOR + 4 MINOR 全 accept，0 user-decision）。</p>
+        </div>
+        <div class="mile">
+          <div class="circle blue">v3</div>
+          <div class="when">target 2026-Q3</div>
+          <h3>cycle + self-host</h3>
+          <p>review→revise 回环 + AISEP 改 AISEP 双轨</p>
+        </div>
+      </div>
+      <div class="footer"><span>AISEP / 发展路径</span><span>16 / 17</span></div>
+    </section>
+
+    <!-- Slide 17: Pilot suggestion -->
+    <section class="slide dark">
+      <p class="eyebrow">Next Step</p>
+      <h2>建议从一个小 Pilot 开始，用真实任务验证流程价值。</h2>
+      <div class="next-step">
+        <div class="card">
+          <h3><span class="icon green">1</span>选任务</h3>
+          <p>选 1 个边界清楚、能写验收标准、1-2 周可闭环的真实任务（新建 / 重构 / 逆向皆可）。</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon blue">2</span>跑流程</h3>
+          <p>用 <code style="background:rgba(255,255,255,.14); padding:1px 8px; border-radius:6px; color:#67e8f9;">aisep run --real</code> 生成 10 阶段产物、补丁、验证和评审结论。</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon purple">3</span>看报告</h3>
+          <p>用 <code style="background:rgba(255,255,255,.14); padding:1px 8px; border-radius:6px; color:#c4b5fd;">aisep report --open</code> 生成 report.html 讨论交付质量、风险、可复用模式。</p>
+        </div>
+      </div>
+      <p class="quote">AISEP 不替代工程判断，而是把 AI 的速度装进可控的软件工程流程。</p>
+      <div class="footer"><span>AISEP / Pilot 建议</span><span>17 / 17</span></div>
+    </section>
+
+  </main>
+</body>
+</html>

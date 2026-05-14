@@ -1,0 +1,10 @@
+{
+  "id": "sr-01HJK5XH0CHILD0BE",
+  "workspaceId": "ws-01HJK5XF0CDEF07A",
+  "stage": "implement",
+  "phase": "none",
+  "status": "pending",
+  "fanOutRole": "child",
+  "parentStageRunId": "sr-01HJK5XH0PARENT00",
+  "affects": ["packages/backend/.*"]
+}
