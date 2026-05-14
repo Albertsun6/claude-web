@@ -35,17 +35,19 @@
 
 ```bash
 # Mac mini 上
-git clone https://github.com/Albertsun6/claude-web ~/claude-web
-cd ~/claude-web
+git clone https://github.com/Albertsun6/vessel ~/Vessel
+cd ~/Vessel
 pnpm install
-pnpm --filter @claude-web/frontend build
+pnpm --filter @vessel/frontend build
 ```
 
-如果你想保持原 `Desktop/claude-web` 路径（很多设置写死了），改成：
+如果你想保持原 `Desktop/Vessel` 路径（很多设置写死了），改成：
 
 ```bash
-git clone https://github.com/Albertsun6/claude-web ~/Desktop/claude-web
+git clone https://github.com/Albertsun6/vessel ~/Desktop/Vessel
 ```
+
+> **Note**：老 `https://github.com/Albertsun6/claude-web` URL GitHub auto-redirect 仍 work，但建议用新 URL。LaunchAgent plist 名（`com.claude-web.backend.plist`）暂未迁移，等 ADR-013 Stage 2 milestone。
 
 ### 3. Whisper 模型
 
@@ -65,7 +67,7 @@ curl -fL -o ~/.whisper-models/ggml-large-v3-turbo.bin \
 
 ```xml
 <key>WorkingDirectory</key>
-<string>/Users/yongqian/Desktop/claude-web</string>   <!-- 改成实际路径 -->
+<string>/Users/yongqian/Desktop/Vessel</string>   <!-- 改成实际路径 -->
 
 <key>ProgramArguments</key>
 <array>

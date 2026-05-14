@@ -1,4 +1,6 @@
-# claude-web 用户手册
+# Vessel 用户手册
+
+> 项目原名 claude-web / Eva，现已 fork-rename 为 Vessel。文档内的 `~/.claude-web/` 路径 / `claude-web:` localStorage 键 / `com.claude-web.backend.plist` LaunchAgent 名暂未迁移（等 ADR-013 Stage 2 数据目录 milestone）。
 
 > 个人移动端友好的 Claude Code CLI 前端。本手册覆盖**目前所有用户可见功能**。新功能加进来后，让 Claude 跑 `/update-manual` 自动维护这份文档。
 

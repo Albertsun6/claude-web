@@ -35,9 +35,15 @@
 | **015** | [Research Before Design](vessel/ADR-015-research-before-design.md)（Spike/Trade Study） | 1 | ✅ Accepted | ADR-014 | 0-meta-lite+ |
 | **016** | [Coding Driver Interface（C 路径）](vessel/ADR-016-coding-driver-interface.md) | 1 | ✅ Accepted | ADR-000 / ADR-012 | M0.5 |
 | **017** | [Cursor CLI Cross-Reviewer](vessel/ADR-017-cursor-cli-cross-reviewer.md)（异质评审引擎） | 1 | ✅ Accepted | ADR-014 / ADR-015 | 0-meta-lite+ |
+| **018** | [AISEP vs HARNESS 边界](vessel/ADR-018-aisep-vs-harness.md)（独立 Capability 体系 vs 现有 HARNESS_* 试点） | 1 | ✅ Accepted | ADR-000 / ADR-013 / ADR-017 | aisep 全程 |
+| **019** | [Steward V0 Contract](vessel/ADR-019-steward-v0-contract.md)（BACKLOG.md + 10-prompt UI + boot ritual） | 1 | ✅ Accepted | ADR-014 | 0-meta-lite+ |
+| **020** | [PIM 统一捕获入口](vessel/ADR-020-pim-capture-entry.md)（v2.1 个人 PIM 试点 backend 模块） | 1 | 🔄 **Proposed**（pending M0-PIM Day 7 验收） | ADR-000 / ADR-006 / ADR-008 / ADR-013 / ADR-018 | M0-PIM |
+| **022** | [AISEP v2 Fan-In](vessel/ADR-022-aisep-v2-fan-in.md)（multi-source aggregation + per-child failure recovery） | 1 | ✅ Accepted | ADR-018 / ADR-014 | aisep v0.4 |
+
+> ADR-021 编号当前空闲，预留给 ADR-019 Steward 契约后续修订（参 ADR-019 §"改 schema 字段含义...需 ADR-020+"）。本表 020 已被 PIM 占用；下次 Steward 契约修订用 021。
 
 **Tier 划分**（按 v5.4 dogfood M-P2 partial）：
-- **Tier 1**（11 份）：重大决策 + Phase 0 调研（如适用）
+- **Tier 1**（15 份）：重大决策 + Phase 0 调研（如适用）
 - **Tier 2**（7 份）：1-2 段简短决策 / 决策已明确 / 无需 Phase 0
 
 ---

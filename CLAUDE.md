@@ -1,4 +1,9 @@
-# Eva (formerly claude-web)
+# Vessel (formerly Eva / claude-web)
+
+> **Rename note**: This codebase is fork-rename of Eva (originally `claude-web`).
+> See [docs/adr/vessel/ADR-000](docs/adr/vessel/ADR-000-adopt-eva-codebase-as-vessel-foundation.md) for foundation decision
+> and [docs/adr/vessel/ADR-013](docs/adr/vessel/ADR-013-rename-strategy.md) for rename runbook.
+> Stage 1 (packages `@vessel/*`) and GitHub repo rename done. Stage 2 (data dir `~/.vessel/`) + Stage 4 (iOS bundle id) deferred.
 
 Personal mobile-friendly UI for the `claude` CLI. Reuses the user's Claude Pro/Max
 subscription by **spawning the CLI as a subprocess** (`child_process.spawn` →
@@ -91,7 +96,7 @@ launchctl load -w ~/Library/LaunchAgents/com.vessel.backend.plist
 pnpm dev:frontend     # http://localhost:5173, proxies /api + /ws to :3032
 
 # build for prod (served by backend)
-pnpm --filter @claude-web/frontend build
+pnpm --filter @vessel/frontend build
 ```
 
 Tailscale serve already wired to expose :3032 on `https://<your-mac-hostname>.<tailnet>.ts.net`:
