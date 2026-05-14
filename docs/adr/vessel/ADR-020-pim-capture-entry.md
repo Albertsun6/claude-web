@@ -1,8 +1,8 @@
 # ADR-020: PIM 统一捕获入口（v2.1 个人 PIM 试点 backend 模块）
 
-- **Status**: Proposed (2026-05-14，PIM M0 Day 0 草稿)
-- **Date**: 2026-05-14
-- **Deciders**: yongqian（待 review）
+- **Status**: **Accepted** (2026-05-14，Week 1 验收通过 — Day 1-7 全部 ship + 212/212 tests pass + iOS xcodebuild BUILD SUCCEEDED)
+- **Date**: 2026-05-14 (Proposed → Accepted)
+- **Deciders**: yongqian (Week 1 验收完成)
 - **Tags**: pim, capture-entry, backend, eva-legacy-pattern, M0
 - **Depends on**: [ADR-000 adopt-eva-codebase](ADR-000-adopt-eva-codebase-as-vessel-foundation.md), [ADR-006 schema-evolution](ADR-006-schema-evolution.md), [ADR-008 config-location](ADR-008-config-location.md), [ADR-013 rename-strategy](ADR-013-rename-strategy.md), [ADR-018 aisep-vs-harness](ADR-018-aisep-vs-harness.md)
 - **Source**: 3 轮 /survey 调研 + 5 轮设计迭代 + Plan agent R1-R8 + cursor-agent 4 条 = 12 个独立审查点全 accept
