@@ -17,6 +17,7 @@
 		16DAF22677F6A54AEFB7AED7 /* InboxListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EEB69F0B44BB4AB35B7669A /* InboxListView.swift */; };
 		1D18CF10BAA0B3ACBE82D133 /* TitleHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 470F67BA3632BA518C2C2041 /* TitleHelper.swift */; };
 		26C4BCB5B25D9AC41CC2B18F /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B3AEAE127A245EAF2708E5 /* Settings.swift */; };
+		2C8CB443C51F8D64B4B15A0B /* PimCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 742B94853414DD621B17E086 /* PimCaptureView.swift */; };
 		2D1D7894EFE31F7A56E1B05B /* NotesSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FA156E85199F04B4CE8DED0 /* NotesSession.swift */; };
 		2D9D908E9A8B5BB3CC58D9F2 /* SessionsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84370F12AC58B5405568265F /* SessionsAPI.swift */; };
 		345CA7DBA2E841A1B8FF1A12 /* HistorySessionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC3B5EC41C6FC847190B9A23 /* HistorySessionRow.swift */; };
@@ -59,6 +60,7 @@
 		A6F5BA2DB01D6A9B5F2B0B68 /* FilePreviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C990D3E5D06C83305C62ECEF /* FilePreviewSheet.swift */; };
 		AA5403B09D7174892A766DAE /* InputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691B41D5BAB98CEB25C842EF /* InputBar.swift */; };
 		ABC62E99E4D8EC7CFA0E9A39 /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5786E7AAA15AAD313FECEFEE /* Telemetry.swift */; };
+		B05D91F4D481E05DE66588D0 /* PimAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2DAF8B5EFA9624A5F76B1C /* PimAPI.swift */; };
 		B546DA7E0322B056D8806707 /* ToolCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 356FA260082DE219FEA514E3 /* ToolCards.swift */; };
 		BF5A69BCBA855473B0A8A644 /* WorktreeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B24D52E2E7D3A331C79A17AE /* WorktreeAPI.swift */; };
 		C656B15DE65E078988C3A2FD /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CAA94D3A2EA5E1964256325 /* TTSPlayer.swift */; };
@@ -141,6 +143,7 @@
 		70D86E69352B042BA20B55E3 /* RunsDashboardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunsDashboardSheet.swift; sourceTree = "<group>"; };
 		71BB8A881E6FF12842326917 /* UnifiedDiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedDiffView.swift; sourceTree = "<group>"; };
 		72DC05F1B8A3DED8C9DF0E89 /* VesselMemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VesselMemoryView.swift; sourceTree = "<group>"; };
+		742B94853414DD621B17E086 /* PimCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PimCaptureView.swift; sourceTree = "<group>"; };
 		7761F193E381FE2895AF7F40 /* BuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildInfo.swift; sourceTree = "<group>"; };
 		7ACDF9BE3E7BCB6A0D365CFD /* HarnessAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessAPI.swift; sourceTree = "<group>"; };
 		84370F12AC58B5405568265F /* SessionsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsAPI.swift; sourceTree = "<group>"; };
@@ -165,6 +168,7 @@
 		C95EB1C07DDCD24CB9C39877 /* WorktreeFinalizeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeFinalizeSheet.swift; sourceTree = "<group>"; };
 		C990D3E5D06C83305C62ECEF /* FilePreviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewSheet.swift; sourceTree = "<group>"; };
 		CB510CB95648E444AFA81726 /* VesselDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VesselDiscovery.swift; sourceTree = "<group>"; };
+		CE2DAF8B5EFA9624A5F76B1C /* PimAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PimAPI.swift; sourceTree = "<group>"; };
 		D04BCC1C6A84402D2C9303E2 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
 		D0552063BBA63AC2ED652842 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DBE42DC5B7B65552357A2443 /* HarnessBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessBoardView.swift; sourceTree = "<group>"; };
@@ -344,6 +348,8 @@
 				A5A0E673CBB7B4E78AF2F5F2 /* MemoryAPI.swift */,
 				5FA156E85199F04B4CE8DED0 /* NotesSession.swift */,
 				D04BCC1C6A84402D2C9303E2 /* NotesView.swift */,
+				CE2DAF8B5EFA9624A5F76B1C /* PimAPI.swift */,
+				742B94853414DD621B17E086 /* PimCaptureView.swift */,
 				E521D87B3BA1D89B7F1A4F1C /* ProjectRegistry.swift */,
 				3908AACD90DC034442E43A1A /* ProjectsAPI.swift */,
 				2006E8318BCC0CD398822E76 /* Protocol.swift */,
@@ -553,6 +559,8 @@
 				2D1D7894EFE31F7A56E1B05B /* NotesSession.swift in Sources */,
 				96A3BBB04159D9E1F8DD3A86 /* NotesView.swift in Sources */,
 				14BD41359E745E1A0CBC1993 /* PermissionSheet.swift in Sources */,
+				B05D91F4D481E05DE66588D0 /* PimAPI.swift in Sources */,
+				2C8CB443C51F8D64B4B15A0B /* PimCaptureView.swift in Sources */,
 				F9D323D74FD725C52970BE1D /* ProjectRegistry.swift in Sources */,
 				E08D357BCE2E160FFFA47F98 /* ProjectsAPI.swift in Sources */,
 				4A9261381735E4FFEC18C6E6 /* Protocol.swift in Sources */,

@@ -704,7 +704,7 @@ struct PimItemPatchDto: Codable {
 
 /// Server-driven config 中的 pim 字段。iOS 从 GET /api/harness/config 拉，
 /// 给 commitment picker / domain autocomplete 选项不写死。
-struct PimConfig: Codable {
+struct PimConfig: Codable, Equatable {
     let commitmentStates: [String]
     let modalities: [String]?
     let domainVocabulary: [String]?
