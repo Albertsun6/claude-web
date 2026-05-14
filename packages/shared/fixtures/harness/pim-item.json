@@ -1,0 +1,16 @@
+{
+  "id": "pim-01HX5KQ8MNCDEF200001",
+  "content": "凌晨想到：要不要做个统一入口收集所有信息？包括任务、笔记、灵感、文件、目标、决策、项目都从一个口进。",
+  "capturedAt": 1778740000000,
+  "source": "ios",
+  "commitmentState": "inbox",
+  "modality": "text",
+  "aiStatus": "pending",
+  "visibility": "private",
+  "createdAt": 1778740000000,
+  "updatedAt": 1778740000000,
+  "domainTags": ["学习", "兴趣"],
+  "peopleRefs": [
+    { "personRef": "自己", "confidence": 1.0 }
+  ]
+}

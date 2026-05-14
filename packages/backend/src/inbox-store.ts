@@ -16,6 +16,7 @@ import { rename, writeFile, appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { DATA_DIR } from "./data-dir.js";
+import type { HarnessDb } from "./harness-store.js";
 
 export type InboxStatus = "open" | "archived";
 export type TriageDestination = "ideas" | "archive";
@@ -52,6 +53,46 @@ const STORE_PATH = path.join(STORE_DIR, "inbox.jsonl");
 const TMP_PATH = STORE_PATH + ".tmp";
 
 let memoryCache: InboxItem[] | null = null;
+
+// ============================================================================
+// PIM dual-write (ADR-020 D3) — 2-week buffer period
+// ============================================================================
+//
+// POST /api/inbox 同时写 jsonl + pim_item. pim_item INSERT 失败 → log warn 不阻塞.
+// 由 index.ts 启动时 setPimDbForInbox(_harnessDb) 注入 DB instance.
+// 设计选择 (vs factory pattern): inbox-store 接受外部注入避免 router 签名变化.
+// 旧 client 仍 POST 老的 inbox.jsonl 字段, pim_item 字段映射见
+// scripts/migrate-inbox-to-pim.ts mapInboxToPim().
+let _pimDb: HarnessDb | null = null;
+
+/** Called from index.ts after openHarnessDb succeeds. */
+export function setPimDbForInbox(db: HarnessDb | null): void {
+  _pimDb = db;
+}
+
+/** Best-effort dual-write to pim_item. Logs but doesn't throw. */
+function dualWriteToPim(item: InboxItem): void {
+  if (_pimDb == null) return; // No PIM DB yet (e.g. test env, HARNESS_DISABLED=1)
+  try {
+    const archived = item.status === "archived" || item.triage?.destination === "archive";
+    _pimDb.db
+      .prepare(
+        `INSERT OR IGNORE INTO pim_item
+           (id, content, captured_at, source, commitment_state, modality, ai_status, visibility, created_at, updated_at)
+         VALUES
+           (@id, @content, @capturedAt, @source, @commitmentState, 'text', 'pending', 'private', @capturedAt, @capturedAt)`,
+      )
+      .run({
+        id: item.id,
+        content: item.body,
+        capturedAt: item.capturedAt,
+        source: item.source,
+        commitmentState: archived ? "archived" : "inbox",
+      });
+  } catch (err) {
+    console.warn(`[inbox] dual-write to pim_item failed for ${item.id}: ${(err as Error).message}`);
+  }
+}
 
 // Promise-based write lock (mirrors projects-store.ts). Node.js is
 // single-threaded, but read-modify-write across awaits is not atomic — two
@@ -128,6 +169,7 @@ export function appendInbox(input: AppendInput): Promise<InboxItem> {
     };
     await appendFile(STORE_PATH, JSON.stringify(item) + "\n", "utf8");
     if (memoryCache !== null) memoryCache.push(item);
+    dualWriteToPim(item); // ADR-020 D3 dual-write 2-week buffer; best-effort, never throws
     return item;
   });
 }

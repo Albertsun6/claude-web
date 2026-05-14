@@ -23,6 +23,7 @@ struct ClaudeWebApp: App {
     @State private var gitAPI: GitAPI
     @State private var heartbeat: HeartbeatMonitor
     @State private var inboxAPI: InboxAPI
+    @State private var pimAPI: PimAPI  // M0-PIM Day 4 (ADR-020)
     @State private var worktreeAPI: WorktreeAPI
     @State private var harnessConfigAPI: HarnessConfigAPI
     @State private var harnessStore: HarnessStore
@@ -59,7 +60,11 @@ struct ClaudeWebApp: App {
         _telemetry = State(initialValue: Telemetry(backend: backendRef, token: tokenRef))
         _gitAPI = State(initialValue: GitAPI(backend: backendRef, token: tokenRef))
         _heartbeat = State(initialValue: HeartbeatMonitor(baseURL: backendRef))
-        _inboxAPI = State(initialValue: InboxAPI(baseURL: backendRef))
+        // Day 4 (cursor-agent Round 1 finding #1): inject authToken — required if
+        // backend sets VESSEL_TOKEN. Default closure `{ "" }` keeps old behavior
+        // when token is empty (single-user dev mode).
+        _inboxAPI = State(initialValue: InboxAPI(baseURL: backendRef, authToken: tokenRef))
+        _pimAPI = State(initialValue: PimAPI(baseURL: backendRef, authToken: tokenRef))
         _worktreeAPI = State(initialValue: WorktreeAPI(baseURL: backendRef))
         let harnessAPIInst = HarnessConfigAPI(backend: backendRef, token: tokenRef)
         _harnessConfigAPI = State(initialValue: harnessAPIInst)
@@ -82,6 +87,7 @@ struct ClaudeWebApp: App {
                 .environment(cache)
                 .environment(heartbeat)
                 .environment(inboxAPI)
+                .environment(pimAPI)
                 .environment(worktreeAPI)
                 .environment(harnessStore)
                 .environment(harnessAPI)

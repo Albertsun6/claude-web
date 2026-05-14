@@ -35,13 +35,22 @@ const EXPECTED_TABLES = [
   "review_verdict",
   "decision",
   "retrospective",
+  // M0-PIM (ADR-020, 0008_pim_item.sql)
+  "pim_item",
+  "pim_commitment_state_history",
+  "pim_domain_tags",
+  "pim_people_refs",
+  "pim_intent_snapshot",
+  "pim_refs",
+  "pim_audit_summary",
 ];
 
-const EXPECTED_FTS_TABLES = ["issue_fts", "artifact_fts"];
+const EXPECTED_FTS_TABLES = ["issue_fts", "artifact_fts", "pim_item_fts"];
 
 const EXPECTED_TRIGGERS = [
   "issue_fts_ai", "issue_fts_ad", "issue_fts_au",
   "artifact_fts_ai", "artifact_fts_ad", "artifact_fts_au",
+  "pim_item_fts_ai", "pim_item_fts_ad", "pim_item_fts_au",
 ];
 
 function assert(cond: boolean, msg: string): void {
@@ -177,6 +186,7 @@ try {
     "0001_initial.sql",
     "0002_stage_status_dispatched.sql",
     "0003_stage_failed_reason.sql",
+    "0008_pim_item.sql",  // M0-PIM (ADR-020)
   ];
   assert(
     applied.length === expected.length && applied.every((f, i) => f === expected[i]),

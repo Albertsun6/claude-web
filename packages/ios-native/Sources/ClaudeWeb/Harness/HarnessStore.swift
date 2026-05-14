@@ -136,7 +136,8 @@ final class HarnessStore {
                     stage: "discovery",
                     modelHint: "sonnet",
                     enabled: true,
-                )]
+                )],
+                pim: PimConfig.fallback  // M0-PIM Day 1d (ADR-020 §D10)
             )
         }
         return cfg

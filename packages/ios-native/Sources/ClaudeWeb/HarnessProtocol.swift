@@ -497,6 +497,10 @@ struct HarnessConfig: Codable, Equatable {
     // 同 permissionModes 的双向 minor bump 兼容硬约束 — Swift 端 optional，
     // store 层 ?? bundleFallback().agentProfiles! 兜底。
     let agentProfiles: [AgentProfileItem]?
+    // PIM v2.1 (M0-PIM, ADR-020 §D10 — 4 处同步之 ③ iOS struct)
+    // **Optional**（同 permissionModes / agentProfiles 的硬约束）—
+    // v1.3 client + v1.0 server payload (没有 pim) 时 nil → fallback PimConfig.fallback
+    let pim: PimConfig?
 }
 
 // MARK: - Version comparator (RFC §2.3, mirrors packages/shared/src/version.ts)
@@ -562,4 +566,155 @@ struct AnyCodable: Codable {
             throw EncodingError.invalidValue(value, .init(codingPath: [], debugDescription: "AnyCodable: unsupported type"))
         }
     }
+}
+
+// ============================================================================
+// MARK: - PIM v2.1 (M0-PIM, ADR-020)
+//
+// 同源：
+// - TS Zod: packages/shared/src/pim-protocol.ts
+// - DDL: packages/backend/src/migrations/0008_pim_item.sql
+// - ADR: docs/adr/vessel/ADR-020-pim-capture-entry.md
+//
+// ⚠️ ADR-0015 §F1 BLOCKER: 所有新字段必须 Optional —— 这是 minor bump
+// double-compatibility 红线（v1.1 client + v1.0 server payload，v1.0 client +
+// v1.1 server payload 都不能 decode 失败）。
+// ============================================================================
+
+// MARK: PIM 受控词表（与 TS PIM_*_STATES 一一对应）
+
+/// 不用 Swift `enum` 而用 string raw value —— ADR-020 D6 应用层规范化弹性。
+/// Server-driven config 加新值时，client 不重装即可显示（fallback case 收纳）。
+enum PimCommitmentState {
+    static let inbox = "inbox"
+    static let action = "action"
+    static let calendar = "calendar"
+    static let waiting = "waiting"
+    static let reference = "reference"
+    static let archived = "archived"
+
+    /// 默认 fallback（client 离线 / config 未加载时用）
+    static let defaultValues = ["inbox", "action", "calendar", "waiting", "reference", "archived"]
+}
+
+enum PimModality {
+    static let text = "text"
+    static let link = "link"
+    static let image = "image"
+    static let audio = "audio"
+    static let file = "file"
+    static let structured = "structured"
+
+    static let defaultValues = ["text", "link", "image", "audio", "file", "structured"]
+}
+
+/// AI Level 1 状态机（ADR-020 D9）
+enum PimAiStatus: String, Codable {
+    case pending
+    case running
+    case done
+    case failed
+    case timeout
+    case disabled
+}
+
+// MARK: PimItemDto（核心 wire DTO）
+
+/// v2.1 PimItem wire DTO. 镜像 packages/shared/src/pim-protocol.ts PimItemDtoSchema.
+///
+/// **所有新字段必须 Optional**（ADR-0015 §F1 BLOCKER）—— v1.0 server 还没发送
+/// 这些字段时，v1.1 iOS decode 不能 fail. 同样 v1.1 server 发送的 v1.0 iOS 没
+/// 见过的字段也 graceful skip.
+struct PimItemDto: Codable {
+    let id: String
+    let content: String
+    let capturedAt: Int64
+    let source: String
+    /// 用 String 而非 enum——D6 弹性 + server-driven config 加值不重装
+    let commitmentState: String
+    let modality: String
+
+    // 新字段全 Optional
+    let aiStatus: PimAiStatus?
+    let aiSuggestedAt: Int64?
+    let visibility: String?
+    let ownerUserId: String?  // ADR-020 D7 预留；本期 NULL
+    let createdAt: Int64
+    let updatedAt: Int64
+    let deletedAt: Int64?  // soft delete; NULL = 未删
+
+    // L2 视图层 facets
+    let domainTags: [String]?
+    let peopleRefs: [PimPersonRef]?
+
+    // 加工关系
+    let derivedFrom: [PimDerivedFrom]?
+
+    // L3 意图向量快照（本期建表不写入）
+    let intentSnapshots: [PimIntentSnapshot]?
+}
+
+struct PimPersonRef: Codable {
+    let personRef: String
+    let confidence: Double?
+}
+
+struct PimDerivedFrom: Codable {
+    let parentId: String
+    let relKind: String?
+    let confidence: Double?
+    let createdBy: String?  // "user" | "ai"
+}
+
+struct PimIntentSnapshot: Codable {
+    let vectorJson: String
+    let snapshotAt: Int64
+    let source: String  // "ai_suggest" | "user_confirm" | "user_override"
+}
+
+// MARK: PimItemCreateDto（POST /api/pim 输入）
+
+/// 捕获时最小输入。Backend 自动填 id / capturedAt / aiStatus / createdAt / updatedAt 等。
+struct PimItemCreateDto: Codable {
+    let content: String
+    let source: String?
+    let commitmentState: String?
+    let modality: String?
+    let visibility: String?
+    let domainTags: [String]?
+    let peopleRefs: [String]?
+    let derivedFromIds: [String]?
+}
+
+// MARK: PimItemPatchDto（PATCH /api/pim/:id 输入）
+
+/// Partial update only（ADR-020 R5: 多设备 last-write-wins 缓解，避免 PUT 整对象覆盖）.
+struct PimItemPatchDto: Codable {
+    let content: String?
+    let commitmentState: String?
+    let modality: String?
+    let visibility: String?
+    let aiStatus: PimAiStatus?
+    let domainTags: [String]?
+    let peopleRefs: [PimPersonRef]?
+    let deletedAt: Int64?  // nil 表示不动；显式 null 在 JSON wire 上需特殊处理
+}
+
+// MARK: PimConfig（server-driven config 中的 pim 字段，ADR-020 §D10 4 处同步）
+
+/// Server-driven config 中的 pim 字段。iOS 从 GET /api/harness/config 拉，
+/// 给 commitment picker / domain autocomplete 选项不写死。
+struct PimConfig: Codable, Equatable {
+    let commitmentStates: [String]
+    let modalities: [String]?
+    let domainVocabulary: [String]?
+    let aiEnabled: Bool?
+
+    /// Bundle 内 fallback（client 离线 / config 未加载时用）
+    static let fallback = PimConfig(
+        commitmentStates: PimCommitmentState.defaultValues,
+        modalities: PimModality.defaultValues,
+        domainVocabulary: ["工作", "家庭", "健康", "财务", "学习", "兴趣", "关系"],
+        aiEnabled: true
+    )
 }

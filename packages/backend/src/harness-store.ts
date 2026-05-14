@@ -15,7 +15,7 @@
 // - ADR: docs/adr/ADR-0010-sqlite-fts5.md, ADR-0015-schema-migration.md
 
 import Database from "better-sqlite3";
-import { readFileSync, readdirSync, mkdirSync } from "node:fs";
+import { readFileSync, readdirSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DATA_DIR } from "./data-dir.js";
@@ -28,7 +28,17 @@ const DB_PATH = join(HARNESS_DIR, "harness.db");
 // v100: 0001_initial.sql (M-1 初始 13 实体)
 // v101: 0002_stage_status_dispatched.sql (H14 dispatched 加 stage.status enum)
 // v102: 0003_stage_failed_reason.sql (M2 Loop 1 additive failed_reason + failed_at)
-export const HARNESS_SCHEMA_VERSION = 102;
+// v103: 0008_pim_item.sql (M0-PIM v2.1 PIM 统一捕获入口, ADR-020)
+//       预留 0004-0007 给 Vessel kernel milestone（ADR-006 §每个 migration 一个 milestone）
+export const HARNESS_SCHEMA_VERSION = 103;
+
+// Migrations requiring pre-apply DB backup (ADR-020 D11).
+// 在跑这些 migration 之前自动调 better-sqlite3 db.backup() 生成 .bak 文件，
+// 失败时 backend 启动 abort（rollback 路径需要这个 backup）。
+// 当前列表：
+//   - 0008_pim_item.sql (M0-PIM, PIM v2.1 schema 大增)
+// 未来 high-risk migration 可加入。
+const PRE_APPLY_BACKUP_MIGRATIONS = [/^0008_/] as const;
 
 // migrations 目录定位（Round 2 cross m3 边界注释）：
 // - 当前 backend 用 `tsx watch src/index.ts` 直接跑源码，不打包，不复制 dist
@@ -94,7 +104,7 @@ export function openHarnessDb(
   db.pragma("foreign_keys = ON");
 
   bootstrapMigrationsTable(db);
-  runPendingMigrations(db, migrationsDir);
+  runPendingMigrations(db, migrationsDir, path);
 
   const schemaVersion = db.pragma("user_version", { simple: true }) as number;
 
@@ -116,7 +126,11 @@ function bootstrapMigrationsTable(db: Database.Database): void {
   `);
 }
 
-function runPendingMigrations(db: Database.Database, migrationsDir: string): void {
+function runPendingMigrations(
+  db: Database.Database,
+  migrationsDir: string,
+  dbPath: string,
+): void {
   const files = readdirSync(migrationsDir)
     .filter((f) => /^\d{4}_.*\.sql$/.test(f))
     .sort();
@@ -127,6 +141,36 @@ function runPendingMigrations(db: Database.Database, migrationsDir: string): voi
 
   for (const file of files) {
     if (applied.has(file)) continue;
+
+    // ADR-020 D11: pre-apply backup for high-risk migrations.
+    // 用 better-sqlite3 的 db.backup() 在线一致性 API（不是 fs.copyFile，
+    // 后者在 WAL 未 checkpoint 时有竞态窗口）。
+    // 失败 → backend 启动 abort（rollback 路径需要这个 backup）。
+    if (PRE_APPLY_BACKUP_MIGRATIONS.some((re) => re.test(file))) {
+      const backupPath = dbPath.replace(/\.db$/, `.db.before-${file.slice(0, 4)}.bak`);
+      if (existsSync(backupPath)) {
+        console.log(
+          `[harness-store] pre-apply backup ${backupPath} already exists, skipping backup for ${file}`,
+        );
+      } else {
+        console.log(`[harness-store] pre-apply backup before ${file} → ${backupPath}`);
+        // db.backup() in better-sqlite3 returns a Promise; await it via .then() sync wait pattern is wrong.
+        // 实际 API: db.backup(destFile, options?) returns Promise<{totalPages, remainingPages}>.
+        // 在同步 openHarnessDb 内 await 不可——改用 sync-wait via deasync-style 不靠谱。
+        // 替代方案：使用 SQLite VACUUM INTO（同步、在线一致性，等价于 backup）
+        // SQLite docs: "VACUUM INTO command. The into-clause causes the VACUUM to write the
+        //   reorganized database into a separate file ... can be run while the database is open."
+        // 这是 SQLite 3.27.0+ 标准 SQL，better-sqlite3 直接 exec 即可，无竞态。
+        try {
+          db.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`);
+        } catch (err) {
+          throw new Error(
+            `[harness-store] pre-apply backup failed for ${file}: ${(err as Error).message}. ` +
+              `Rollback path requires this backup. Aborting startup.`,
+          );
+        }
+      }
+    }
 
     const sql = readFileSync(join(migrationsDir, file), "utf-8");
     const header = sql.split("\n").slice(0, 20).join("\n");
