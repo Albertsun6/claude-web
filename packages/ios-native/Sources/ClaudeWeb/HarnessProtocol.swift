@@ -497,6 +497,10 @@ struct HarnessConfig: Codable, Equatable {
     // 同 permissionModes 的双向 minor bump 兼容硬约束 — Swift 端 optional，
     // store 层 ?? bundleFallback().agentProfiles! 兜底。
     let agentProfiles: [AgentProfileItem]?
+    // PIM v2.1 (M0-PIM, ADR-020 §D10 — 4 处同步之 ③ iOS struct)
+    // **Optional**（同 permissionModes / agentProfiles 的硬约束）—
+    // v1.3 client + v1.0 server payload (没有 pim) 时 nil → fallback PimConfig.fallback
+    let pim: PimConfig?
 }
 
 // MARK: - Version comparator (RFC §2.3, mirrors packages/shared/src/version.ts)

@@ -170,5 +170,11 @@
       "modelHint": "sonnet",
       "enabled": false
     }
-  ]
+  ],
+  "pim": {
+    "commitmentStates": ["inbox", "action", "calendar", "waiting", "reference", "archived"],
+    "modalities": ["text", "link", "image", "audio", "file", "structured"],
+    "domainVocabulary": ["工作", "家庭", "健康", "财务", "学习", "兴趣", "关系"],
+    "aiEnabled": true
+  }
 }

@@ -448,6 +448,16 @@ export const AgentProfileItemSchema = z.object({
 });
 export type AgentProfileItem = z.infer<typeof AgentProfileItemSchema>;
 
+// PimConfig — server-driven PIM 配置（ADR-020 §D10 4 处同步之 ① Zod schema）
+// 用 lazy import 避免循环依赖（pim-protocol 也 export 自 index）。直接 inline
+// 等价 schema 而非 import，因为 harness-protocol 是更基础的层。
+const PimConfigInHarnessSchema = z.object({
+  commitmentStates: z.array(z.string()),
+  modalities: z.array(z.string()).optional(),
+  domainVocabulary: z.array(z.string()).optional(),
+  aiEnabled: z.boolean().optional(),
+});
+
 export const HarnessConfigSchema = z
   .object({
     protocolVersion: z.string(),                     // "1.x"; minor bump 加新字段，老 client graceful skip
@@ -462,6 +472,10 @@ export const HarnessConfigSchema = z
     // 同 permissionModes 的 minor bump 模式 — Swift 端必须 optional，
     // shared / backend 严格必填。M2 真 spawn 时再 minor bump 加复杂字段。
     agentProfiles: z.array(AgentProfileItemSchema),
+    // PIM v2.1 (M0-PIM, ADR-020 §D10 — protocolVersion 1.3 候选)
+    // server-driven commitment_state / modality / domain vocabulary 取值。
+    // iOS / Web fallback 时用 PIM_CONFIG_FALLBACK 兜底（pim-protocol.ts）。
+    pim: PimConfigInHarnessSchema.optional(),
   })
   .superRefine((cfg, ctx) => {
     // Phase 3 cross M1: modelList isDefault exactly-one

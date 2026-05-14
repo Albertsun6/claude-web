@@ -27,6 +27,7 @@
     "test:harness-ci": "pnpm test:harness-schema && pnpm test:scheduler-cleanup && pnpm test:scheduler-failed-reasons && pnpm test:e2e-pipeline && pnpm test:e2e-failures",
     "test:inbox-concurrent": "tsx src/test-inbox-concurrent.ts",
     "test:inbox-dual-write": "tsx src/test-inbox-dual-write.ts",
+    "test:pim-routes": "tsx src/test-pim-routes.ts",
     "migrate:inbox-to-pim": "tsx scripts/migrate-inbox-to-pim.ts",
     "test:workflow": "tsx src/test-workflow.ts",
     "test:m1bplus": "tsx src/test-m1bplus.ts",
