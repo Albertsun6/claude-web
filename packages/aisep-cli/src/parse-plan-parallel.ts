@@ -24,7 +24,13 @@ import yaml from "js-yaml";
 export interface PlanParallelEntry {
   id: string;
   name: string;
-  affects: string;
+  /**
+   * v0.4 (ADR-022 Decision 2): regex patterns declaring which paths the
+   * child plans to touch. Accepts string or string[] in plan.md YAML; the
+   * parser normalizes to string[] internally. v0.4 protocol requires
+   * non-empty array on the resulting AisepStageRun.
+   */
+  affects: string[];
 }
 
 const SUB_NAME_RE = /^[A-Za-z0-9_.:-]+$/;
@@ -110,16 +116,40 @@ export function parsePlanParallel(
           `parsePlanParallel: entry #${i} 'name' must match ${SUB_NAME_RE} (shell-safe per RISK-Q4-c); got "${String(name)}"`,
         );
       }
-      if (typeof affects !== "string" || affects.length === 0) {
+      // v0.4: accept string OR string[]; normalize to non-empty string[].
+      let affectsArr: string[];
+      if (typeof affects === "string") {
+        if (affects.length === 0) {
+          throw new Error(
+            `parsePlanParallel: entry #${i} 'affects' missing or empty (must be a path regex literal or array)`,
+          );
+        }
+        affectsArr = [affects];
+      } else if (Array.isArray(affects)) {
+        if (affects.length === 0) {
+          throw new Error(
+            `parsePlanParallel: entry #${i} 'affects' is an empty array (must declare ≥ 1 regex pattern)`,
+          );
+        }
+        for (let j = 0; j < affects.length; j += 1) {
+          const a = affects[j];
+          if (typeof a !== "string" || a.length === 0) {
+            throw new Error(
+              `parsePlanParallel: entry #${i} 'affects[${j}]' must be a non-empty string`,
+            );
+          }
+        }
+        affectsArr = affects.slice();
+      } else {
         throw new Error(
-          `parsePlanParallel: entry #${i} 'affects' missing or empty (must be a path regex literal)`,
+          `parsePlanParallel: entry #${i} 'affects' must be a string or string[] (got ${typeof affects})`,
         );
       }
       if (seenNames.has(name)) {
         throw new Error(`parsePlanParallel: duplicate name "${name}" at entry #${i}`);
       }
       seenNames.add(name);
-      entries.push({ id, name, affects });
+      entries.push({ id, name, affects: affectsArr });
     }
     return entries;
   }

@@ -152,6 +152,7 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
     // manually. Manual flags always win (explicit > auto).
     let effectiveParallel = args.parallel === true;
     let effectiveChildren = args.parallelChildren;
+    let effectiveAffectsByName: Map<string, string[]> | undefined;
     if (stage === "implement" && !effectiveParallel) {
       const planPath = join(cwd, "plan.md");
       if (existsSync(planPath)) {
@@ -168,6 +169,10 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
         if (autoEntries) {
           effectiveParallel = true;
           effectiveChildren = autoEntries.map((e) => e.name);
+          // v0.4: thread affects through to runFanOutParent (Decision 2).
+          effectiveAffectsByName = new Map(
+            autoEntries.map((e) => [e.name, e.affects]),
+          );
           console.log(
             `[aisep run] auto-detected fan-out from plan.md: parallel=${effectiveChildren.join(",")}`,
           );
@@ -192,7 +197,15 @@ export async function runCommand(rawArgs: string[]): Promise<number> {
         stage: "implement",
         predecessorId: lastRunId,
         concurrencyCap: cap,
-        children: effectiveChildren.map((name) => ({ name })),
+        children: effectiveChildren.map((name) => ({
+          name,
+          // v0.4 Decision 2: prefer plan.md-declared affects; fall back to
+          // `packages/<name>/.*` heuristic when the child comes from
+          // `--children <name>` CLI flag without a plan.md backing it.
+          affects: effectiveAffectsByName?.get(name) ?? [
+            `packages/${name}/.*`,
+          ],
+        })),
       });
       for (const c of children) {
         console.log(

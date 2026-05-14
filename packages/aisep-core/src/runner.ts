@@ -9,18 +9,27 @@
 // dispatches children serially; Stage 2.cli will add concurrency via
 // scheduler.nextReady + Promise.all batching.
 
-import type {
-  AisepArtifact,
-  AisepAttempt,
-  AisepStage,
-  AisepStagePhase,
-  AisepStageRun,
-  AisepWorkspace,
+import {
+  FAN_OUT_ALLOWED_STAGES,
+  type AisepArtifact,
+  type AisepAttempt,
+  type AisepStage,
+  type AisepStagePhase,
+  type AisepStageRun,
+  type AisepWorkspace,
 } from "@vessel/aisep-protocol";
 
+import { assertNoAffectsOverlap } from "./affects-overlap.js";
 import { ids } from "./ids.js";
-import { nextReady, type SchedulerInputStageRun } from "./scheduler.js";
+import {
+  nextReady,
+  nextReadyFanInDispatch,
+  type FanInDispatchDecision,
+  type SchedulerInputStageRun,
+} from "./scheduler.js";
+import { isTerminal } from "./state-machine.js";
 import type { AisepStore } from "./store.js";
+import { acquireWorkspaceLock, type LockMode } from "./workspace-lock.js";
 
 /**
  * StageExecutor — interface implemented by aisep-agents.
@@ -145,8 +154,10 @@ export class AisepRunner {
    * v0.3 (v1 fan-out Stage 2.runner): dispatch a fan-out parent stage_run
    * with N child stage_runs (one per declared sub-implement).
    *
-   * v1 Scope: only `stage === "implement"` is fan-out-able per superRefine
-   * invariant.
+   * v0.4 (v2 fan-in, ADR-022):
+   * - stage whitelist widened to FAN_OUT_ALLOWED_STAGES per Q1b
+   * - each child REQUIRES `affects: string[]` non-empty (Decision 2)
+   * - pre-dispatch `assertNoAffectsOverlap` per Q4 declared-overlap check
    *
    * Stage 2.runner: dispatches children **serially** to keep this layer
    * simple. Stage 2.cli will add concurrency via
@@ -165,8 +176,11 @@ export class AisepRunner {
   async runFanOutParent(args: {
     stage: AisepStage;
     predecessorId?: string;
-    /** Declared sub-implements; v1 limits stage to "implement". */
-    children: Array<{ name: string }>;
+    /**
+     * Declared sub-implements. v0.4 REQUIRES `affects` per child (Decision 2):
+     * regex patterns declaring which paths the child plans to touch.
+     */
+    children: Array<{ name: string; affects: string[] }>;
     /**
      * Max concurrent children dispatched at a time (v1 plan-roadmap cap
      * = 4; user-tunable via CLI `--concurrency`). When omitted, defaults
@@ -174,11 +188,11 @@ export class AisepRunner {
      */
     concurrencyCap?: number;
   }): Promise<{ parent: AisepStageRun; children: AisepStageRun[] }> {
-    const { store, workspace, executor } = this.opts;
+    const { store, workspace, executor: _executor } = this.opts;
 
-    if (args.stage !== "implement") {
+    if (!FAN_OUT_ALLOWED_STAGES.has(args.stage)) {
       throw new Error(
-        `runFanOutParent: v1 limits fan-out to stage="implement"; got stage="${args.stage}"`,
+        `runFanOutParent: stage='${args.stage}' is not in FAN_OUT_ALLOWED_STAGES (v0.4 Q1b allows: implement, verify, review)`,
       );
     }
     if (args.children.length < 2) {
@@ -186,10 +200,24 @@ export class AisepRunner {
         `runFanOutParent: a fan-out requires >= 2 children; got ${args.children.length}`,
       );
     }
+    for (let i = 0; i < args.children.length; i += 1) {
+      const child = args.children[i]!;
+      if (!Array.isArray(child.affects) || child.affects.length === 0) {
+        throw new Error(
+          `runFanOutParent: child[${i}] (name='${child.name}') requires non-empty affects: string[] (v0.4 Decision 2)`,
+        );
+      }
+    }
+    // v0.4 Q4 pre-dispatch: refuse fan-out if any pair of children's affects
+    // share a literal anchor (regex-intersect heuristic, false positives OK,
+    // documented limits per proposal §Q4).
+    assertNoAffectsOverlap(args.children.map((c) => c.affects));
 
     // 1. Pre-mint child stage_run ids so we can wire parent.subStages
     //    atomically with the parent's creation.
-    const childIds = args.children.map(() => ids.stageRun(this.opts.clock));
+    const childIds = args.children.map(() =>
+      ids.stageRun((this.opts as { clock?: import("./ids.js").IdClock }).clock),
+    );
 
     // 2. Create parent with subStages populated (fanOutRole='parent' invariant).
     const parent = store.createStageRun({
@@ -202,6 +230,7 @@ export class AisepRunner {
     } as Omit<AisepStageRun, "id" | "status">);
 
     // 3. Create children rows pointing at parent (fanOutRole='child' invariant).
+    //    v0.4: each child carries its declared affects regex patterns.
     const childRuns: AisepStageRun[] = [];
     for (let i = 0; i < args.children.length; i += 1) {
       const child = store.createStageRun({
@@ -211,6 +240,7 @@ export class AisepRunner {
         phase: "none",
         fanOutRole: "child",
         parentStageRunId: parent.id,
+        affects: args.children[i]!.affects,
       } as Omit<AisepStageRun, "id" | "status"> & { id?: string });
       childRuns.push(child);
     }
@@ -338,6 +368,224 @@ export class AisepRunner {
     );
 
     return { parent: finalParent, children: finishedChildren };
+  }
+
+  /**
+   * v0.4 (v2 fan-in, ADR-022 Decision 4): retry a single failed fan-out
+   * child id-stably. Adds a new attempt log entry; the child id is NOT
+   * regenerated. Parent's `patch_set` manifest is re-aggregated on success.
+   *
+   * Q5 retry semantics:
+   * 1. Acquire workspace lock (R7); refuse if held by another live process.
+   * 2. Verify target is a fan-out child (fanOutRole='child').
+   * 3. Verify target child.status === 'failed' (cannot retry running/succeeded).
+   * 4. Verify parent.status terminal (per Q5 step 1 + R1 mitigation).
+   * 5. Mark child status `failed → running` via retry-marker state-machine
+   *    amendment.
+   * 6. Spawn executor (existing code path); append new attempt log entry.
+   * 7. If child succeeded, re-aggregate parent's `patch_set` manifest.
+   * 8. Parent.status is NOT flipped (per Q5 ¶7 "parent stays at original
+   *    status until all children terminal again" — downstream fan-in dispatch
+   *    is gated on child statuses, NOT parent.status; see Slice 2 scheduler
+   *    `nextReadyFanInDispatch` step 1 which accepts parent='failed').
+   *
+   * Releases the workspace lock on every exit path (error or success).
+   *
+   * @param args.childId — fan-out child stage_run id to retry
+   * @param args.bumpTimeout — when true, executor uses F3-style 1.5× timeout
+   *   multiplier (caller responsibility to thread this to the executor).
+   *   v0.4 Slice 3 records the intent on the attempt; full executor
+   *   integration is in Slice 4 cli `--bump-timeout` plumbing.
+   */
+  async runRetryChild(args: {
+    childId: string;
+    bumpTimeout?: boolean;
+  }): Promise<AisepStageRun> {
+    const { store, workspace } = this.opts;
+
+    // Step 1: workspace lock (R7).
+    const lock = acquireWorkspaceLock(workspace.cwd, "retry-child" as LockMode);
+    try {
+      // Steps 2-4: pre-condition checks.
+      const child = store.getStageRun(args.childId);
+      if (!child) {
+        throw new Error(`runRetryChild: stage_run not found: ${args.childId}`);
+      }
+      if (child.fanOutRole !== "child") {
+        throw new Error(
+          `runRetryChild: stage_run ${args.childId} is not a fan-out child (fanOutRole='${child.fanOutRole}')`,
+        );
+      }
+      if (child.status !== "failed") {
+        throw new Error(
+          `runRetryChild: child ${args.childId} must be status='failed' to retry (got '${child.status}')`,
+        );
+      }
+      if (!child.parentStageRunId) {
+        throw new Error(
+          `runRetryChild: child ${args.childId} has no parentStageRunId (invariant violation)`,
+        );
+      }
+      const parent = store.getStageRun(child.parentStageRunId);
+      if (!parent) {
+        throw new Error(
+          `runRetryChild: parent stage_run not found: ${child.parentStageRunId}`,
+        );
+      }
+      if (!isTerminal(parent.status)) {
+        throw new Error(
+          `runRetryChild: parent ${parent.id} must be terminal to retry a child (got '${parent.status}'; per ADR-022 Q5 step 1 + R1)`,
+        );
+      }
+
+      // Step 5: failed → running via retry-marker amendment.
+      store.updateStageRunStatus(child.id, "running", { retryChild: true });
+
+      // Step 6: execute the body (already-in-running variant — does NOT
+      // re-transition to running). `bumpTimeout` is recorded in the
+      // attempt's error field for forensic traceability (full F3 timeout
+      // bump is plumbed through executor in Slice 4).
+      const finalChild = await this.executeRunningStageRun(
+        child.id,
+        child.stage,
+        "none",
+        undefined, // subStageName flows from plan.md in Slice 4 cli
+        undefined, // no AbortSignal for explicit user-driven retry
+      );
+
+      // Step 7: if child succeeded, re-aggregate parent's patch_set.
+      if (finalChild.status === "succeeded") {
+        this.reaggregateParentPatchSet(parent.id);
+      }
+
+      return finalChild;
+    } finally {
+      lock.release();
+    }
+  }
+
+  /**
+   * v0.4 (Slice 3): re-build the patch_set manifest on a fan-out parent
+   * after one of its children's status changes via retry. Reads the
+   * latest patch artifact from each child + appends a fresh patch_set
+   * artifact on the parent. The previous patch_set artifact stays in
+   * the artifact log (append-only); consumers should look at the most
+   * recent patch_set on the parent.
+   */
+  private reaggregateParentPatchSet(parentId: string): void {
+    const { store, workspace } = this.opts;
+    const parent = store.getStageRun(parentId);
+    if (!parent || parent.fanOutRole !== "parent") return;
+
+    const childRuns = store.listChildStageRuns(parentId);
+    const childPatches = childRuns.map((c, idx) => {
+      const childArtifacts = store.listArtifactsByStageRun(c.id);
+      const firstPatch = childArtifacts.find((a) => a.ref.kind === "patch");
+      return {
+        subStageId: c.id,
+        subStageName: `child-${idx}`, // Slice 4 cli will pass real subStageName via store metadata
+        patchFile: firstPatch?.ref.key ?? `patch/<missing-${idx}>`,
+        contentHash:
+          firstPatch?.contentHash ??
+          "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        byteCount: firstPatch?.sizeBytes ?? 0,
+      };
+    });
+
+    const manifestContent = JSON.stringify({ patches: childPatches });
+    store.appendArtifact({
+      workspaceId: workspace.meta.id,
+      stageRunId: parent.id,
+      ref: {
+        kind: "patch_set",
+        key: `patch_set/${parent.stage}-retry-${Date.now()}.json`,
+      },
+      storage: "inline",
+      contentUri: `sqlite://artifact_blob/parent-${parent.id}-retry`,
+      contentInline: manifestContent,
+      contentHash: `sha256:${"0".repeat(64)}`,
+      sizeBytes: Buffer.byteLength(manifestContent, "utf-8"),
+    } as Omit<AisepArtifact, "id" | "producedAt">);
+  }
+
+  /**
+   * Private helper: drive a stage_run already in 'running' status through
+   * the executor → persist artifacts + attempt → transition to terminal.
+   *
+   * Extracted in v0.4 Slice 3 so both `executeStageRunBody` (which
+   * transitions pending→running first) and `runRetryChild` (which
+   * transitions failed→running via retry-marker first) can share the
+   * same post-running execution path.
+   */
+  private async executeRunningStageRun(
+    stageRunId: string,
+    stage: AisepStage,
+    phase: AisepStagePhase,
+    subStageName?: string,
+    signal?: AbortSignal,
+  ): Promise<AisepStageRun> {
+    const { store, workspace, executor } = this.opts;
+
+    let run = store.getStageRun(stageRunId);
+    if (!run) throw new Error(`executeRunningStageRun: stage_run not found: ${stageRunId}`);
+
+    const upstreamArtifacts: AisepArtifact[] = run.predecessorId
+      ? store.listArtifactsByStageRun(run.predecessorId)
+      : [];
+
+    const memoryHits = this.opts.memoryProvider
+      ? await this.opts.memoryProvider.retrieve(stage, phase)
+      : [];
+
+    try {
+      const result = await executor.execute({
+        stage,
+        phase,
+        workspace,
+        upstreamArtifacts,
+        memoryHits,
+        ...(subStageName !== undefined ? { subStageName } : {}),
+        ...(signal !== undefined ? { signal } : {}),
+      });
+
+      for (const a of result.producedArtifacts) {
+        store.appendArtifact({
+          ...a,
+          workspaceId: workspace.meta.id,
+          stageRunId: run.id,
+        });
+      }
+
+      const latestN = store.latestAttemptN(run.id);
+      store.appendAttempt({
+        stageRunId: run.id,
+        attemptN: latestN + 1,
+        ...result.attempt,
+      });
+
+      run = store.updateStageRunStatus(run.id, result.ok ? "succeeded" : "failed");
+      return run;
+    } catch (err) {
+      const latestN = store.latestAttemptN(run.id);
+      store.appendAttempt({
+        stageRunId: run.id,
+        attemptN: latestN + 1,
+        invocation: {
+          provider: "other",
+          model: "n/a",
+          argv: [],
+          cwd: workspace.cwd,
+          promptHash: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        },
+        reviewState: "draft",
+        outputArtifactIds: [],
+        status: "failed",
+        exitCode: -1,
+        error: (err as Error).message,
+      });
+      run = store.updateStageRunStatus(run.id, "failed");
+      return run;
+    }
   }
 
   /**

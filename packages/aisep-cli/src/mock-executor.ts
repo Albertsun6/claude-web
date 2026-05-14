@@ -40,9 +40,17 @@ export interface MockExecutorOptions {
    * succeed). Independent of `failOnStages`.
    */
   failOnSubStages?: string[];
+  /**
+   * v0.4 (Slice 3 retry-child tests): fail on the FIRST invocation per
+   * matching subStageName, succeed on subsequent invocations. Mirrors
+   * the real-world retry-child scenario: child fails first, user retries,
+   * child succeeds. State is per-executor-instance (one Mock per test).
+   */
+  failFirstAttemptOnSubStages?: string[];
 }
 
 export class MockStageExecutor implements StageExecutor {
+  private firstAttemptSeen = new Set<string>();
   constructor(private readonly opts: MockExecutorOptions = {}) {}
 
   async execute(args: Parameters<StageExecutor["execute"]>[0]): Promise<StageExecutorResult> {
@@ -87,7 +95,18 @@ export class MockStageExecutor implements StageExecutor {
     const failBySubStage =
       args.subStageName !== undefined &&
       (this.opts.failOnSubStages ?? []).includes(args.subStageName);
-    const ok = !failByStage && !failBySubStage;
+    // v0.4 Slice 3: fail-first-then-succeed mode for retry-child tests.
+    let failFirstAttempt = false;
+    if (
+      args.subStageName !== undefined &&
+      (this.opts.failFirstAttemptOnSubStages ?? []).includes(args.subStageName)
+    ) {
+      if (!this.firstAttemptSeen.has(args.subStageName)) {
+        this.firstAttemptSeen.add(args.subStageName);
+        failFirstAttempt = true;
+      }
+    }
+    const ok = !failByStage && !failBySubStage && !failFirstAttempt;
     const promptHash = hashString(`mock:${args.stage}:${args.phase}`);
 
     const producedArtifact = {

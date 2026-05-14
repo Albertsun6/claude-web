@@ -33,7 +33,9 @@ describe("parsePlanParallel", () => {
     expect(result).toHaveLength(2);
     expect(result![0]!.name).toBe("backend");
     expect(result![1]!.name).toBe("frontend");
-    expect(result![0]!.affects).toBe("^packages/backend/");
+    // v0.4: affects normalized to string[] (Decision 2). A YAML scalar
+    // string in plan.md still works for backward compat; parser wraps it.
+    expect(result![0]!.affects).toEqual(["^packages/backend/"]);
   });
 
   it("parses 3-entry valid block", () => {
@@ -147,7 +149,45 @@ parallel:
     affects: ^b/
 \`\`\`
 `;
-    expect(() => parsePlanParallel(md)).toThrow(/'affects' missing or empty/);
+    expect(() => parsePlanParallel(md)).toThrow(/'affects' must be a string or string\[\]/);
+  });
+
+  it("v0.4: accepts affects as YAML array (Decision 2 array form)", () => {
+    const md = `
+\`\`\`yaml
+parallel:
+  - id: T1
+    name: backend
+    affects:
+      - ^packages/backend/.*\\.ts
+      - ^packages/shared/types/.*
+  - id: T2
+    name: frontend
+    affects: [^packages/frontend/.*]
+\`\`\`
+`;
+    const result = parsePlanParallel(md);
+    expect(result).toHaveLength(2);
+    expect(result![0]!.affects).toEqual([
+      "^packages/backend/.*\\.ts",
+      "^packages/shared/types/.*",
+    ]);
+    expect(result![1]!.affects).toEqual(["^packages/frontend/.*"]);
+  });
+
+  it("v0.4: rejects empty affects array", () => {
+    const md = `
+\`\`\`yaml
+parallel:
+  - id: T1
+    name: backend
+    affects: []
+  - id: T2
+    name: frontend
+    affects: ^b/
+\`\`\`
+`;
+    expect(() => parsePlanParallel(md)).toThrow(/'affects' is an empty array/);
   });
 
   it("throws on malformed YAML", () => {
