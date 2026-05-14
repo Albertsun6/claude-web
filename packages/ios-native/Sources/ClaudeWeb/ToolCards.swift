@@ -148,6 +148,8 @@ private struct EditCard: View {
     var body: some View {
         let input = decodeInput(line.toolInputJSON, as: Input.self)
         let path = input?.file_path ?? ""
+        let old = input?.old_string ?? ""
+        let new = input?.new_string ?? ""
         CardShell(
             icon: "square.and.pencil",
             title: "Edit",
@@ -158,11 +160,8 @@ private struct EditCard: View {
                 if !path.isEmpty {
                     Text(path).font(.caption2.monospaced()).foregroundStyle(.secondary)
                 }
-                if let old = input?.old_string, !old.isEmpty {
-                    diffBlock(label: "−", text: old, color: .red)
-                }
-                if let new = input?.new_string, !new.isEmpty {
-                    diffBlock(label: "+", text: new, color: .green)
+                if !old.isEmpty || !new.isEmpty {
+                    UnifiedDiffView(old: old, new: new)
                 }
                 if input?.replace_all == true {
                     Text("replace_all = true")
@@ -170,18 +169,6 @@ private struct EditCard: View {
                         .foregroundStyle(.orange)
                 }
             }
-        }
-    }
-
-    private func diffBlock(label: String, text: String, color: Color) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            Text(label).font(.caption.bold()).foregroundStyle(color)
-            Text(text)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(6)
-                .background(color.opacity(0.08), in: .rect(cornerRadius: 4))
         }
     }
 }

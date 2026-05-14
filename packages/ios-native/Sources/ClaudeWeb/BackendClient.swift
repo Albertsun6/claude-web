@@ -75,6 +75,8 @@ final class BackendClient {
     func connect() { webSocket.connect() }
     func disconnect() { webSocket.disconnect() }
     func reconnect() { webSocket.reconnect() }
+    func enterBackground() { webSocket.enterBackground() }
+    func enterForeground() { webSocket.enterForeground() }
 
     // MARK: - Forwarded store API
 

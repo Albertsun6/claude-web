@@ -10,6 +10,7 @@
 		02CD812D3F8FD2B778F795C7 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41644A5C0D2AF122ECB234C5 /* VoiceRecorder.swift */; };
 		04E0AE5921D797ADBA0F3D62 /* RecordingHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = 615A5C6CF9F1DCFB56036BED /* RecordingHUD.swift */; };
 		091DA8EEDBC1DAE9643F3537 /* ConversationNamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E17B4D2B56E9F6FEBC61F73 /* ConversationNamer.swift */; };
+		0D866981D79E87B007ACE373 /* UnifiedDiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71BB8A881E6FF12842326917 /* UnifiedDiffView.swift */; };
 		14BD41359E745E1A0CBC1993 /* PermissionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D633D2B9BA81ED44C7C43A /* PermissionSheet.swift */; };
 		157923023F45AA49313F6F40 /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E2A2028BD3CBE2B54DD066 /* BackendClient.swift */; };
 		161A16FBF5C93B78910BCB24 /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EFD34C3AA3C0A5D9A5EB6A6 /* BonjourBrowser.swift */; };
@@ -138,6 +139,7 @@
 		6E17B4D2B56E9F6FEBC61F73 /* ConversationNamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNamer.swift; sourceTree = "<group>"; };
 		6F52716A6E5E57D5EF97BC91 /* HeartbeatMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeartbeatMonitor.swift; sourceTree = "<group>"; };
 		70D86E69352B042BA20B55E3 /* RunsDashboardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunsDashboardSheet.swift; sourceTree = "<group>"; };
+		71BB8A881E6FF12842326917 /* UnifiedDiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedDiffView.swift; sourceTree = "<group>"; };
 		72DC05F1B8A3DED8C9DF0E89 /* VesselMemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VesselMemoryView.swift; sourceTree = "<group>"; };
 		7761F193E381FE2895AF7F40 /* BuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildInfo.swift; sourceTree = "<group>"; };
 		7ACDF9BE3E7BCB6A0D365CFD /* HarnessAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessAPI.swift; sourceTree = "<group>"; };
@@ -352,6 +354,7 @@
 				356FA260082DE219FEA514E3 /* ToolCards.swift */,
 				321A98BEF46530B4498358D4 /* TranscriptParser.swift */,
 				0CAA94D3A2EA5E1964256325 /* TTSPlayer.swift */,
+				71BB8A881E6FF12842326917 /* UnifiedDiffView.swift */,
 				A4E5E18CA2A460D6F91B83C9 /* UpdateBannerView.swift */,
 				9A3CAC537429B670DD01C3B8 /* VersionAPI.swift */,
 				41644A5C0D2AF122ECB234C5 /* VoiceRecorder.swift */,
@@ -565,6 +568,7 @@
 				1D18CF10BAA0B3ACBE82D133 /* TitleHelper.swift in Sources */,
 				B546DA7E0322B056D8806707 /* ToolCards.swift in Sources */,
 				94F54C0F259708D42826A521 /* TranscriptParser.swift in Sources */,
+				0D866981D79E87B007ACE373 /* UnifiedDiffView.swift in Sources */,
 				EEFD7DC1FA13209BDA76CAAA /* UpdateBannerView.swift in Sources */,
 				E2847AAAB42BCAFC73E9E451 /* VersionAPI.swift in Sources */,
 				A4840C0D6E3E8CC68B1FF0A5 /* VesselDiscovery.swift in Sources */,
@@ -636,7 +640,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 59;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 23PRXWBRNH;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -803,7 +807,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 59;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 23PRXWBRNH;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

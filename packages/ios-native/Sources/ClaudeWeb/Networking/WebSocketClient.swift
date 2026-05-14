@@ -2,7 +2,9 @@
 // loop, decodes incoming frames into ServerMessage, and exposes a single
 // `send(_:)` for outbound frames. No conversation / runId knowledge.
 //
-// Reconnect strategy: exponential backoff (1s → 30s) on receive failure.
+// Reconnect strategy: exponential backoff (1s → 60s) with ±20% jitter,
+// reset to 1s on first successful receive. App-level scenePhase disconnects
+// the socket on background to prevent BG retry storms.
 // `backendBase` is observable; mutating it triggers a reconnect via didSet.
 
 import Foundation
@@ -100,14 +102,9 @@ final class WebSocketClient {
     }
 
     func disconnect() {
-        pingTimer?.invalidate()
-        pingTimer = nil
-        receiveTask?.cancel()
-        receiveTask = nil
         reconnectTask?.cancel()
         reconnectTask = nil
-        task?.cancel(with: .goingAway, reason: nil)
-        task = nil
+        tearDownConnection()
         state = .disconnected
     }
 
@@ -117,16 +114,62 @@ final class WebSocketClient {
         connect()
     }
 
+    /// Called when the app moves to the background. Suspends the proactive
+    /// reconnect loop + ping timer so iOS's BG runtime window isn't burned on
+    /// retry storms during outages (the original failure mode that surfaced as
+    /// device heat). The existing socket, if healthy, is left alone — iOS
+    /// will manage its lifetime and may suspend or reclaim it.
+    func enterBackground() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        pingTimer?.invalidate()
+        pingTimer = nil
+    }
+
+    /// Called when the app returns to the foreground. If the socket is gone
+    /// (either we were mid-reconnect when backgrounded, or iOS reclaimed it),
+    /// kick off a fresh connect. If the socket survived, just restart the
+    /// ping timer and reset the pong watchdog so we don't fire a false
+    /// timeout from the BG gap.
+    func enterForeground() {
+        if task == nil {
+            reconnectDelay = 1
+            connect()
+        } else {
+            lastPongAt = Date()
+            startPingTimer()
+        }
+    }
+
+    /// Cancel the current socket task + receive loop + ping timer without
+    /// touching the reconnect task (so scheduleReconnect can self-call this
+    /// while the pending reconnect Task is still its own owner).
+    private func tearDownConnection() {
+        pingTimer?.invalidate()
+        pingTimer = nil
+        receiveTask?.cancel()
+        receiveTask = nil
+        task?.cancel(with: .goingAway, reason: nil)
+        task = nil
+    }
+
     private func scheduleReconnect() {
         reconnectTask?.cancel()
-        let delay = reconnectDelay
+        // Tear down NOW so we don't accumulate sockets/loops during the sleep
+        // window. Previously this only set task=nil, which leaked the underlying
+        // URLSessionWebSocketTask + left receiveLoop awaiting on a dead socket.
+        tearDownConnection()
+        // ±20% jitter so simultaneous failures across reconnects don't
+        // re-converge into a synchronized retry storm.
+        let base = reconnectDelay
+        let jitter = base * 0.2 * (Double.random(in: -1...1))
+        let delay = max(0.5, base + jitter)
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.task = nil
                 self.connect()
-                self.reconnectDelay = min(delay * 2, 30)
+                self.reconnectDelay = min(base * 2, 60)
             }
         }
     }
@@ -136,6 +179,10 @@ final class WebSocketClient {
         while !Task.isCancelled {
             do {
                 let msg = try await t.receive()
+                // First successful frame after a (re)connect = healthy socket.
+                // Reset backoff so a future fresh outage starts at 1s instead
+                // of whatever cap (60s) the last outage drove us up to.
+                reconnectDelay = 1
                 let data: Data
                 switch msg {
                 case .data(let d): data = d
