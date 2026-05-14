@@ -30,6 +30,7 @@ import {
   resolvePermission,
 } from "./routes/permission.js";
 import { inboxRouter } from "./routes/inbox.js";
+import { setPimDbForInbox } from "./inbox-store.js";
 import { updateCheckRouter } from "./routes/update-check.js";
 import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
@@ -156,6 +157,10 @@ if (!process.env.HARNESS_DISABLED) {
   try {
     _harnessDb = openHarnessDb();
     console.log(`[harness] SQLite ready (schema v${_harnessDb.schemaVersion})`);
+    // ADR-020 D3: POST /api/inbox dual-write 同时写 jsonl + pim_item.
+    // 2-week buffer 期间 inbox.jsonl 与 pim_item 都接收新增, Week 3 末
+    // 标 inbox.jsonl 为 .deprecated.
+    setPimDbForInbox(_harnessDb);
   } catch (err) {
     console.error("[harness] DB init failed — harness routes unavailable:", err);
     app.all("/api/harness/*", (c) =>
