@@ -78,7 +78,7 @@ summary { cursor: pointer; padding: 4px 0; user-select: none; }
     Workspace <code><%= report.workspace.cwd %></code> ·
     Generated <%= new Date(report.generatedAt).toISOString() %> ·
     <%= report.stages.length %> stage_runs ·
-    <%= report.fanOuts.length %> fan-out group(s)
+    <%= report.parallelGroups.length %> fan-out group(s)
   </div>
 </header>
 
@@ -115,20 +115,40 @@ gantt
 </section>
 
 <section id="fanout-tree">
-  <h2>Fan-out tree</h2>
-<% if (report.fanOuts.length === 0) { %>
-  <p class="empty">No fan-out (linear chain).</p>
+  <h2>Parallel groups (fan-out / fan-in)</h2>
+<% if (report.parallelGroups.length === 0) { %>
+  <p class="empty">No parallel groups (linear chain).</p>
 <% } else { %>
-<% report.fanOuts.forEach((group, idx) => { %>
-  <h3 style="font-size:14px; margin:8px 0">parent: <code><%= group.parentId %></code> (<%= group.parentStage %>)</h3>
+<% report.parallelGroups.forEach((group, idx) => { %>
+  <h3 style="font-size:14px; margin:8px 0">
+    parent: <code><%= group.parentId %></code>
+    (<%= group.parentStage %>, direction=<%= group.direction %>)
+  </h3>
   <div class="mermaid">
-flowchart TD
+flowchart <%= group.direction === "in" ? "BT" : "TD" %>
     P<%= idx %>["parent · <%= group.parentStage %>"]
 <% group.childIds.forEach((cid, ci) => { %>
     C<%= idx %>_<%= ci %>["<%= group.childNames[cid] || cid %>"]
     P<%= idx %> --> C<%= idx %>_<%= ci %>
+<% if (group.direction === "in" && group.upstreamPredecessorByChildId[cid]) { %>
+    U<%= idx %>_<%= ci %>["upstream <%= group.upstreamPredecessorByChildId[cid].slice(-6) %>"]
+    U<%= idx %>_<%= ci %> -.mirrors.-> C<%= idx %>_<%= ci %>
+<% } %>
 <% }); %>
   </div>
+<% if (Object.keys(group.affectsByChildId).length > 0) { %>
+  <table style="font-size:12px; margin:6px 0">
+    <thead><tr><th>child</th><th>affects</th></tr></thead>
+    <tbody>
+<% group.childIds.forEach((cid) => { %>
+      <tr>
+        <td><code><%= group.childNames[cid] || cid.slice(-8) %></code></td>
+        <td><code><%= (group.affectsByChildId[cid] || []).join(", ") %></code></td>
+      </tr>
+<% }); %>
+    </tbody>
+  </table>
+<% } %>
 <% }); %>
 <% } %>
 </section>

@@ -6,7 +6,7 @@
 import type {
   AisepReport,
   AisepReportContractGrepCheck,
-  AisepReportFanOutGroup,
+  AisepReportParallelGroup,
   AisepReportStage,
   AisepReportTraceRow,
   BuildReportInput,
@@ -68,25 +68,49 @@ export function buildReport(input: BuildReportInput): AisepReport {
     return projectStage(run, primaryArt?.ref.key);
   });
 
-  // Fan-out groups (parents and their children).
-  const fanOuts: AisepReportFanOutGroup[] = [];
+  // Parallel groups (fan-out parents + their children, with fan-in
+  // direction detection per ADR-022 Q6 F10).
+  const parallelGroups: AisepReportParallelGroup[] = [];
+  const parentById = new Map(input.stageRuns.map((r) => [r.id, r]));
   for (const run of input.stageRuns) {
     if (run.fanOutRole !== "parent") continue;
     const childRuns = input.stageRuns.filter(
       (r) => r.fanOutRole === "child" && r.parentStageRunId === run.id,
     );
     const childNames: Record<string, string> = {};
+    const affectsByChildId: Record<string, string[]> = {};
+    const upstreamPredecessorByChildId: Record<string, string> = {};
     for (const c of childRuns) {
       const arts = artifactByRunId.get(c.id) ?? [];
       const patch = arts.find((a) => a.ref.kind === "patch");
       const m = patch?.ref.key ? /-([A-Za-z0-9_.:-]+)\.md$/.exec(patch.ref.key) : null;
       childNames[c.id] = m ? m[1]! : c.id.slice(-6);
+      affectsByChildId[c.id] = Array.isArray((c as { affects?: unknown }).affects)
+        ? ((c as { affects: string[] }).affects)
+        : [];
+      // Fan-in linkage: child.predecessorId points at its upstream
+      // counterpart (Q3 stage-pair).
+      if (c.predecessorId) {
+        upstreamPredecessorByChildId[c.id] = c.predecessorId;
+      }
     }
-    fanOuts.push({
+    // Direction: "in" iff this parent's own predecessorId resolves to
+    // another fan-out parent (Q3 stage-pair fan-in). "out" otherwise.
+    let direction: "out" | "in" = "out";
+    if (run.predecessorId) {
+      const upstreamParent = parentById.get(run.predecessorId);
+      if (upstreamParent && upstreamParent.fanOutRole === "parent") {
+        direction = "in";
+      }
+    }
+    parallelGroups.push({
       parentId: run.id,
       parentStage: run.stage,
+      direction,
       childIds: childRuns.map((c) => c.id),
       childNames,
+      upstreamPredecessorByChildId,
+      affectsByChildId,
     });
   }
 
@@ -164,7 +188,7 @@ export function buildReport(input: BuildReportInput): AisepReport {
     workspace: input.workspace,
     generatedAt: input.generatedAt ?? Date.now(),
     stages,
-    fanOuts,
+    parallelGroups,
     traceMatrix,
     contractGrepChecks,
     memoryHits: [], // v0.3 MVP — full timeline requires retrieve() artifact persistence
