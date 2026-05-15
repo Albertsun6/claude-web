@@ -27,13 +27,23 @@ import {
 import { suggestForPimItem, isPimAiEnabled } from "../pim-ai-suggester.js";
 
 // ============================================================================
-// DB instance injection (mirrors inbox-store.setPimDbForInbox pattern)
+// DB + broadcast injection (mirrors inbox-store.setPimDbForInbox pattern)
 // ============================================================================
 
 let _db: HarnessDb | null = null;
+let _broadcast: ((msg: unknown) => void) | null = null;
 
 export function setPimDbForRoutes(db: HarnessDb | null): void {
   _db = db;
+}
+
+/**
+ * Inject WS broadcast fn (from index.ts at boot).
+ * Day 12 — emits `{type:'pim_event', kind, id}` on every successful mutation
+ * so iOS / Web peers refresh.
+ */
+export function setPimBroadcast(fn: ((msg: unknown) => void) | null): void {
+  _broadcast = fn;
 }
 
 function requireDb(): HarnessDb {
@@ -41,6 +51,16 @@ function requireDb(): HarnessDb {
     throw new Error("[pim routes] no harness DB injected — call setPimDbForRoutes() first");
   }
   return _db;
+}
+
+/** Fire-and-forget broadcast (swallow errors — broadcast is UX nicety, not truth). */
+function broadcastPimEvent(kind: "created" | "updated" | "deleted" | "attached_issue", id: string): void {
+  if (!_broadcast) return;
+  try {
+    _broadcast({ type: "pim_event", kind, id, ts: Date.now() });
+  } catch (err) {
+    console.warn(`[pim routes] broadcast failed (non-blocking): ${(err as Error).message}`);
+  }
 }
 
 /**
@@ -165,6 +185,9 @@ pimRouter.post("/", async (c) => {
     });
   }
 
+  // Day 12 — broadcast for cross-device sync
+  broadcastPimEvent("created", row.id);
+
   return c.json({ item: rowToWire(row) }, 201);
 });
 
@@ -265,6 +288,9 @@ pimRouter.patch("/:id", async (c) => {
   else if (typeof payload.deletedAt === "number") otherPatch.deletedAt = payload.deletedAt;
   if (Object.keys(otherPatch).length > 0) updatePimItem(db, id, otherPatch, auditCtx);
 
+  // Day 12 broadcast
+  broadcastPimEvent("updated", id);
+
   const updated = getPimItem(db, id);
   return c.json({ item: rowToWire(updated!) });
 });
@@ -278,6 +304,7 @@ pimRouter.delete("/:id", (c) => {
   const db = requireDb().db;
   const ok = softDeletePimItem(db, id, buildAuditCtx(c));
   if (!ok) return c.json({ error: "not found" }, 404);
+  broadcastPimEvent("deleted", id);
   return c.json({ ok: true });
 });
 
@@ -299,5 +326,6 @@ pimRouter.post("/:id/attach-issue", async (c) => {
   }
   const ok = attachIssueRef(requireDb().db, id, body.issueId, buildAuditCtx(c));
   if (!ok) return c.json({ error: "pim_item not found or issue update failed" }, 404);
+  broadcastPimEvent("attached_issue", id);
   return c.json({ ok: true });
 });

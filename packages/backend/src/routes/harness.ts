@@ -91,7 +91,7 @@ export function buildHarnessRouter(
   });
 
   app.post("/issues", async (c) => {
-    let body: { projectId?: string; initiativeId?: string; title?: string; body?: string; priority?: string; source?: string };
+    let body: { projectId?: string; initiativeId?: string; title?: string; body?: string; priority?: string; source?: string; pimItemId?: string };
     try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "invalid JSON" }, 400); }
     if (!body.projectId || !body.title) return c.json({ ok: false, error: "projectId + title required" }, 400);
     const row = createIssue(db, {
@@ -101,6 +101,9 @@ export function buildHarnessRouter(
       body: body.body,
       priority: body.priority as any,
       source: body.source,
+      // ADR-020 Week 2 Day 12 — derived_from linkage to upstream PimItem.
+      // Optional; absent = standalone issue.
+      pimItemId: typeof body.pimItemId === "string" ? body.pimItemId : undefined,
     });
     return c.json({ ok: true, data: row }, 201);
   });
