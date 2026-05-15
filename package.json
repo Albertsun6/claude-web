@@ -9,7 +9,6 @@
     "dev:frontend": "pnpm --filter @vessel/frontend dev",
     "test:cli": "pnpm --filter @vessel/backend test:cli",
     "test:protocol": "pnpm --filter @vessel/shared test",
-    "test:protocol:aisep": "pnpm --filter @vessel/aisep-protocol test",
     "dep-cruiser:check": "dependency-cruiser packages/",
     "vessel-core": "pnpm --filter @vessel/backend exec tsx src/cli/vessel-core.ts",
     "eva:status": "node scripts/eva-status.mjs",
