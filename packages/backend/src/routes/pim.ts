@@ -21,6 +21,7 @@ import {
   attachIssueRef,
   sanityReport,
   softDeletePimItem,
+  exportPimItems,
   type PimItemRow,
   type PimAuditContext,
 } from "../pim-queries.js";
@@ -203,15 +204,46 @@ pimRouter.get("/list", (c) => {
   const sinceMsStr = c.req.query("sinceMs");
   const sinceMs = sinceMsStr ? parseInt(sinceMsStr, 10) : undefined;
   const includeDeleted = c.req.query("includeDeleted") === "1";
+  // Week 3 Day 15: FTS5 full-text search via ?q=
+  const query = c.req.query("q") || c.req.query("query") || undefined;
 
-  const rows = listPimItems(requireDb().db, {
-    commitmentState: commitment,
-    source,
-    limit,
-    sinceMs,
-    includeDeleted,
-  });
+  let rows: PimItemRow[];
+  try {
+    rows = listPimItems(requireDb().db, {
+      commitmentState: commitment,
+      source,
+      limit,
+      sinceMs,
+      includeDeleted,
+      query,
+    });
+  } catch (err) {
+    // FTS5 query syntax errors throw SQLite — return 400 with hint
+    return c.json(
+      { error: `FTS query parse error: ${(err as Error).message}` },
+      400,
+    );
+  }
   return c.json({ items: rows.map(rowToWire), total: rows.length });
+});
+
+// Week 3 Day 18 — export portability (v2.1 红线 #4).
+// Format = markdown | csv. Content-Disposition triggers browser download.
+pimRouter.get("/export", (c) => {
+  const format = c.req.query("format") === "csv" ? "csv" : "markdown";
+  const includeDeleted = c.req.query("includeDeleted") === "1";
+  const body = exportPimItems(requireDb().db, { format, includeDeleted });
+  const today = new Date().toISOString().slice(0, 10);
+  const ext = format === "csv" ? "csv" : "md";
+  const contentType = format === "csv" ? "text/csv; charset=utf-8" : "text/markdown; charset=utf-8";
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": contentType,
+      "content-disposition": `attachment; filename="pim-export-${today}.${ext}"`,
+      "cache-control": "no-store",
+    },
+  });
 });
 
 // ----------------------------------------------------------------------------

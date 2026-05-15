@@ -228,27 +228,47 @@ export interface ListPimItemsOpts {
   limit?: number;
   /** Include soft-deleted (deleted_at NOT NULL). Default false */
   includeDeleted?: boolean;
+  /** FTS5 query string against pim_item.content (Week 3 Day 15). Tokenized
+   *  per SQLite FTS5 default rules; multiple terms = AND; supports phrase
+   *  search "term1 term2" + prefix "vessel*" etc.
+   *  Empty / undefined → no FTS filter. */
+  query?: string;
 }
 
 export function listPimItems(db: Database.Database, opts: ListPimItemsOpts = {}): PimItemRow[] {
   const where: string[] = [];
   const params: Record<string, unknown> = {};
-  if (!opts.includeDeleted) where.push("deleted_at IS NULL");
+  if (!opts.includeDeleted) where.push("p.deleted_at IS NULL");
   if (opts.commitmentState) {
-    where.push("commitment_state = @commitment");
+    where.push("p.commitment_state = @commitment");
     params.commitment = normalize(opts.commitmentState);
   }
   if (opts.source) {
-    where.push("source = @source");
+    where.push("p.source = @source");
     params.source = opts.source;
   }
   if (opts.sinceMs != null) {
-    where.push("captured_at >= @sinceMs");
+    where.push("p.captured_at >= @sinceMs");
     params.sinceMs = opts.sinceMs;
   }
-  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
   const limit = Math.max(1, Math.min(500, opts.limit ?? 50));
-  const sql = `SELECT * FROM pim_item ${whereClause} ORDER BY captured_at DESC LIMIT ${limit}`;
+
+  // FTS5 query path: JOIN pim_item_fts; results ordered by rank (most relevant)
+  // then captured_at. Without FTS, plain table query ORDER BY captured_at.
+  if (opts.query && opts.query.trim().length > 0) {
+    where.push("p.rowid = f.rowid");
+    where.push("f.content MATCH @ftsQuery");
+    params.ftsQuery = opts.query.trim();
+    const whereClause = `WHERE ${where.join(" AND ")}`;
+    const sql = `SELECT p.* FROM pim_item p, pim_item_fts f
+                 ${whereClause}
+                 ORDER BY rank, p.captured_at DESC LIMIT ${limit}`;
+    return db.prepare(sql).all(params) as PimItemRow[];
+  }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const sql = `SELECT p.* FROM pim_item p ${whereClause}
+               ORDER BY p.captured_at DESC LIMIT ${limit}`;
   return db.prepare(sql).all(params) as PimItemRow[];
 }
 
@@ -530,4 +550,148 @@ export function softDeletePimItem(
 ): boolean {
   // updatePimItem will emit op='delete' audit because patch.deletedAt != null
   return updatePimItem(db, id, { deletedAt: Date.now() }, ctx);
+}
+
+// ============================================================================
+// 11. exportPimItems — markdown / csv (Week 3 Day 18, portability red line)
+// ============================================================================
+//
+// v2.1 红线 #4 portability: 用户能 export 全部 PIM 数据为 plain text 格式，
+// 不被工具锁定。markdown 给人读 / Obsidian 兼容; csv 给 Excel/scripts 处理.
+// 包含 deleted (用户决定要不要看)，但默认 includeDeleted=false.
+
+export interface ExportOpts {
+  format: "markdown" | "csv";
+  includeDeleted?: boolean;
+}
+
+/** Returns export payload as a string ready for HTTP response body. */
+export function exportPimItems(db: Database.Database, opts: ExportOpts): string {
+  const where: string[] = [];
+  if (!opts.includeDeleted) where.push("deleted_at IS NULL");
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  // Pull domain_tags + people_refs alongside main row for export richness
+  const items = db
+    .prepare(
+      `SELECT id, content, captured_at, source, commitment_state, modality, ai_status,
+              visibility, owner_user_id, created_at, updated_at, deleted_at
+         FROM pim_item ${whereClause} ORDER BY captured_at DESC`,
+    )
+    .all() as PimItemRow[];
+
+  const domainsByItem = new Map<string, string[]>();
+  const domainRows = db
+    .prepare(`SELECT pim_item_id, domain FROM pim_domain_tags`)
+    .all() as Array<{ pim_item_id: string; domain: string }>;
+  for (const r of domainRows) {
+    const arr = domainsByItem.get(r.pim_item_id) ?? [];
+    arr.push(r.domain);
+    domainsByItem.set(r.pim_item_id, arr);
+  }
+
+  const peopleByItem = new Map<string, string[]>();
+  const peopleRows = db
+    .prepare(`SELECT pim_item_id, person_ref FROM pim_people_refs`)
+    .all() as Array<{ pim_item_id: string; person_ref: string }>;
+  for (const r of peopleRows) {
+    const arr = peopleByItem.get(r.pim_item_id) ?? [];
+    arr.push(r.person_ref);
+    peopleByItem.set(r.pim_item_id, arr);
+  }
+
+  if (opts.format === "csv") return toCsv(items, domainsByItem, peopleByItem);
+  return toMarkdown(items, domainsByItem, peopleByItem);
+}
+
+function isoDate(epochMs: number | null): string {
+  if (epochMs == null) return "";
+  return new Date(epochMs).toISOString();
+}
+
+function csvEscape(s: string | null | undefined): string {
+  if (s == null) return "";
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function toCsv(
+  items: PimItemRow[],
+  domains: Map<string, string[]>,
+  people: Map<string, string[]>,
+): string {
+  const header = [
+    "id",
+    "captured_at_iso",
+    "source",
+    "commitment_state",
+    "modality",
+    "ai_status",
+    "visibility",
+    "content",
+    "domains",
+    "people",
+    "created_at_iso",
+    "updated_at_iso",
+    "deleted_at_iso",
+  ].join(",");
+  const rows = items.map((it) =>
+    [
+      it.id,
+      isoDate(it.captured_at),
+      it.source,
+      it.commitment_state,
+      it.modality,
+      it.ai_status,
+      it.visibility,
+      csvEscape(it.content),
+      csvEscape((domains.get(it.id) ?? []).join("|")),
+      csvEscape((people.get(it.id) ?? []).join("|")),
+      isoDate(it.created_at),
+      isoDate(it.updated_at),
+      isoDate(it.deleted_at),
+    ].join(","),
+  );
+  return [header, ...rows].join("\n") + "\n";
+}
+
+function toMarkdown(
+  items: PimItemRow[],
+  domains: Map<string, string[]>,
+  people: Map<string, string[]>,
+): string {
+  const lines: string[] = [
+    `# PIM Export`,
+    ``,
+    `Generated: ${new Date().toISOString()}`,
+    ``,
+    `Total items: ${items.length}`,
+    ``,
+    `---`,
+    ``,
+  ];
+  for (const it of items) {
+    const d = domains.get(it.id) ?? [];
+    const p = people.get(it.id) ?? [];
+    lines.push(
+      `## ${it.id}`,
+      ``,
+      `- **captured**: ${isoDate(it.captured_at)}`,
+      `- **source**: ${it.source}`,
+      `- **commitment**: ${it.commitment_state}`,
+      `- **modality**: ${it.modality}`,
+      `- **ai_status**: ${it.ai_status}`,
+      `- **visibility**: ${it.visibility}`,
+      ...(d.length > 0 ? [`- **domains**: ${d.join(", ")}`] : []),
+      ...(p.length > 0 ? [`- **people**: ${p.join(", ")}`] : []),
+      ...(it.deleted_at ? [`- **deleted**: ${isoDate(it.deleted_at)}`] : []),
+      ``,
+      it.content,
+      ``,
+      `---`,
+      ``,
+    );
+  }
+  return lines.join("\n");
 }
