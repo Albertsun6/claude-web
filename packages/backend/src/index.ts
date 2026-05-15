@@ -31,8 +31,9 @@ import {
 } from "./routes/permission.js";
 import { inboxRouter } from "./routes/inbox.js";
 import { setPimDbForInbox } from "./inbox-store.js";
-import { pimRouter, setPimDbForRoutes } from "./routes/pim.js";
+import { pimRouter, setPimDbForRoutes, setPimBroadcast } from "./routes/pim.js";
 import { pimCapturePageHandler } from "./routes/pim-page.js";
+import { cleanupOrphanAiSuggestions, isPimAiEnabled } from "./pim-ai-suggester.js";
 import { updateCheckRouter } from "./routes/update-check.js";
 import { runsRouter } from "./routes/runs.js";
 import { helpRouter } from "./routes/help.js";
@@ -173,6 +174,12 @@ if (!process.env.HARNESS_DISABLED) {
     setPimDbForInbox(_harnessDb);
     // ADR-020 D5 — PIM CRUD routes (/api/pim) need DB instance.
     setPimDbForRoutes(_harnessDb);
+    // ADR-020 D9 Week 2 — cleanup orphan AI suggestions left by previous
+    // crashed backend run (ai_status='running' > 5min → 'failed'). Idempotent.
+    cleanupOrphanAiSuggestions(_harnessDb.db);
+    console.log(
+      `[pim-ai-suggester] PIM_AI_ENABLED=${isPimAiEnabled()} (set env var to 'true' to enable)`,
+    );
   } catch (err) {
     console.error("[harness] DB init failed — harness routes unavailable:", err);
     app.all("/api/harness/*", (c) =>
@@ -369,6 +376,10 @@ function broadcastToAll(msg: unknown): void {
 if (_harnessDb) {
   app.route("/api/harness", buildHarnessRouter(_harnessDb.db, broadcastToAll));
 }
+
+// ADR-020 Week 2 Day 12 — PIM routes broadcast `{type:'pim_event', kind, id}` on
+// mutations for cross-device sync. Injected here (after wss.clients ready).
+setPimBroadcast(broadcastToAll);
 
 // M1C-A: Workflow Engine routes (broadcastToAll injected per cursor B-级 review M-2).
 app.route("/api/vessel", buildWorkflowRouter(broadcastToAll));

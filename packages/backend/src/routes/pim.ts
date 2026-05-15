@@ -10,6 +10,7 @@
 // (避免 router signature 改 + 与 inbox-store.ts dual-write 一致的注入模式)。
 
 import { Hono } from "hono";
+import type { Context } from "hono";
 import type { HarnessDb } from "../harness-store.js";
 import {
   createPimItem,
@@ -20,17 +21,30 @@ import {
   attachIssueRef,
   sanityReport,
   softDeletePimItem,
+  exportPimItems,
   type PimItemRow,
+  type PimAuditContext,
 } from "../pim-queries.js";
+import { suggestForPimItem, isPimAiEnabled } from "../pim-ai-suggester.js";
 
 // ============================================================================
-// DB instance injection (mirrors inbox-store.setPimDbForInbox pattern)
+// DB + broadcast injection (mirrors inbox-store.setPimDbForInbox pattern)
 // ============================================================================
 
 let _db: HarnessDb | null = null;
+let _broadcast: ((msg: unknown) => void) | null = null;
 
 export function setPimDbForRoutes(db: HarnessDb | null): void {
   _db = db;
+}
+
+/**
+ * Inject WS broadcast fn (from index.ts at boot).
+ * Day 12 — emits `{type:'pim_event', kind, id}` on every successful mutation
+ * so iOS / Web peers refresh.
+ */
+export function setPimBroadcast(fn: ((msg: unknown) => void) | null): void {
+  _broadcast = fn;
 }
 
 function requireDb(): HarnessDb {
@@ -38,6 +52,29 @@ function requireDb(): HarnessDb {
     throw new Error("[pim routes] no harness DB injected — call setPimDbForRoutes() first");
   }
   return _db;
+}
+
+/** Fire-and-forget broadcast (swallow errors — broadcast is UX nicety, not truth). */
+function broadcastPimEvent(kind: "created" | "updated" | "deleted" | "attached_issue", id: string): void {
+  if (!_broadcast) return;
+  try {
+    _broadcast({ type: "pim_event", kind, id, ts: Date.now() });
+  } catch (err) {
+    console.warn(`[pim routes] broadcast failed (non-blocking): ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Build audit context from request headers (X-Device-Id) + optional actor.
+ * Read on every mutation handler so audit log has source_device for
+ * multi-device tracing (ADR-020 §D Day 8 R5 mitigation).
+ */
+function buildAuditCtx(c: Context, actor?: string): PimAuditContext {
+  const deviceId = c.req.header("x-device-id") || c.req.header("X-Device-Id");
+  return {
+    actor: actor ?? "user",
+    sourceDevice: deviceId && deviceId.trim().length > 0 ? deviceId.trim() : undefined,
+  };
 }
 
 // ============================================================================
@@ -123,17 +160,34 @@ pimRouter.post("/", async (c) => {
         .filter((p): p is { personRef: string } => typeof p.personRef === "string")
     : undefined;
 
-  const row = createPimItem(requireDb().db, {
-    content: payload.content,
-    source: inferredSource,
-    commitmentState: typeof payload.commitmentState === "string" ? payload.commitmentState : undefined,
-    modality: typeof payload.modality === "string" ? payload.modality : undefined,
-    visibility: typeof payload.visibility === "string" ? payload.visibility : undefined,
-    domainTags: Array.isArray(payload.domainTags)
-      ? (payload.domainTags as string[]).filter((d) => typeof d === "string")
-      : undefined,
-    peopleRefs,
-  });
+  const db = requireDb();
+  const row = createPimItem(
+    db.db,
+    {
+      content: payload.content,
+      source: inferredSource,
+      commitmentState: typeof payload.commitmentState === "string" ? payload.commitmentState : undefined,
+      modality: typeof payload.modality === "string" ? payload.modality : undefined,
+      visibility: typeof payload.visibility === "string" ? payload.visibility : undefined,
+      domainTags: Array.isArray(payload.domainTags)
+        ? (payload.domainTags as string[]).filter((d) => typeof d === "string")
+        : undefined,
+      peopleRefs,
+    },
+    buildAuditCtx(c),
+  );
+
+  // ADR-020 §D9 — fire-and-forget AI Level 1 suggestion.
+  // No await: POST returns 201 immediately, AI runs in background.
+  // suggestForPimItem swallows all errors into ai_status updates.
+  if (isPimAiEnabled()) {
+    suggestForPimItem(db.db, row.id).catch((err) => {
+      console.warn(`[pim routes] suggestForPimItem ${row.id} failed: ${err.message}`);
+    });
+  }
+
+  // Day 12 — broadcast for cross-device sync
+  broadcastPimEvent("created", row.id);
 
   return c.json({ item: rowToWire(row) }, 201);
 });
@@ -150,15 +204,46 @@ pimRouter.get("/list", (c) => {
   const sinceMsStr = c.req.query("sinceMs");
   const sinceMs = sinceMsStr ? parseInt(sinceMsStr, 10) : undefined;
   const includeDeleted = c.req.query("includeDeleted") === "1";
+  // Week 3 Day 15: FTS5 full-text search via ?q=
+  const query = c.req.query("q") || c.req.query("query") || undefined;
 
-  const rows = listPimItems(requireDb().db, {
-    commitmentState: commitment,
-    source,
-    limit,
-    sinceMs,
-    includeDeleted,
-  });
+  let rows: PimItemRow[];
+  try {
+    rows = listPimItems(requireDb().db, {
+      commitmentState: commitment,
+      source,
+      limit,
+      sinceMs,
+      includeDeleted,
+      query,
+    });
+  } catch (err) {
+    // FTS5 query syntax errors throw SQLite — return 400 with hint
+    return c.json(
+      { error: `FTS query parse error: ${(err as Error).message}` },
+      400,
+    );
+  }
   return c.json({ items: rows.map(rowToWire), total: rows.length });
+});
+
+// Week 3 Day 18 — export portability (v2.1 红线 #4).
+// Format = markdown | csv. Content-Disposition triggers browser download.
+pimRouter.get("/export", (c) => {
+  const format = c.req.query("format") === "csv" ? "csv" : "markdown";
+  const includeDeleted = c.req.query("includeDeleted") === "1";
+  const body = exportPimItems(requireDb().db, { format, includeDeleted });
+  const today = new Date().toISOString().slice(0, 10);
+  const ext = format === "csv" ? "csv" : "md";
+  const contentType = format === "csv" ? "text/csv; charset=utf-8" : "text/markdown; charset=utf-8";
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": contentType,
+      "content-disposition": `attachment; filename="pim-export-${today}.${ext}"`,
+      "cache-control": "no-store",
+    },
+  });
 });
 
 // ----------------------------------------------------------------------------
@@ -207,15 +292,22 @@ pimRouter.patch("/:id", async (c) => {
   const existing = getPimItem(db, id);
   if (!existing) return c.json({ error: "not found" }, 404);
 
-  // commitmentState change → 走专门 helper（写 history）
+  const auditCtx = buildAuditCtx(c);
+
+  // commitmentState change → 走专门 helper（写 history + audit op='set_commitment'）
   if (typeof payload.commitmentState === "string") {
-    const deviceId = c.req.header("x-device-id") || "unknown";
+    const deviceId = auditCtx.sourceDevice ?? "unknown";
     const changedBy = typeof payload.changedBy === "string" ? payload.changedBy : `user:${deviceId}`;
-    setCommitmentState(db, id, {
-      newState: payload.commitmentState,
-      changedBy,
-      reason: typeof payload.reason === "string" ? payload.reason : undefined,
-    });
+    setCommitmentState(
+      db,
+      id,
+      {
+        newState: payload.commitmentState,
+        changedBy,
+        reason: typeof payload.reason === "string" ? payload.reason : undefined,
+      },
+      auditCtx,
+    );
   }
 
   // 其他字段 partial update
@@ -226,7 +318,10 @@ pimRouter.patch("/:id", async (c) => {
   if (typeof payload.aiStatus === "string") otherPatch.aiStatus = payload.aiStatus;
   if (payload.deletedAt === null) otherPatch.deletedAt = null;
   else if (typeof payload.deletedAt === "number") otherPatch.deletedAt = payload.deletedAt;
-  if (Object.keys(otherPatch).length > 0) updatePimItem(db, id, otherPatch);
+  if (Object.keys(otherPatch).length > 0) updatePimItem(db, id, otherPatch, auditCtx);
+
+  // Day 12 broadcast
+  broadcastPimEvent("updated", id);
 
   const updated = getPimItem(db, id);
   return c.json({ item: rowToWire(updated!) });
@@ -239,8 +334,9 @@ pimRouter.patch("/:id", async (c) => {
 pimRouter.delete("/:id", (c) => {
   const id = c.req.param("id");
   const db = requireDb().db;
-  const ok = softDeletePimItem(db, id);
+  const ok = softDeletePimItem(db, id, buildAuditCtx(c));
   if (!ok) return c.json({ error: "not found" }, 404);
+  broadcastPimEvent("deleted", id);
   return c.json({ ok: true });
 });
 
@@ -260,7 +356,8 @@ pimRouter.post("/:id/attach-issue", async (c) => {
   if (!body.issueId || typeof body.issueId !== "string") {
     return c.json({ error: "field 'issueId' is required" }, 400);
   }
-  const ok = attachIssueRef(requireDb().db, id, body.issueId);
+  const ok = attachIssueRef(requireDb().db, id, body.issueId, buildAuditCtx(c));
   if (!ok) return c.json({ error: "pim_item not found or issue update failed" }, 404);
+  broadcastPimEvent("attached_issue", id);
   return c.json({ ok: true });
 });

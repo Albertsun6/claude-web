@@ -63,6 +63,7 @@
 		B05D91F4D481E05DE66588D0 /* PimAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2DAF8B5EFA9624A5F76B1C /* PimAPI.swift */; };
 		B546DA7E0322B056D8806707 /* ToolCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 356FA260082DE219FEA514E3 /* ToolCards.swift */; };
 		BF5A69BCBA855473B0A8A644 /* WorktreeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B24D52E2E7D3A331C79A17AE /* WorktreeAPI.swift */; };
+		BFAC18E875B8C3D77D38B68E /* PimListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B2081BB042EC24B9D378B6 /* PimListView.swift */; };
 		C656B15DE65E078988C3A2FD /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CAA94D3A2EA5E1964256325 /* TTSPlayer.swift */; };
 		C6CDF6B457BE967B4D349967 /* FsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45ED547D8ACC4C8EFD0E4B32 /* FsAPI.swift */; };
 		D051A86CE3462AB69825A1F5 /* HeartbeatMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F52716A6E5E57D5EF97BC91 /* HeartbeatMonitor.swift */; };
@@ -149,6 +150,7 @@
 		84370F12AC58B5405568265F /* SessionsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsAPI.swift; sourceTree = "<group>"; };
 		8C4B85AF0A4688AFA24B1EDA /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		8EFD34C3AA3C0A5D9A5EB6A6 /* BonjourBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourBrowser.swift; sourceTree = "<group>"; };
+		92B2081BB042EC24B9D378B6 /* PimListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PimListView.swift; sourceTree = "<group>"; };
 		97D816CCFBF66DCDCE26D89E /* NewConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewConversationSheet.swift; sourceTree = "<group>"; };
 		98ADC5FDEE0363CACDD58B20 /* fallback-config.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "fallback-config.json"; sourceTree = "<group>"; };
 		9A3CAC537429B670DD01C3B8 /* VersionAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionAPI.swift; sourceTree = "<group>"; };
@@ -350,6 +352,7 @@
 				D04BCC1C6A84402D2C9303E2 /* NotesView.swift */,
 				CE2DAF8B5EFA9624A5F76B1C /* PimAPI.swift */,
 				742B94853414DD621B17E086 /* PimCaptureView.swift */,
+				92B2081BB042EC24B9D378B6 /* PimListView.swift */,
 				E521D87B3BA1D89B7F1A4F1C /* ProjectRegistry.swift */,
 				3908AACD90DC034442E43A1A /* ProjectsAPI.swift */,
 				2006E8318BCC0CD398822E76 /* Protocol.swift */,
@@ -561,6 +564,7 @@
 				14BD41359E745E1A0CBC1993 /* PermissionSheet.swift in Sources */,
 				B05D91F4D481E05DE66588D0 /* PimAPI.swift in Sources */,
 				2C8CB443C51F8D64B4B15A0B /* PimCaptureView.swift in Sources */,
+				BFAC18E875B8C3D77D38B68E /* PimListView.swift in Sources */,
 				F9D323D74FD725C52970BE1D /* ProjectRegistry.swift in Sources */,
 				E08D357BCE2E160FFFA47F98 /* ProjectsAPI.swift in Sources */,
 				4A9261381735E4FFEC18C6E6 /* Protocol.swift in Sources */,

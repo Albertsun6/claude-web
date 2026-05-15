@@ -120,6 +120,8 @@ export interface CreateIssueInput {
   body?: string;
   priority?: "low" | "normal" | "high" | "critical";
   source?: string;
+  /** ADR-020 Week 2 Day 12 — link Issue to upstream PimItem (derived_from). */
+  pimItemId?: string;
 }
 
 export function createIssue(db: Database.Database, input: CreateIssueInput): IssueRow {
@@ -139,11 +141,18 @@ export function createIssue(db: Database.Database, input: CreateIssueInput): Iss
     created_at: now,
     updated_at: now,
   };
+  // pim_item_id (added migration 0008 ADR-020) is a column on issue but NOT
+  // part of IssueRow type yet. Pass through dedicated bind to keep IssueRow
+  // stable for legacy readers; null = unlinked.
   db.prepare(`
-    INSERT INTO issue(id,project_id,initiative_id,source,title,body,labels_json,priority,status,retrospective_id,created_at,updated_at)
-    VALUES(@id,@project_id,@initiative_id,@source,@title,@body,@labels_json,@priority,@status,@retrospective_id,@created_at,@updated_at)
-  `).run(row);
-  audit(db, "create", "issue", id, { title: input.title, priority: row.priority });
+    INSERT INTO issue(id,project_id,initiative_id,source,title,body,labels_json,priority,status,retrospective_id,created_at,updated_at,pim_item_id)
+    VALUES(@id,@project_id,@initiative_id,@source,@title,@body,@labels_json,@priority,@status,@retrospective_id,@created_at,@updated_at,@pim_item_id)
+  `).run({ ...row, pim_item_id: input.pimItemId ?? null });
+  audit(db, "create", "issue", id, {
+    title: input.title,
+    priority: row.priority,
+    ...(input.pimItemId ? { pim_item_id: input.pimItemId } : {}),
+  });
   return row;
 }
 
