@@ -77,10 +77,13 @@ final class PimAPI {
 
     // MARK: - GET /api/pim/list
 
+    /// Week 3 Day 15: `query` 字段触发 FTS5 检索（pim_item_fts MATCH）.
+    /// CJK 单字需要 caller 自己 append `*` 做前缀匹配（unicode61 tokenizer 限制）.
     func list(
         commitmentState: String? = nil,
         limit: Int = 50,
-        includeDeleted: Bool = false
+        includeDeleted: Bool = false,
+        query: String? = nil
     ) async throws -> PimItemListResponse {
         var comps = URLComponents(
             url: baseURL().appendingPathComponent("api/pim/list"),
@@ -89,11 +92,20 @@ final class PimAPI {
         var queryItems = [URLQueryItem(name: "limit", value: String(limit))]
         if let commitmentState { queryItems.append(URLQueryItem(name: "commitment", value: commitmentState)) }
         if includeDeleted { queryItems.append(URLQueryItem(name: "includeDeleted", value: "1")) }
+        if let query, !query.isEmpty { queryItems.append(URLQueryItem(name: "q", value: query)) }
         comps.queryItems = queryItems
         var req = URLRequest(url: comps.url!)
         authorize(&req)
         req.timeoutInterval = 6
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        if let http = resp as? HTTPURLResponse, http.statusCode == 400 {
+            // FTS syntax error — give caller a typed signal
+            throw NSError(
+                domain: "PimAPI",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: "搜索语法错误（FTS5 解析失败）"]
+            )
+        }
         return try JSONDecoder().decode(PimItemListResponse.self, from: data)
     }
 

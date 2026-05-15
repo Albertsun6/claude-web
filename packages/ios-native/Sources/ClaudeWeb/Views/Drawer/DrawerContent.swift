@@ -14,10 +14,13 @@ struct DrawerContent: View {
     @Environment(VoiceSession.self) private var voice
     @Environment(ProjectRegistry.self) private var registry
     @Environment(Telemetry.self) private var telemetry
+    @Environment(PimAPI.self) private var pimAPI
 
     @State private var showQuickPicker = false
     @State private var showInboxList = false
     @State private var showHarnessBoard = false
+    @State private var showPimList = false
+    @State private var showPimCapture = false
     @State private var missingProjects: [ProjectDTO] = []
     @State private var showCleanupConfirm = false
     @State private var cleanupRunning = false
@@ -46,6 +49,14 @@ struct DrawerContent: View {
             }
             .sheet(isPresented: $showInboxList) {
                 InboxListView()
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showPimList) {
+                PimListView(pimAPI: pimAPI)
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showPimCapture) {
+                PimCaptureView(pimAPI: pimAPI)
                     .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showHarnessBoard) {
@@ -138,6 +149,12 @@ struct DrawerContent: View {
             }
             DrawerRow(icon: "lightbulb", label: "碎想 Inbox", tint: .yellow) {
                 showInboxList = true
+            }
+            DrawerRow(icon: "tray.and.arrow.down", label: "PIM 捕获", tint: .blue) {
+                showPimCapture = true
+            }
+            DrawerRow(icon: "tray.full", label: "PIM 回看", tint: .indigo) {
+                showPimList = true
             }
             DrawerRow(icon: "flask", label: "Harness 看板", tint: .purple) {
                 showHarnessBoard = true
