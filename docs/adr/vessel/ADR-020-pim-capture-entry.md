@@ -25,7 +25,7 @@ PIM **不属于** 现有 3 套并行 spiral：
 | Spiral | 用途 | PIM 关系 |
 |---|---|---|
 | **HARNESS_*** (eva-legacy) | Eva 自身 SDLC 流程（Issue → Stage → Task）| 不是 PIM |
-| **AISEP** (`packages/aisep-*/`) | AI 软件工程平台，开发各种软件 | 不是 PIM |
+| **AISEP** ([vessel-aisep](https://github.com/Albertsun6/vessel-aisep) external repo since 2026-05-15) | AI 软件工程平台，开发各种软件 | 不是 PIM |
 | **Steward V0** (`docs/BACKLOG.md` + 10 prompts) | Vessel 项目内部任务追踪 | 是 task subset，不是全 PIM |
 
 PIM 是**用户自身的个人信息管理**（任务/笔记/灵感/通讯/日志/目标/项目），独立于 Vessel 项目自身 SDLC。

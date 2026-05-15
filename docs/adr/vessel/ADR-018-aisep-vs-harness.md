@@ -1,6 +1,12 @@
 # ADR-018: AISEP 作为独立 Capability 体系 vs 现有 HARNESS_* 试点的边界
 
-- **Status**: Accepted
+> **Residence note**: This ADR lives in **both** vessel mainline and vessel-aisep for historical traceability.
+> The "short-term: do not split" decision below was **superseded on 2026-05-15** by [ADR-024](ADR-024-aisep-external-repo-during-vessel-development.md)
+> (AISEP 拆出独立 repo 在 vessel 完善期独立演进). The split itself is the implementation of that
+> superseding decision. Refer to ADR-024 for current strategy; this file remains as the origin scoping
+> decision (HARNESS_* vs AISEP boundary, which is still in force).
+
+- **Status**: Superseded by [ADR-024](ADR-024-aisep-external-repo-during-vessel-development.md) (split decision, 2026-05-15)
 - **Date**: 2026-05-11
 - **Deciders**: yongqian
 - **Tags**: governance, scope-boundary, capability-app, methodology

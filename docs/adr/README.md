@@ -35,12 +35,14 @@
 | **015** | [Research Before Design](vessel/ADR-015-research-before-design.md)（Spike/Trade Study） | 1 | ✅ Accepted | ADR-014 | 0-meta-lite+ |
 | **016** | [Coding Driver Interface（C 路径）](vessel/ADR-016-coding-driver-interface.md) | 1 | ✅ Accepted | ADR-000 / ADR-012 | M0.5 |
 | **017** | [Cursor CLI Cross-Reviewer](vessel/ADR-017-cursor-cli-cross-reviewer.md)（异质评审引擎） | 1 | ✅ Accepted | ADR-014 / ADR-015 | 0-meta-lite+ |
-| **018** | [AISEP vs HARNESS 边界](vessel/ADR-018-aisep-vs-harness.md)（独立 Capability 体系 vs 现有 HARNESS_* 试点） | 1 | ✅ Accepted | ADR-000 / ADR-013 / ADR-017 | aisep 全程 |
+| **018** | [AISEP vs HARNESS 边界](vessel/ADR-018-aisep-vs-harness.md)（独立 Capability 体系 vs 现有 HARNESS_* 试点） | 1 | 🔄 Superseded by ADR-024 | ADR-000 / ADR-013 / ADR-017 | aisep 全程 |
 | **019** | [Steward V0 Contract](vessel/ADR-019-steward-v0-contract.md)（BACKLOG.md + 10-prompt UI + boot ritual） | 1 | ✅ Accepted | ADR-014 | 0-meta-lite+ |
 | **020** | [PIM 统一捕获入口](vessel/ADR-020-pim-capture-entry.md)（v2.1 个人 PIM 试点 backend 模块） | 1 | ✅ Accepted（Week 1 验收 2026-05-14 通过；212 tests + iOS xcodebuild SUCCEEDED） | ADR-000 / ADR-006 / ADR-008 / ADR-013 / ADR-018 | M0-PIM |
-| **022** | [AISEP v2 Fan-In](vessel/ADR-022-aisep-v2-fan-in.md)（multi-source aggregation + per-child failure recovery） | 1 | ✅ Accepted | ADR-018 / ADR-014 | aisep v0.4 |
+| **022** | ~~AISEP v2 Fan-In~~（已随 AISEP 拆出，单驻留 [vessel-aisep](https://github.com/Albertsun6/vessel-aisep) repo） | — | 🔀 Moved to vessel-aisep | ADR-018 / ADR-014 | aisep v0.4 |
+| **024** | [AISEP 拆出独立 repo](vessel/ADR-024-aisep-external-repo-during-vessel-development.md)（先拆后合策略） | 1 | ✅ Accepted | ADR-018 (supersedes) / ADR-022 (related) | aisep 全程 |
 
 > ADR-021 编号当前空闲，预留给 ADR-019 Steward 契约后续修订（参 ADR-019 §"改 schema 字段含义...需 ADR-020+"）。本表 020 已被 PIM 占用；下次 Steward 契约修订用 021。
+> ADR-023 编号当前空闲，留作后续使用。
 
 **Tier 划分**（按 v5.4 dogfood M-P2 partial）：
 - **Tier 1**（15 份）：重大决策 + Phase 0 调研（如适用）
